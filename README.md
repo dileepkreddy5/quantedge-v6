@@ -2,7 +2,7 @@
 
 > ⚠️ **Deployment in progress.** Market data is being migrated from Yahoo Finance to Polygon API to eliminate rate limits. AWS infrastructure is fully defined and containerized — rollout underway.
 
-QuantEdge is a modular AI platform designed to replicate institutional-grade quantitative decision workflows. I built it because I wanted the kind of analysis that hedge funds use — not the watered-down stuff you get from retail tools like Yahoo Finance or Robinhood. I wanted to type a ticker, hit enter, and get a real institutional-grade report: regime detection, volatility forecasting, options flow, sentiment, risk-adjusted position sizing — all of it, in one place, in under a minute.
+QuantEdge is a modular AI platform designed to replicate institutional-grade quantitative decision workflows. I wanted to type a ticker, hit enter, and get a real institutional-grade report: regime detection, volatility forecasting, options flow, sentiment, risk-adjusted position sizing — all of it, in one place, in under a minute.
 
 Live deployment: **https://quant.dileepkapu.com** . Single user. No SaaS, no subscriptions, no ads.
 
@@ -84,24 +84,6 @@ Type a ticker — AAPL, NVDA, SPY, anything — and QuantEdge runs 8 analysis mo
 - Token revocation via Redis blocklist — logout is immediate, not expiry-based
 - Brute force lockout after 5 failed attempts per IP, 30-minute cooldown
 - AWS WAF with OWASP Top 10 rules, IP reputation lists, and rate limiting in front of CloudFront
-
----
-
-## Running locally
-
-```bash
-cp .env.template .env
-# Fill in required values
-
-docker-compose up -d
-curl http://localhost:8000/health
-
-cd frontend
-npm install --legacy-peer-deps
-npm start
-```
-
-Required environment variables: `SECRET_KEY`, `DATABASE_URL`, `REDIS_URL`, `COGNITO_USER_POOL_ID`, `COGNITO_CLIENT_ID`, `AWS_ACCOUNT_ID`. Everything else is optional.
 
 ---
 
