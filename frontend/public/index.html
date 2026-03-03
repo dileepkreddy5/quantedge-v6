@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#1A1A2E" />
+    <meta name="description" content="QuantEdge — Institutional Quantitative Analytics Platform" />
+    <title>QuantEdge™ — Institutional Analytics</title>
+
+    <!-- Preconnect for performance -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap"
+      rel="stylesheet"
+    />
+
+    <style>
+      /* Loading screen shown before React mounts */
+      #root-loading {
+        position: fixed;
+        inset: 0;
+        background: #0a0a1a;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        font-family: 'Inter', sans-serif;
+        color: #a0aec0;
+        z-index: 9999;
+        transition: opacity 0.4s ease;
+      }
+      #root-loading.hidden { opacity: 0; pointer-events: none; }
+      .loading-logo {
+        font-size: 2rem;
+        font-weight: 700;
+        letter-spacing: 4px;
+        color: #667eea;
+        margin-bottom: 2rem;
+      }
+      .loading-bar {
+        width: 200px;
+        height: 2px;
+        background: #1a1a3e;
+        border-radius: 2px;
+        overflow: hidden;
+      }
+      .loading-bar-inner {
+        height: 100%;
+        background: linear-gradient(90deg, #667eea, #764ba2);
+        animation: load 1.5s ease-in-out infinite;
+      }
+      @keyframes load {
+        0% { width: 0%; margin-left: 0; }
+        50% { width: 60%; margin-left: 20%; }
+        100% { width: 0%; margin-left: 100%; }
+      }
+      body { margin: 0; background: #0a0a1a; }
+    </style>
+  </head>
+  <body>
+    <noscript>QuantEdge requires JavaScript to run.</noscript>
+
+    <!-- Loading screen — hidden once React mounts -->
+    <div id="root-loading">
+      <div class="loading-logo">QUANTEDGE™</div>
+      <div class="loading-bar"><div class="loading-bar-inner"></div></div>
+    </div>
+
+    <!-- React mounts here -->
+    <div id="root"></div>
+
+    <script>
+      // Hide loading screen once React has mounted
+      window.addEventListener('load', function () {
+        setTimeout(function () {
+          var loader = document.getElementById('root-loading');
+          if (loader) {
+            loader.classList.add('hidden');
+            setTimeout(function () { loader.remove(); }, 400);
+          }
+        }, 300);
+      });
+    </script>
+  </body>
+</html>
