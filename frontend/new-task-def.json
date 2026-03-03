@@ -1,0 +1,121 @@
+{
+  "containerDefinitions": [
+    {
+      "name": "quantedge-api",
+      "image": "435829590902.dkr.ecr.us-east-1.amazonaws.com/quantedge-api:latest",
+      "cpu": 0,
+      "portMappings": [
+        {
+          "containerPort": 8000,
+          "hostPort": 8000,
+          "protocol": "tcp"
+        }
+      ],
+      "essential": true,
+      "environment": [
+        {
+          "name": "USE_ANTHROPIC_FALLBACK",
+          "value": "true"
+        },
+        {
+          "name": "AWS_REGION",
+          "value": "us-east-1"
+        },
+        {
+          "name": "APP_ENV",
+          "value": "production"
+        },
+        {
+          "name": "SNS_ALERT_TOPIC_ARN",
+          "value": "arn:aws:sns:us-east-1:435829590902:quantedge-alerts"
+        },
+        {
+          "name": "S3_BUCKET_DATA",
+          "value": "quantedge-datalake-dileep"
+        },
+        {
+          "name": "CORS_ORIGINS",
+          "value": "[\"https://quant.dileepkapu.com\"]"
+        },
+        {
+          "name": "COGNITO_USER_POOL_ID",
+          "value": "us-east-1_SfJqWZbmc"
+        },
+        {
+          "name": "DATABASE_URL",
+          "value": "postgresql+asyncpg://quantedge_admin:0899e1cb13e69007fffe6d9aabbee0e76604bd2c0b6cfa2e9818253a650fb61a@quantedge-postgres.c09yes6ea4te.us-east-1.rds.amazonaws.com:5432/quantedge"
+        },
+        {
+          "name": "S3_BUCKET_MODELS",
+          "value": "quantedge-models-dileep"
+        },
+        {
+          "name": "OWNER_USERNAME",
+          "value": "dileep"
+        },
+        {
+          "name": "AWS_ACCOUNT_ID",
+          "value": "435829590902"
+        },
+        {
+          "name": "COGNITO_CLIENT_ID",
+          "value": "5mc6f72fdvm0ls04ig5da4449t"
+        },
+        {
+          "name": "REDIS_URL",
+          "value": "rediss://master.quantedge-redis.ccrusk.use1.cache.amazonaws.com:6379"
+        }
+      ],
+      "mountPoints": [],
+      "volumesFrom": [],
+      "secrets": [
+        {
+          "name": "SECRET_KEY",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:435829590902:secret:quantedge/app-secrets-6YCuw9:SECRET_KEY::"
+        },
+        {
+          "name": "ALPHA_VANTAGE_KEY",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:435829590902:secret:quantedge/app-secrets-6YCuw9:ALPHA_VANTAGE_KEY::"
+        },
+        {
+          "name": "FRED_API_KEY",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:435829590902:secret:quantedge/app-secrets-6YCuw9:FRED_API_KEY::"
+        },
+        {
+          "name": "ANTHROPIC_API_KEY",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:435829590902:secret:quantedge/app-secrets-6YCuw9:ANTHROPIC_API_KEY::"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/quantedge",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "api"
+        }
+      },
+      "healthCheck": {
+        "command": [
+          "CMD-SHELL",
+          "curl -f http://localhost:8000/health || exit 1"
+        ],
+        "interval": 30,
+        "timeout": 10,
+        "retries": 3,
+        "startPeriod": 60
+      },
+      "systemControls": []
+    }
+  ],
+  "family": "quantedge-api",
+  "taskRoleArn": "arn:aws:iam::435829590902:role/quantedge-ecs-task-role",
+  "executionRoleArn": "arn:aws:iam::435829590902:role/quantedge-ecs-execution-role",
+  "networkMode": "awsvpc",
+  "volumes": [],
+  "placementConstraints": [],
+  "requiresCompatibilities": [
+    "FARGATE"
+  ],
+  "cpu": "1024",
+  "memory": "2048"
+}

@@ -1,0 +1,85 @@
+k# ========================
+# Environment / Secrets
+# ========================
+.env
+.env.*
+*.env
+*.pem
+*.key
+*.crt
+credentials.json
+
+# ========================
+# Python
+# ========================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.eggs/
+*.egg
+build/
+dist/
+.venv/
+venv/
+env/
+
+# ========================
+# ML Model Artifacts (store externally)
+# ========================
+backend/ml/saved_models/
+*.pt
+*.pth
+*.pkl
+*.h5
+*.joblib
+*.onnx
+
+# ========================
+# Logs
+# ========================
+*.log
+logs/
+
+# ========================
+# Node / Frontend
+# ========================
+node_modules/
+frontend/build/
+frontend/.cache/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ========================
+# Terraform (use remote S3 state)
+# ========================
+.terraform/
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+terraform.tfvars.json
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+crash.log
+
+# ========================
+# Testing / Coverage
+# ========================
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ========================
+# IDE / OS
+# ========================
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
