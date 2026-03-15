@@ -235,6 +235,14 @@ resource "aws_security_group" "ecs" {
   vpc_id      = aws_vpc.main.id
 
   ingress {
+    description = "HTTPS for VPC endpoints (ECR, Secrets Manager, CloudWatch)"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
     description = "FastAPI from CloudFront and health checks"
     from_port   = 8000
     to_port     = 8000
