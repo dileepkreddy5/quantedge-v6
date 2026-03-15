@@ -53,7 +53,6 @@ export default function Dashboard() {
       // slight delay so component is mounted
       setTimeout(() => runAnalysis(urlTicker.toUpperCase()), 300);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const [activeTab, setActiveTab] = useState('overview');
   const [data, setData] = useState<any>(null);
