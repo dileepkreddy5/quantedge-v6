@@ -18,14 +18,14 @@ class Settings(BaseSettings):
 
     # ─── CORS ─────────────────────────────────────────────
     # Used as settings.CORS_ORIGINS in main_v6.py
-    CORS_ORIGINS: List[str] = Field(
-        default=["http://localhost:3000", "http://localhost:5173"],
+    CORS_ORIGINS: str = Field(
+        default="http://localhost:3000",
         env="CORS_ORIGINS"
     )
 
     # ─── AWS ──────────────────────────────────────────────
     AWS_REGION: str = Field(default="us-east-1", env="AWS_REGION")
-    AWS_ACCOUNT_ID: str = Field(..., env="AWS_ACCOUNT_ID")
+    AWS_ACCOUNT_ID: str = Field(default="", env="AWS_ACCOUNT_ID")
 
     # ─── Cognito ──────────────────────────────────────────
     COGNITO_USER_POOL_ID: str = Field(..., env="COGNITO_USER_POOL_ID")
