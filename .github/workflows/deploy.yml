@@ -226,6 +226,7 @@ jobs:
           REACT_APP_API_URL: ${{ secrets.REACT_APP_API_URL }}
           GENERATE_SOURCEMAP: 'false'
           NODE_ENV: production
+          CI: 'false'
         run: npm run build
 
       - name: Configure AWS credentials
