@@ -655,7 +655,7 @@ resource "aws_ecs_task_definition" "quantedge_api" {
         { name = "COGNITO_USER_POOL_ID",  value = aws_cognito_user_pool.quantedge.id },
         { name = "COGNITO_CLIENT_ID",     value = aws_cognito_user_pool_client.app.id },
         { name = "SNS_ALERT_TOPIC_ARN",   value = aws_sns_topic.alerts.arn },
-        { name = "CORS_ORIGINS",          value = "https://${local.full_domain}" },
+        { name = "CORS_ORIGINS", value = "https://${local.full_domain}" },
         # Reduce workers — 1 is enough for personal use (saves memory)
         { name = "UVICORN_WORKERS",       value = "1" }
       ]
