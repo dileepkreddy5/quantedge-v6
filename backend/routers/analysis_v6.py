@@ -14,7 +14,7 @@ All ML predictions use real trained models:
 No Claude API anywhere in the prediction path.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, BackgroundTasks, Request
 from pydantic import BaseModel, validator
 import asyncio
 import json
@@ -898,7 +898,7 @@ class QuantEdgeAnalyzerV6:
 
 @router.post("/analyze")
 async def analyze(
-    body: AnalyzeRequest,
+    body: AnalyzeRequest = Body(...),
     background_tasks: BackgroundTasks,
     http_request: Request,
     current_user: Optional[CognitoUser] = Depends(get_optional_user),
