@@ -106,11 +106,11 @@ async def login(request: Request, body: LoginRequest):
 
         logger.info(f"Login step 1 success: {body.username} from {client_ip}")
         # If Cognito returned tokens directly (no MFA), return them
-        if result.get("access_token"):
+        if result.get("AccessToken") or result.get("access_token"):
             return {
                 "requires_mfa": False,
-                "access_token": result.get("access_token"),
-                "refresh_token": result.get("refresh_token"),
+                "access_token": result.get("AccessToken") or result.get("access_token"),
+                "refresh_token": result.get("RefreshToken") or result.get("refresh_token"),
                 "message": "Login successful",
             }
         return {
