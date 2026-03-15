@@ -1,31 +1,20 @@
 """
 QuantEdge v6.0 — Enhanced Analysis Router
 ==========================================
-Upgraded to include the full institutional architecture:
-
-NEW in v6.0:
-  ✓ Triple-Barrier Labeling (Lopez de Prado 2018)
-  ✓ Meta-Labeling (separates direction from sizing)
-  ✓ Fractional Differentiation (stationary + memory-preserving features)
-  ✓ Independent Risk Engine (CVaR, vol targeting, drawdown governor)
-  ✓ HRP Portfolio Construction (no matrix inversion, robust)
-  ✓ CVaR Optimization (tail-risk minimizing)
-  ✓ Equal Risk Contribution
-  ✓ Regime-Aware Portfolio Blending
-  ✓ Model Governance Engine (IC monitoring, drift detection)
-  ✓ Volatility Targeting (TargetVol = 10%)
-  ✓ Drawdown Governor (auto halt at -15%)
-  ✓ Deflated Sharpe Ratio (corrects for selection bias)
-  ✓ Distribution modeling (NOT just point predictions)
-  ✓ Tail co-movement risk
-  ✓ Factor crowding detection
-  ✓ Liquidity-adjusted risk
-
-Architecture: Layered, independent microservices
+Full institutional pipeline:
   Data → Features → Labels → Alpha → Risk → Portfolio → Governance
+
+All ML predictions use real trained models:
+  - XGBoost: fit() on historical feature matrix, SHAP via TreeExplainer
+  - LightGBM: fit() on historical feature matrix, Spearman IC tracked
+  - BiLSTM: trained on 60-day sequences, MC Dropout uncertainty
+  - GJR-GARCH, HMM, Kalman: real library calls (arch, hmmlearn, filterpy)
+  - FinBERT: real transformer inference for sentiment
+
+No Claude API anywhere in the prediction path.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request
 from pydantic import BaseModel, validator
 import asyncio
 import json
@@ -37,19 +26,17 @@ from loguru import logger
 
 from auth.cognito_auth import get_current_user, get_optional_user, CognitoUser
 from core.config import settings
+# signal_tracker accessed via request.app.state.signal_tracker (set in main_v6.py lifespan)
 
-# Data
 from data.feeds.market_data import MarketDataFeed, FundamentalDataFeed
 from data.feeds.market_data import OptionsDataFeed, SentimentDataFeed
 
-# ML v5 (existing models)
 from ml.models.lstm_model import build_default_model, LSTMTrainer
 from ml.models.xgboost_lgbm import XGBoostPredictor, LightGBMPredictor, EnsembleModel
 from ml.models.regime_volatility import HMMRegimeClassifier, GJRGARCHModel, KalmanTrendFilter, MonteCarloEngine
 from ml.models.nlp_options import FinBERTSentiment, OptionsAnalytics
 from ml.features.feature_engineering import FeaturePipeline
 
-# NEW: v6.0 institutional engines
 from ml.labeling.triple_barrier import LabelingPipeline, DeflatedSharpeRatio
 from ml.risk.risk_engine import MasterRiskEngine, DynamicCovarianceEngine, CVaREngine, VolatilityTargetingEngine
 from ml.portfolio.portfolio_engine import (
@@ -63,15 +50,14 @@ from ml.portfolio.portfolio_engine import (
 router = APIRouter()
 
 
-# ── Request/Response Models ───────────────────────────────────
 class AnalyzeRequest(BaseModel):
     ticker: str
     include_options: bool = True
     include_sentiment: bool = True
     mc_paths: int = 100_000
-    include_portfolio: bool = False    # NEW: include portfolio construction
-    portfolio_tickers: List[str] = []  # NEW: multi-asset portfolio
-    target_vol: float = 0.10           # NEW: volatility targeting
+    include_portfolio: bool = False
+    portfolio_tickers: List[str] = []
+    target_vol: float = 0.10
 
     @validator("ticker")
     def validate_ticker(cls, v):
@@ -81,31 +67,23 @@ class AnalyzeRequest(BaseModel):
         return v
 
 
-# ── Master Analyzer v6.0 ──────────────────────────────────────
 class QuantEdgeAnalyzerV6:
     """
-    Master analysis orchestrator — QuantEdge v6.0.
+    Master analysis orchestrator.
 
-    Architecture layers (fully separated):
-    ┌──────────────────────────────────────────────────────────┐
-    │  DATA LAYER    → fetch immutable market data             │
-    │  FEATURE LAYER → compute 200+ features                  │
-    │  LABEL LAYER   → triple-barrier + meta-labeling          │
-    │  ALPHA LAYER   → LSTM + XGB + LGB + HMM + GARCH + NLP   │
-    │  RISK LAYER    → CVaR, vol target, drawdown, HRP         │
-    │  PORTFOLIO     → HRP + CVaR + ERC blended by regime      │
-    │  GOVERNANCE    → IC monitoring, drift detection          │
-    └──────────────────────────────────────────────────────────┘
+    Architecture (fully separated layers):
+      DATA → FEATURES → LABELS → ALPHA → RISK → PORTFOLIO → GOVERNANCE
+
+    All ML models do real training on real historical data before predicting.
+    No Claude API in any prediction path.
     """
 
     def __init__(self):
-        # Data feeds
         self.market_feed = MarketDataFeed()
         self.fund_feed = FundamentalDataFeed()
         self.options_feed = OptionsDataFeed()
         self.sentiment_feed = SentimentDataFeed()
 
-        # v5 Alpha models
         self.feature_pipeline = FeaturePipeline()
         self.garch = GJRGARCHModel()
         self.hmm = HMMRegimeClassifier()
@@ -115,7 +93,6 @@ class QuantEdgeAnalyzerV6:
         self.finbert = FinBERTSentiment()
         self.options_analytics = OptionsAnalytics()
 
-        # v6 NEW: Institutional engines
         self.labeling = LabelingPipeline(
             profit_take=2.0, stop_loss=1.0, hold_days=21,
             cusum_h=1.0, time_decay=0.5
@@ -137,9 +114,23 @@ class QuantEdgeAnalyzerV6:
         target_vol: float = 0.10,
     ) -> Dict:
         """
-        Full institutional analysis pipeline.
+        Full institutional analysis pipeline with 120-second timeout.
         All layers run in correct dependency order.
         """
+        # Hard timeout: prevents hung external calls from blocking the server forever
+        return await asyncio.wait_for(
+            self._run_pipeline(ticker, include_options, include_sentiment, mc_paths, target_vol),
+            timeout=120.0,
+        )
+
+    async def _run_pipeline(
+        self,
+        ticker: str,
+        include_options: bool,
+        include_sentiment: bool,
+        mc_paths: int,
+        target_vol: float,
+    ) -> Dict:
         start_time = time.time()
         result = {}
 
@@ -156,37 +147,37 @@ class QuantEdgeAnalyzerV6:
                 return_exceptions=True
             )
 
-            # Handle errors gracefully
             if isinstance(price_data, Exception) or price_data is None or len(price_data) < 100:
                 raise HTTPException(status_code=404, detail=f"Insufficient price data for {ticker}")
 
-            close = price_data['close']
-            high = price_data.get('high', close)
-            low = price_data.get('low', close)
-            volume = price_data.get('volume', pd.Series(0, index=close.index))
+            close = price_data["close"]
+            high = price_data.get("high", close)
+            low = price_data.get("low", close)
+            volume = price_data.get("volume", pd.Series(0, index=close.index))
 
             returns = close.pct_change().dropna()
             log_returns = np.log(close / close.shift(1)).dropna()
 
-            # Current price and basic metrics
             current_price = float(close.iloc[-1])
             price_1y_ago = float(close.iloc[-252]) if len(close) >= 252 else float(close.iloc[0])
-            annual_return = (current_price / price_1y_ago - 1)
+            annual_return = current_price / price_1y_ago - 1
 
             if not isinstance(fundamentals, Exception) and fundamentals:
-                result['fundamentals'] = fundamentals
-                result['name'] = fundamentals.get('name', ticker)
-                result['sector'] = fundamentals.get('sector', 'Unknown')
-                result['industry'] = fundamentals.get('industry', 'Unknown')
-                result['exchange'] = fundamentals.get('exchange', '')
-                result['market_cap'] = fundamentals.get('market_cap')
-                for key in ['pe_ratio', 'forward_pe', 'peg_ratio', 'price_to_book',
-                            'price_to_sales', 'ev_ebitda', 'gross_margin', 'operating_margin',
-                            'net_margin', 'roe', 'roa', 'roic', 'debt_to_equity',
-                            'revenue_growth', 'earnings_growth', 'fcf_yield',
-                            'current_ratio', 'quick_ratio', 'dividend_yield',
-                            'short_interest', 'institutional_ownership', 'beta',
-                            'week_52_high', 'week_52_low']:
+                result["fundamentals"] = fundamentals
+                result["name"] = fundamentals.get("name", ticker)
+                result["sector"] = fundamentals.get("sector", "Unknown")
+                result["industry"] = fundamentals.get("industry", "Unknown")
+                result["exchange"] = fundamentals.get("exchange", "")
+                result["market_cap"] = fundamentals.get("market_cap")
+                for key in [
+                    "pe_ratio", "forward_pe", "peg_ratio", "price_to_book",
+                    "price_to_sales", "ev_ebitda", "gross_margin", "operating_margin",
+                    "net_margin", "roe", "roa", "roic", "debt_to_equity",
+                    "revenue_growth", "earnings_growth", "fcf_yield",
+                    "current_ratio", "quick_ratio", "dividend_yield",
+                    "short_interest", "institutional_ownership", "beta",
+                    "week_52_high", "week_52_low",
+                ]:
                     result[key] = fundamentals.get(key)
 
             # ── LAYER 2: FEATURES ─────────────────────────────
@@ -198,162 +189,161 @@ class QuantEdgeAnalyzerV6:
                 logger.warning(f"Feature engineering error: {e}")
                 feature_matrix = {}
 
-            # ── LAYER 3: LABELING (NEW v6.0) ──────────────────
+            # ── LAYER 3: LABELING ─────────────────────────────
             labeling_result = {}
             try:
                 labeling_result = self.labeling.run(
                     close=close,
-                    high=high if not isinstance(high, pd.Series) or len(high) == 0 else high,
-                    low=low if not isinstance(low, pd.Series) or len(low) == 0 else low,
+                    high=high,
+                    low=low,
                 )
             except Exception as e:
-                logger.warning(f"Labeling pipeline error: {e}")
+                logger.warning(f"Labeling error: {e}")
 
             # ── LAYER 4: ALPHA MODELS ─────────────────────────
-            # GARCH Volatility
+
+            # GJR-GARCH volatility
             garch_result = {}
             try:
-                garch_result = self.garch.fit(returns)   # fit() returns the risk dict directly
-                result['garch'] = garch_result
+                garch_result = self.garch.fit(returns)
+                result["garch"] = garch_result
             except Exception as e:
                 logger.warning(f"GARCH error: {e}")
 
-            # HMM Regime
-            regime_result = {}
-            current_regime = 'UNKNOWN'
+            # HMM regime detection
+            current_regime = "UNKNOWN"
             regime_probs = {}
             try:
                 self.hmm.fit(returns, volume)
                 regime_result = self.hmm.predict_current_regime(returns, volume)
-                current_regime = regime_result.get('current_regime', 'UNKNOWN')
-                regime_probs = regime_result.get('regime_probabilities', {})
-                result['regime'] = regime_result
-                result['current_regime'] = current_regime
+                current_regime = regime_result.get("current_regime", "UNKNOWN")
+                regime_probs = regime_result.get("regime_probabilities", {})
+                result["regime"] = regime_result
+                result["current_regime"] = current_regime
             except Exception as e:
                 logger.warning(f"HMM error: {e}")
 
-            # Kalman Filter
-            kalman_result = {}
+            # Kalman filter trend
             try:
-                kalman_result = self.kalman.fit(close)   # fit() returns the signal dict directly
-                result['kalman'] = kalman_result
+                kalman_result = self.kalman.fit(close)
+                result["kalman"] = kalman_result
             except Exception as e:
                 logger.warning(f"Kalman error: {e}")
 
-            # ML Predictions
-            ml_predictions = await self._run_ml_predictions(feature_matrix, ticker, current_regime)
-            result['ml_predictions'] = ml_predictions
+            # XGBoost + LightGBM + LSTM predictions (real training)
+            ml_predictions = await self._run_ml_predictions(
+                feature_matrix=feature_matrix,
+                ticker=ticker,
+                regime=current_regime,
+                price_data=price_data,
+                fundamentals=fundamentals if not isinstance(fundamentals, Exception) else {},
+            )
+            result["ml_predictions"] = ml_predictions
 
-            # Predicted returns
-            ensemble_preds = ml_predictions.get('ensemble', {})
-            predicted_return_1y = ensemble_preds.get('pred_252d', annual_return * 100) / 100
+            ensemble_preds = ml_predictions.get("ensemble", {})
+            predicted_return_1y = ensemble_preds.get("pred_252d", annual_return * 100) / 100
 
-            # Monte Carlo
+            # Monte Carlo simulation
             try:
-                annual_vol = garch_result.get('current_annual_vol', returns.std() * np.sqrt(252))
+                annual_vol = garch_result.get("current_annual_vol", returns.std() * np.sqrt(252))
                 mc_result = self.mc_engine.simulate(
                     current_price=current_price,
                     expected_annual_return=predicted_return_1y,
                     annual_vol=annual_vol,
                     n_paths=mc_paths,
                 )
-                result['monte_carlo'] = mc_result
+                result["monte_carlo"] = mc_result
             except Exception as e:
                 logger.warning(f"MC error: {e}")
 
-            # NLP Sentiment
+            # FinBERT sentiment (real transformer inference)
             if include_sentiment and not isinstance(news_data, Exception):
                 try:
                     sentiment_result = self._compute_sentiment(news_data)
-                    result['sentiment'] = sentiment_result
+                    result["sentiment"] = sentiment_result
                 except Exception as e:
                     logger.warning(f"Sentiment error: {e}")
 
-            # Options
-            if include_options and not isinstance(options_chain, Exception) and isinstance(options_chain, pd.DataFrame) and not options_chain.empty:
+            # Options analytics
+            if (
+                include_options
+                and not isinstance(options_chain, Exception)
+                and isinstance(options_chain, pd.DataFrame)
+                and not options_chain.empty
+            ):
                 try:
-                    options_result = self._compute_options(options_chain, current_price, annual_vol)
-                    result['options'] = options_result
+                    options_result = self._compute_options(
+                        options_chain, current_price, annual_vol
+                    )
+                    result["options"] = options_result
                 except Exception as e:
                     logger.warning(f"Options error: {e}")
 
-            # ── LAYER 5: RISK ENGINE (INDEPENDENT) ───────────
-            risk_result = {}
+            # ── LAYER 5: RISK ENGINE ──────────────────────────
             try:
-                # Single-asset risk (using return series)
-                ret_df = pd.DataFrame({'asset': returns.tail(252)})
+                ret_df = pd.DataFrame({"asset": returns.tail(252)})
                 risk_result = self.risk_engine.full_risk_assessment(
                     returns=ret_df,
                     portfolio_nav=None,
                 )
-                result['risk_engine'] = {
-                    'summary': risk_result['summary'],
-                    'vol_targeting': risk_result['vol_targeting'],
-                    'cvar': {
-                        'worst_case_daily': risk_result['cvar']['worst_case'],
-                        'historical': risk_result['cvar']['historical'],
-                        'cornish_fisher': risk_result['cvar']['cornish_fisher'],
+                result["risk_engine"] = {
+                    "summary": risk_result["summary"],
+                    "vol_targeting": risk_result["vol_targeting"],
+                    "cvar": {
+                        "worst_case_daily": risk_result["cvar"]["worst_case"],
+                        "historical": risk_result["cvar"]["historical"],
+                        "cornish_fisher": risk_result["cvar"]["cornish_fisher"],
                     },
-                    'position_limits': risk_result['position_limits'],
-                    'risk_budget': risk_result['risk_budget'],
+                    "position_limits": risk_result["position_limits"],
+                    "risk_budget": risk_result["risk_budget"],
                 }
             except Exception as e:
                 logger.warning(f"Risk engine error: {e}")
 
-            # ── LAYER 6: PORTFOLIO CONSTRUCTION (HRP) ─────────
-            hrp_result = {}
+            # ── LAYER 6: PORTFOLIO CONSTRUCTION ───────────────
             try:
-                # Single ticker: compute risk metrics only
                 returns_252 = returns.tail(252)
                 annual_vol = float(returns_252.std() * np.sqrt(252))
-
-                # Volatility targeting scale factor
                 vol_scale = self.vol_targeter.compute_scale_factor(
                     portfolio_returns=pd.Series(returns_252.values),
                     current_drawdown=self._compute_drawdown(close),
                 )
-                hrp_result = {
-                    'vol_scale_factor': vol_scale['scale_factor'],
-                    'target_vol': vol_scale['target_vol'],
-                    'realized_vol': vol_scale['realized_vol'],
-                    'leverage_signal': vol_scale['leverage_signal'],
-                    'governor_active': vol_scale['governor_active'],
-                    'recommended_position_size': min(1.0, vol_scale['scale_factor']),
+                result["portfolio_construction"] = {
+                    "vol_scale_factor": vol_scale["scale_factor"],
+                    "target_vol": vol_scale["target_vol"],
+                    "realized_vol": vol_scale["realized_vol"],
+                    "leverage_signal": vol_scale["leverage_signal"],
+                    "governor_active": vol_scale["governor_active"],
+                    "recommended_position_size": min(1.0, vol_scale["scale_factor"]),
                 }
-                result['portfolio_construction'] = hrp_result
             except Exception as e:
-                logger.warning(f"HRP error: {e}")
+                logger.warning(f"Portfolio construction error: {e}")
 
-            # ── LAYER 7: GOVERNANCE (NEW v6.0) ────────────────
-            governance_result = {}
+            # ── LAYER 7: GOVERNANCE ───────────────────────────
             try:
-                # Compute DSR for strategy quality assessment
                 sharpe = float(returns.mean() / returns.std() * np.sqrt(252))
                 skew = float(returns.skew())
                 kurt = float(returns.kurtosis() + 3)
-
                 dsr = self.dsr.compute(
                     sharpe=sharpe,
-                    n_trials=8,  # We tested 8 models
+                    n_trials=8,
                     n_obs=min(len(returns), 252),
                     skewness=skew,
                     kurtosis=kurt,
                 )
-
-                governance_result = {
-                    'deflated_sharpe_ratio': float(dsr),
-                    'is_genuine_alpha': self.dsr.is_genuine(dsr),
-                    'sharpe_ratio_raw': float(sharpe),
-                    'n_models_tested': 8,
-                    'labeling': {
-                        'n_events': labeling_result.get('n_events', 0),
-                        'label_distribution': labeling_result.get('label_distribution', {}),
-                        'avg_sample_uniqueness': labeling_result.get('avg_uniqueness', 0),
-                        'fractional_d': labeling_result.get('d_value', 1.0),
-                        'n_cusum_events': labeling_result.get('n_cusum_samples', 0),
+                result["governance"] = {
+                    "deflated_sharpe_ratio": float(dsr),
+                    "is_genuine_alpha": self.dsr.is_genuine(dsr),
+                    "sharpe_ratio_raw": float(sharpe),
+                    "n_models_tested": 8,
+                    "labeling": {
+                        "n_events": labeling_result.get("n_events", 0),
+                        "label_distribution": labeling_result.get("label_distribution", {}),
+                        "avg_sample_uniqueness": labeling_result.get("avg_uniqueness", 0),
+                        "fractional_d": labeling_result.get("d_value", 1.0),
+                        "n_cusum_events": labeling_result.get("n_cusum_samples", 0),
                     },
                 }
-                result['governance'] = governance_result
             except Exception as e:
                 logger.warning(f"Governance error: {e}")
 
@@ -361,50 +351,53 @@ class QuantEdgeAnalyzerV6:
             try:
                 from ml.features.feature_engineering import VolatilityFeatures
                 risk_metrics = VolatilityFeatures.risk_metrics(returns)
-                result['risk_metrics'] = risk_metrics
-                result['annual_vol'] = risk_metrics.get('annual_volatility', annual_vol)
-                result['sharpe_ratio'] = risk_metrics.get('sharpe_ratio')
-                result['sortino_ratio'] = risk_metrics.get('sortino_ratio')
-                result['max_drawdown'] = risk_metrics.get('max_drawdown')
-                result['calmar_ratio'] = risk_metrics.get('calmar_ratio')
-                # Hurst exponent computed separately (not in risk_metrics)
-                result['hurst_exponent'] = float(VolatilityFeatures.hurst_exponent(returns))
+                result["risk_metrics"] = risk_metrics
+                result["annual_vol"] = risk_metrics.get("annual_volatility", annual_vol)
+                result["sharpe_ratio"] = risk_metrics.get("sharpe_ratio")
+                result["sortino_ratio"] = risk_metrics.get("sortino_ratio")
+                result["max_drawdown"] = risk_metrics.get("max_drawdown")
+                result["calmar_ratio"] = risk_metrics.get("calmar_ratio")
+                result["hurst_exponent"] = float(VolatilityFeatures.hurst_exponent(returns))
             except Exception as e:
-                result['annual_vol'] = float(returns.std() * np.sqrt(252))
+                result["annual_vol"] = float(returns.std() * np.sqrt(252))
 
             # ── SCENARIOS ────────────────────────────────────
-            result['scenarios'] = self._build_scenarios(
+            result["scenarios"] = self._build_scenarios(
                 current_price=current_price,
                 predicted_return=predicted_return_1y,
-                annual_vol=result.get('annual_vol', 0.25),
+                annual_vol=result.get("annual_vol", 0.25),
                 regime=current_regime,
             )
 
             # ── COMPOSITE SIGNAL ─────────────────────────────
             signal, score = self._compute_composite_signal(result)
-            result['overall_signal'] = signal
-            result['overall_score'] = score
+            result["overall_signal"] = signal
+            result["overall_score"] = score
 
-            # ── PRICE + CHANGE ────────────────────────────────
-            result['price'] = current_price
-            result['change'] = float(close.iloc[-1] - close.iloc[-2]) if len(close) >= 2 else 0
-            result['change_pct'] = float((close.iloc[-1] / close.iloc[-2] - 1) * 100) if len(close) >= 2 else 0
-            result['predicted_return_1y'] = float(predicted_return_1y * 100)
-
-            # ── DATA QUALITY ─────────────────────────────────
-            result['data_quality'] = {
-                'score': self._data_quality_score(result),
-                'n_price_days': len(close),
-                'has_options': not isinstance(options_chain, Exception) and isinstance(options_chain, pd.DataFrame) and not options_chain.empty,
-                'has_sentiment': not isinstance(news_data, Exception) and bool(news_data),
-                'has_fundamentals': not isinstance(fundamentals, Exception) and bool(fundamentals),
+            result["price"] = current_price
+            result["change"] = float(close.iloc[-1] - close.iloc[-2]) if len(close) >= 2 else 0
+            result["change_pct"] = (
+                float((close.iloc[-1] / close.iloc[-2] - 1) * 100) if len(close) >= 2 else 0
+            )
+            result["predicted_return_1y"] = float(predicted_return_1y * 100)
+            result["data_quality"] = {
+                "score": self._data_quality_score(result),
+                "n_price_days": len(close),
+                "has_options": (
+                    not isinstance(options_chain, Exception)
+                    and isinstance(options_chain, pd.DataFrame)
+                    and not options_chain.empty
+                ),
+                "has_sentiment": not isinstance(news_data, Exception) and bool(news_data),
+                "has_fundamentals": not isinstance(fundamentals, Exception) and bool(fundamentals),
             }
-
-            result['analysis_duration_seconds'] = round(time.time() - start_time, 1)
-            result['version'] = '6.0'
+            result["analysis_duration_seconds"] = round(time.time() - start_time, 1)
+            result["version"] = "6.0"
 
         except HTTPException:
             raise
+        except asyncio.TimeoutError:
+            raise HTTPException(status_code=504, detail="Analysis timed out after 120 seconds")
         except Exception as e:
             logger.error(f"Analysis error for {ticker}: {e}")
             raise HTTPException(status_code=500, detail=str(e))
@@ -412,167 +405,397 @@ class QuantEdgeAnalyzerV6:
         return result
 
     async def _run_ml_predictions(
-        self, feature_matrix: Dict, ticker: str, regime: str
+        self,
+        feature_matrix: Dict,
+        ticker: str,
+        regime: str,
+        price_data: Optional[pd.DataFrame] = None,
+        fundamentals: Optional[Dict] = None,
     ) -> Dict:
-        """Run all ML models and ensemble them."""
-        import anthropic
+        """
+        Train XGBoost, LightGBM, and BiLSTM on real historical data then predict.
 
+        Pipeline:
+          1. build_historical_feature_matrix() → (n_days, n_features) array
+          2. Forward 21-day log-return labels, clipped at ±30%
+          3. 60-day embargo train/val split (Lopez de Prado Ch.7)
+          4. XGBoost: xgb_model.fit(X_train, y_train) → predict(today_vec)
+             SHAP: shap.TreeExplainer(model).shap_values(today_vec)
+          5. LightGBM: lgb_model.fit(X_train, y_train) → predict(today_vec)
+             Rank score: percentile in training distribution
+          6. BiLSTM: 60-day rolling sequences, 30-epoch training, MC Dropout inference
+          7. Ensemble: XGB 40% + LGB 40% + LSTM 20%
+        """
         if not feature_matrix:
-            return {'ensemble': {}}
+            return {"ensemble": {}}
 
-        # Try Claude API as intelligent ML fallback
-        try:
-            if not settings.ANTHROPIC_API_KEY:
-                raise ValueError("ANTHROPIC_API_KEY not set — using statistical fallback")
-            client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
-            feature_summary = {
-                k: round(float(v), 4) for k, v in
-                list(feature_matrix.items())[:40]
-                if v is not None and not np.isnan(float(v) if isinstance(v, (int, float)) else np.nan)
+        loop = asyncio.get_event_loop()
+
+        def _train_and_predict() -> Dict:
+            # All imports inside thread so they don't need to be at module level
+            from ml.models.xgboost_lgbm import XGBoostPredictor, LightGBMPredictor
+            from ml.models.lstm_model import LSTMTrainer, QuantEdgeLSTM
+            import torch
+
+            # ── 1. HISTORICAL FEATURE MATRIX ─────────────────
+            if price_data is None or len(price_data) < 300:
+                return self._statistical_predictions(feature_matrix, regime)
+
+            try:
+                X_hist, feature_names, dates = self.feature_pipeline.build_historical_feature_matrix(
+                    df=price_data,
+                    fundamentals=fundamentals or {},
+                    lookback_days=504,
+                    step=1,
+                )
+            except Exception as e:
+                logger.warning(f"build_historical_feature_matrix failed: {e}")
+                return self._statistical_predictions(feature_matrix, regime)
+
+            if len(X_hist) < 100:
+                return self._statistical_predictions(feature_matrix, regime)
+
+            # ── 2. FORWARD RETURN LABELS ──────────────────────
+            # Label = log(close[t+21] / close[t]), clipped at ±30%
+            # Clipping removes tail outliers that would dominate the loss.
+            close_series = price_data["close"]
+            horizon = 21
+            y_list, valid_idx = [], []
+            for i, date in enumerate(dates):
+                try:
+                    pos = close_series.index.get_loc(date)
+                    if pos + horizon < len(close_series):
+                        fwd = np.log(
+                            close_series.iloc[pos + horizon] / close_series.iloc[pos]
+                        )
+                        y_list.append(float(np.clip(fwd, -0.30, 0.30)))
+                        valid_idx.append(i)
+                except Exception:
+                    continue
+
+            if len(y_list) < 80:
+                return self._statistical_predictions(feature_matrix, regime)
+
+            X = X_hist[valid_idx]
+            y = np.array(y_list, dtype=np.float64)
+
+            # ── 3. TRAIN/VAL SPLIT WITH 60-DAY EMBARGO ────────
+            # Embargo: skip 60 days after the train split endpoint.
+            # Without this, autocorrelated features would let the model
+            # implicitly see future returns through overlapping windows.
+            # Reference: Lopez de Prado (2018), Advances in Financial ML, Ch.7
+            n_train = int(len(y) * 0.80)
+            n_embargo_end = min(n_train + 60, len(y) - 10)
+            X_train, y_train = X[:n_train], y[:n_train]
+            X_val = X[n_embargo_end:] if len(X) - n_embargo_end >= 10 else None
+            y_val = y[n_embargo_end:] if X_val is not None else None
+
+            # ── 4. TODAY'S FEATURE VECTOR ────────────────────
+            # Must use the same feature_names list so the vector
+            # dimension matches what the models were trained on.
+            today_vec = np.array(
+                [feature_matrix.get(k, 0.0) for k in feature_names],
+                dtype=np.float64,
+            ).reshape(1, -1)
+            today_vec = np.where(np.isfinite(today_vec), today_vec, 0.0)
+
+            # ── 5. XGBOOST ────────────────────────────────────
+            # Hyperparameters for financial data:
+            #   max_depth=6, min_child_weight=20 → prevents overfitting on noisy data
+            #   subsample=0.8, colsample_bytree=0.7 → stochastic boosting
+            #   reg_alpha=0.1, reg_lambda=1.0 → L1+L2 regularization
+            xgb_pred_21d = xgb_signal = xgb_ic = 0.0
+            shap_drivers = []
+            try:
+                xgb_model = XGBoostPredictor(target_horizon=horizon)
+                xgb_fit = xgb_model.fit(
+                    X_train, y_train, feature_names, X_val=X_val, y_val=y_val
+                )
+                xgb_pred_21d = float(xgb_model.predict(today_vec)[0]) * 100
+                xgb_ic = float(xgb_fit.get("ic_train", 0))
+                xgb_signal = float(np.clip(xgb_pred_21d * 5, -100, 100))
+
+                # SHAP values: shap.TreeExplainer gives exact Shapley values,
+                # not just feature_importances_ which are impurity-based and biased
+                # toward high-cardinality features.
+                # Reference: Lundberg & Lee (2017), NeurIPS
+                try:
+                    _, shap_dict = xgb_model.predict_with_shap(today_vec)
+                    # predict_with_shap returns per-feature SHAP values
+                    # (it calls shap.TreeExplainer internally — see xgboost_lgbm.py)
+                    all_shap = {
+                        **shap_dict.get("top_bullish_drivers", {}),
+                        **shap_dict.get("top_bearish_drivers", {}),
+                    }
+                    top = sorted(all_shap.items(), key=lambda kv: abs(kv[1]), reverse=True)[:8]
+                    shap_drivers = [{"feature": k, "impact": round(v * 100, 4)} for k, v in top]
+                except Exception:
+                    # Fallback: raw feature importance (not SHAP, but better than nothing)
+                    fi = xgb_fit.get("top10_features", [])
+                    shap_drivers = [{"feature": k, "impact": round(v * 100, 4)} for k, v in fi[:8]]
+
+            except Exception as e:
+                logger.warning(f"XGBoost training failed: {e}")
+
+            # ── 6. LIGHTGBM ───────────────────────────────────
+            # Leaf-wise tree growth + GOSS sampling.
+            # Rank IC measured as Spearman correlation (rank-based, more
+            # appropriate than Pearson for fat-tailed financial returns).
+            lgb_pred_21d = lgb_ic = 0.0
+            lgb_rank_score = 50.0
+            try:
+                lgb_model = LightGBMPredictor(target_horizon=horizon)
+                lgb_fit = lgb_model.fit(
+                    X_train, y_train, feature_names, X_val=X_val, y_val=y_val
+                )
+                lgb_pred_21d = float(lgb_model.predict(today_vec)[0]) * 100
+                lgb_ic = float(lgb_fit.get("ic_train", 0))
+                # Rank score: what percentile of the training universe does
+                # today's prediction place at? 100 = top decile.
+                train_preds = lgb_model.predict(X_train)
+                lgb_rank_score = round(
+                    float(np.mean(lgb_model.predict(today_vec)[0] > train_preds)) * 100, 1
+                )
+            except Exception as e:
+                logger.warning(f"LightGBM training failed: {e}")
+
+            # ── 7. BiLSTM + TEMPORAL ATTENTION + MC DROPOUT ──
+            # Architecture: Input(n_features) → BiLSTM(128) → Attention → BiLSTM(64)
+            #               → MultiTaskHeads → [5d, 10d, 21d, 63d, 252d predictions]
+            # Training: 30 epochs, Huber loss (robust to return outliers), AdamW
+            # Inference: 30 MC Dropout passes → mean + epistemic uncertainty
+            # Reference: Gal & Ghahramani (2016), "Dropout as Bayesian Approximation"
+            lstm_preds: Dict = {}
+            lstm_uncertainty = 100.0
+            SEQ_LEN = 60
+            try:
+                if len(X) >= SEQ_LEN + horizon + 10:
+                    seqs, seq_labels = [], []
+                    for i in range(len(X) - SEQ_LEN - horizon):
+                        seqs.append(X[i: i + SEQ_LEN])
+                        lbl_idx = i + SEQ_LEN
+                        seq_labels.append(float(y[lbl_idx]) if lbl_idx < len(y) else 0.0)
+
+                    if len(seqs) >= 40:
+                        seqs_np = np.array(seqs, dtype=np.float32)
+                        labels_np = np.array(seq_labels, dtype=np.float32)
+
+                        # QuantEdgeLSTM constructor: input_size, hidden_size, dropout, horizons
+                        # (see ml/models/lstm_model.py — these are the actual param names)
+                        lstm_net = QuantEdgeLSTM(
+                            input_size=X.shape[1],
+                            hidden_size=128,
+                            dropout=0.3,
+                            horizons=[5, 10, 21, 63, 252],
+                        )
+                        trainer = LSTMTrainer(lstm_net)
+                        optimizer = torch.optim.Adam(trainer.model.parameters(), lr=1e-3)
+
+                        n_seq_train = int(len(seqs_np) * 0.85)
+                        X_seq = torch.FloatTensor(seqs_np[:n_seq_train]).to(trainer.device)
+                        y_seq = torch.FloatTensor(labels_np[:n_seq_train]).to(trainer.device)
+
+                        trainer.model.train()
+                        for epoch in range(30):
+                            optimizer.zero_grad()
+                            out = trainer.model(X_seq)
+                            pred_21 = out["pred_21d"].squeeze()
+                            loss = torch.nn.functional.huber_loss(pred_21, y_seq)
+                            loss.backward()
+                            torch.nn.utils.clip_grad_norm_(trainer.model.parameters(), 1.0)
+                            optimizer.step()
+
+                        # MC Dropout inference: model.train() keeps dropout active.
+                        # 30 stochastic forward passes → distribution over predictions.
+                        today_seq = X[-SEQ_LEN:].astype(np.float32)
+                        mc = trainer.predict_with_uncertainty(today_seq, n_mc_samples=30)
+                        lstm_preds = {
+                            "pred_5d":   round(mc.get("return_5d", 0) * 100, 4),
+                            "pred_10d":  round(mc.get("return_10d", 0) * 100, 4),
+                            "pred_21d":  round(mc.get("return_21d", 0) * 100, 4),
+                            "pred_63d":  round(mc.get("return_63d", 0) * 100, 4),
+                            "pred_252d": round(mc.get("return_252d", 0) * 100, 4),
+                            "regime":    mc.get("regime", regime),
+                            "uncertainty": round(mc.get("total_unc_21d", 0.1) * 100, 2),
+                        }
+                        lstm_uncertainty = lstm_preds["uncertainty"]
+            except Exception as e:
+                logger.warning(f"LSTM training/inference failed: {e}")
+
+            # ── 8. ENSEMBLE ───────────────────────────────────
+            # Weights: XGB 40%, LGB 40%, LSTM 20%
+            # LSTM weighted lower because it trains from scratch each request;
+            # once offline pre-trained weights are available, increase to 33%.
+            weighted = []
+            if xgb_pred_21d != 0: weighted.append((xgb_pred_21d, 0.40))
+            if lgb_pred_21d != 0: weighted.append((lgb_pred_21d, 0.40))
+            lstm_21 = lstm_preds.get("pred_21d", 0)
+            if lstm_21 != 0: weighted.append((lstm_21, 0.20))
+
+            if not weighted:
+                return self._statistical_predictions(feature_matrix, regime)
+
+            total_w = sum(w for _, w in weighted)
+            ens_21d = sum(p * w for p, w in weighted) / total_w
+
+            def scale(base: float, h: int) -> float:
+                """Square-root-of-time scaling: σ(h) = σ(1) * sqrt(h)."""
+                return round(base * np.sqrt(h / 21), 4)
+
+            n_models = len(weighted)
+            mean_ic = (abs(xgb_ic) + abs(lgb_ic)) / max(n_models, 1)
+            confidence = float(np.clip(mean_ic / 0.10, 0.0, 1.0))
+
+            return {
+                "lstm": lstm_preds if lstm_preds else {
+                    "pred_21d": scale(ens_21d, 21),
+                    "regime": regime,
+                    "uncertainty": lstm_uncertainty,
+                },
+                "xgboost": {
+                    "signal_strength": round(xgb_signal, 2),
+                    "pred_21d": round(xgb_pred_21d, 4),
+                    "pred_252d": scale(xgb_pred_21d, 252),
+                    "ic_train": round(xgb_ic, 4),
+                },
+                "lightgbm": {
+                    "rank_score": lgb_rank_score,
+                    "pred_21d": round(lgb_pred_21d, 4),
+                    "pred_252d": scale(lgb_pred_21d, 252),
+                    "ic_train": round(lgb_ic, 4),
+                },
+                "ensemble": {
+                    "pred_5d":            scale(ens_21d, 5),
+                    "pred_10d":           scale(ens_21d, 10),
+                    "pred_21d":           round(ens_21d, 4),
+                    "pred_63d":           scale(ens_21d, 63),
+                    "pred_252d":          scale(ens_21d, 252),
+                    "confidence":         round(confidence, 3),
+                    "model_disagreement": round(abs(xgb_pred_21d - lgb_pred_21d), 4),
+                },
+                "shap_top_drivers": shap_drivers,
+                "rank_ic_estimate": round(xgb_ic, 4),
+                "ic_estimate": round((xgb_ic + lgb_ic) / max(n_models, 1), 4),
+                "quantile": {
+                    "q10_1m": round(float(np.percentile(y, 10)) * 100, 4),
+                    "q25_1m": round(float(np.percentile(y, 25)) * 100, 4),
+                    "q50_1m": round(float(np.percentile(y, 50)) * 100, 4),
+                    "q75_1m": round(float(np.percentile(y, 75)) * 100, 4),
+                    "q90_1m": round(float(np.percentile(y, 90)) * 100, 4),
+                },
             }
 
-            message = client.messages.create(
-                model="claude-opus-4-6",
-                max_tokens=1200,
-                messages=[{
-                    "role": "user",
-                    "content": f"""You are an institutional quant model. Given these computed market signals for {ticker}:
-
-Regime: {regime}
-Key features: {json.dumps(feature_summary, indent=2)}
-
-Return ONLY a JSON object with these exact fields (no markdown, no explanation):
-{{
-  "lstm": {{"pred_5d": <float>, "pred_10d": <float>, "pred_21d": <float>, "pred_63d": <float>, "pred_252d": <float>, "regime": "{regime}", "uncertainty": <float 0-100>}},
-  "xgboost": {{"signal_strength": <float -100 to 100>, "pred_21d": <float>, "pred_252d": <float>}},
-  "lightgbm": {{"rank_score": <float 0-100>, "pred_21d": <float>, "pred_252d": <float>}},
-  "ensemble": {{"pred_5d": <float>, "pred_10d": <float>, "pred_21d": <float>, "pred_63d": <float>, "pred_252d": <float>, "confidence": <float 0-1>, "model_disagreement": <float>}},
-  "shap_top_drivers": [{{"feature": "name", "impact": <float>}}, ...],
-  "rank_ic_estimate": <float -1 to 1>,
-  "ic_estimate": <float -1 to 1>,
-  "quantile": {{"q10_1m": <float>, "q25_1m": <float>, "q50_1m": <float>, "q75_1m": <float>, "q90_1m": <float>}}
-}}
-
-All return values are percentages. Be realistic and grounded in the features provided."""
-                }]
-            )
-
-            response_text = message.content[0].text.strip()
-            if '```' in response_text:
-                response_text = response_text.split('```')[1].replace('json', '').strip()
-            predictions = json.loads(response_text)
-            return predictions
-
+        # Run in thread pool — does not block the async event loop
+        try:
+            return await loop.run_in_executor(None, _train_and_predict)
         except Exception as e:
-            logger.warning(f"ML prediction fallback: {e}")
-            # Statistical fallback
+            logger.error(f"_run_ml_predictions failed: {e}")
             return self._statistical_predictions(feature_matrix, regime)
 
     def _statistical_predictions(self, features: Dict, regime: str) -> Dict:
-        """Simple statistical prediction when ML models unavailable."""
-        momentum_21d = features.get('momentum_21d', 0) or 0
-        momentum_63d = features.get('momentum_63d', 0) or 0
-        rsi_14 = features.get('rsi_14', 50) or 50
-        vol_ratio = features.get('vol_ratio', 1) or 1
-
-        # Simple linear combination
-        raw_signal = (
-            0.3 * float(momentum_21d) +
-            0.2 * float(momentum_63d) +
-            0.1 * (float(rsi_14) - 50) / 50 * 5 -
-            0.1 * (float(vol_ratio) - 1) * 5
-        )
-        raw_signal = float(np.clip(raw_signal * 10, -20, 20))
-
+        """Fallback when insufficient history for ML training."""
+        momentum_21d = float(features.get("momentum_21d", 0) or 0)
+        momentum_63d = float(features.get("momentum_63d", 0) or 0)
+        rsi_14 = float(features.get("rsi_14", 50) or 50)
+        vol_ratio = float(features.get("vol_ratio", 1) or 1)
+        raw = float(np.clip(
+            (0.3 * momentum_21d + 0.2 * momentum_63d
+             + 0.1 * (rsi_14 - 50) / 50 * 5
+             - 0.1 * (vol_ratio - 1) * 5) * 10,
+            -20, 20
+        ))
         return {
-            'ensemble': {
-                'pred_5d': raw_signal * 0.3,
-                'pred_10d': raw_signal * 0.5,
-                'pred_21d': raw_signal,
-                'pred_63d': raw_signal * 1.5,
-                'pred_252d': raw_signal * 2.0,
-                'confidence': 0.45,
-                'model_disagreement': 5.0,
+            "ensemble": {
+                "pred_5d": raw * 0.3, "pred_10d": raw * 0.5, "pred_21d": raw,
+                "pred_63d": raw * 1.5, "pred_252d": raw * 2.0,
+                "confidence": 0.35, "model_disagreement": 5.0,
             },
-            'rank_ic_estimate': 0.05,
+            "rank_ic_estimate": 0.03,
         }
 
     def _compute_sentiment(self, news_data: Dict) -> Dict:
-        """Compute sentiment from news and Reddit data."""
+        """
+        Real NLP sentiment via FinBERT (ProsusAI/finbert).
+
+        FinBERT is a BERT model fine-tuned on Financial PhraseBank.
+        It classifies text as positive / negative / neutral with calibrated probabilities.
+        Falls back to TextBlob if the model is not available (e.g. no internet at startup).
+
+        This does NOT use keyword lists. Every headline goes through the transformer.
+        """
         try:
-            # news is a list of dicts with 'title', 'publisher', etc.
-            news_items = news_data.get('news', [])
-            # Extract title strings for NLP processing
-            news_headlines = [item.get('title', '') if isinstance(item, dict) else str(item) for item in news_items]
-            reddit_posts = news_data.get('reddit', [])
+            news_items = news_data.get("news", [])
+            headlines = [
+                item.get("title", "") if isinstance(item, dict) else str(item)
+                for item in news_items
+                if item
+            ]
+            reddit_posts = news_data.get("reddit", [])
 
-            # Simple sentiment approximation
-            bullish_words = ['beat', 'exceeded', 'surpass', 'strong', 'growth', 'record', 'raise', 'upgrade']
-            bearish_words = ['miss', 'below', 'weak', 'decline', 'cut', 'downgrade', 'risk', 'loss']
+            # FinBERT inference on news headlines (batched for speed)
+            # self.finbert.analyze_text() runs the transformer forward pass
+            news_scores = []
+            for headline in headlines[:15]:
+                if headline.strip():
+                    try:
+                        result = self.finbert.analyze_text(headline)
+                        # analyze_text() returns {"score": float, "label": str, "model": str}
+                        # score is in [-1, +1]: positive → +1, negative → -1, neutral → 0
+                        news_scores.append(result.get("score", 0.0))
+                    except Exception:
+                        continue
 
-            news_score = 0.0
-            for headline in news_headlines[:10]:
-                h_lower = str(headline).lower()
-                bulls = sum(1 for w in bullish_words if w in h_lower)
-                bears = sum(1 for w in bearish_words if w in h_lower)
-                news_score += (bulls - bears) * 0.1
+            news_score = float(np.mean(news_scores)) if news_scores else 0.0
+            news_label = "BULLISH" if news_score > 0.15 else "BEARISH" if news_score < -0.15 else "NEUTRAL"
 
-            news_score = float(np.clip(news_score, -1, 1))
-
-            reddit_score = 0.0
-            for post in reddit_posts[:10]:
-                text = str(post.get('title', '')) + ' ' + str(post.get('body', ''))
-                text_lower = text.lower()
-                bulls = sum(1 for w in bullish_words if w in text_lower)
-                bears = sum(1 for w in bearish_words if w in text_lower)
-                weight = np.log1p(post.get('score', 1))
-                reddit_score += (bulls - bears) * 0.1 * weight
-
-            reddit_score = float(np.clip(reddit_score / max(len(reddit_posts), 1), -1, 1))
+            # FinBERT inference on Reddit posts (upvote-weighted)
+            reddit_result = self.finbert.aggregate_reddit_sentiment(reddit_posts[:20])
+            reddit_score = float(reddit_result.get("composite_score", 0.0))
+            reddit_label = reddit_result.get("label", "NEUTRAL")
 
             composite = 0.6 * news_score + 0.4 * reddit_score
-
-            def label(s):
-                if s > 0.2: return 'BULLISH'
-                if s < -0.2: return 'BEARISH'
-                return 'NEUTRAL'
+            composite_label = "BULLISH" if composite > 0.15 else "BEARISH" if composite < -0.15 else "NEUTRAL"
 
             return {
-                'news': {'score': news_score, 'label': label(news_score)},
-                'reddit': {'score': reddit_score, 'label': label(reddit_score), 'n_posts': len(reddit_posts)},
-                'composite': composite,
-                'label': label(composite),
-                'headlines': news_headlines[:5],
+                "news": {
+                    "score": round(news_score, 4),
+                    "label": news_label,
+                    "n_headlines": len(news_scores),
+                },
+                "reddit": {
+                    "score": round(reddit_score, 4),
+                    "label": reddit_label,
+                    "n_posts": len(reddit_posts),
+                },
+                "composite": round(composite, 4),
+                "label": composite_label,
+                "headlines": headlines[:5],
+                "model": "FinBERT (ProsusAI/finbert)",
             }
-        except Exception:
-            return {'composite': 0.0, 'label': 'NEUTRAL', 'news': {}, 'reddit': {}}
+        except Exception as e:
+            logger.warning(f"FinBERT sentiment failed: {e}")
+            return {"composite": 0.0, "label": "NEUTRAL", "news": {}, "reddit": {}}
 
     def _compute_options(self, options_chain: Any, spot: float, vol: float) -> Dict:
-        """Compute options analytics."""
+        """Compute options analytics via OptionsAnalytics."""
         try:
-            from ml.models.nlp_options import OptionsAnalytics
             oa = OptionsAnalytics()
             gex = oa.compute_gex(options_chain, spot)
             iv_surface = oa.build_iv_surface(options_chain, spot)
-
-            # ATM greeks (30 days)
-            from datetime import datetime
             T = 30 / 252
             atm_greeks = oa.compute_all_greeks(
-                S=spot, K=spot, T=T, r=0.053, sigma=vol, option_type='call'
+                S=spot, K=spot, T=T, r=0.053, sigma=vol, option_type="call"
             )
-
             return {
-                'gex': gex,
-                'iv_surface': iv_surface,
-                'atm_greeks': atm_greeks,
-                'atm_iv_30d': vol,
+                "gex": gex,
+                "iv_surface": iv_surface,
+                "atm_greeks": atm_greeks,
+                "atm_iv_30d": vol,
             }
         except Exception:
             return {}
 
     def _compute_drawdown(self, prices: pd.Series) -> float:
-        """Current drawdown from all-time high."""
         if len(prices) == 0:
             return 0.0
         peak = prices.cummax()
@@ -582,149 +805,123 @@ All return values are percentages. Be realistic and grounded in the features pro
         self, current_price: float, predicted_return: float,
         annual_vol: float, regime: str
     ) -> Dict:
-        """Build 4-scenario analysis."""
-        bull_mult = 1.5 if 'BULL' in regime else 1.3
-        bear_mult = 1.5 if 'BEAR' in regime else 1.2
-
+        bull_mult = 1.5 if "BULL" in regime else 1.3
+        bear_mult = 1.5 if "BEAR" in regime else 1.2
         scenarios = {
-            'bull': {
-                'name': 'Bull Case',
-                'return_pct': (predicted_return + bull_mult * annual_vol) * 100,
-                'target_price': current_price * (1 + predicted_return + bull_mult * annual_vol),
-                'probability': 0.25,
-                'description': f'Favorable conditions, strong momentum in {regime} regime',
+            "bull": {
+                "name": "Bull Case",
+                "return_pct": (predicted_return + bull_mult * annual_vol) * 100,
+                "target_price": current_price * (1 + predicted_return + bull_mult * annual_vol),
+                "probability": 0.25,
+                "description": f"Favorable conditions in {regime} regime",
             },
-            'base': {
-                'name': 'Base Case',
-                'return_pct': predicted_return * 100,
-                'target_price': current_price * (1 + predicted_return),
-                'probability': 0.40,
-                'description': 'Expected scenario given current regime and signals',
+            "base": {
+                "name": "Base Case",
+                "return_pct": predicted_return * 100,
+                "target_price": current_price * (1 + predicted_return),
+                "probability": 0.40,
+                "description": "Expected scenario given current regime and signals",
             },
-            'bear': {
-                'name': 'Bear Case',
-                'return_pct': (predicted_return - bear_mult * annual_vol) * 100,
-                'target_price': current_price * (1 + predicted_return - bear_mult * annual_vol),
-                'probability': 0.25,
-                'description': 'Downside scenario with increased volatility',
+            "bear": {
+                "name": "Bear Case",
+                "return_pct": (predicted_return - bear_mult * annual_vol) * 100,
+                "target_price": current_price * (1 + predicted_return - bear_mult * annual_vol),
+                "probability": 0.25,
+                "description": "Downside scenario with elevated volatility",
             },
-            'tail': {
-                'name': 'Tail Risk',
-                'return_pct': (predicted_return - 2.5 * annual_vol) * 100,
-                'target_price': current_price * (1 + predicted_return - 2.5 * annual_vol),
-                'probability': 0.10,
-                'description': 'Black swan event / structural break scenario',
+            "tail": {
+                "name": "Tail Risk",
+                "return_pct": (predicted_return - 2.5 * annual_vol) * 100,
+                "target_price": current_price * (1 + predicted_return - 2.5 * annual_vol),
+                "probability": 0.10,
+                "description": "Black swan / structural break",
             },
         }
-
-        # Expected value
-        ev = sum(s['probability'] * s['return_pct'] / 100 for s in scenarios.values())
-        scenarios['expected_value'] = float(ev)
-
+        ev = sum(s["probability"] * s["return_pct"] / 100 for s in scenarios.values())
+        scenarios["expected_value"] = float(ev)
         return scenarios
 
     def _compute_composite_signal(self, result: Dict) -> tuple:
-        """Compute overall signal and score (0-100)."""
         score_components = []
 
-        # ML ensemble prediction
-        ml = result.get('ml_predictions', {}).get('ensemble', {})
-        pred_1y = ml.get('pred_252d', 0) or 0
+        ml = result.get("ml_predictions", {}).get("ensemble", {})
+        pred_1y = ml.get("pred_252d", 0) or 0
         ml_score = np.clip((float(pred_1y) + 20) / 40 * 100, 0, 100)
-        score_components.append(('ml', ml_score, 0.40))
+        score_components.append(("ml", ml_score, 0.40))
 
-        # Regime
-        regime = result.get('current_regime', 'UNKNOWN')
+        regime = result.get("current_regime", "UNKNOWN")
         regime_scores = {
-            'BULL_LOW_VOL': 80, 'BULL_HIGH_VOL': 65,
-            'MEAN_REVERT': 50, 'BEAR_LOW_VOL': 35, 'BEAR_HIGH_VOL': 20, 'UNKNOWN': 50
+            "BULL_LOW_VOL": 80, "BULL_HIGH_VOL": 65,
+            "MEAN_REVERT": 50, "BEAR_LOW_VOL": 35,
+            "BEAR_HIGH_VOL": 20, "UNKNOWN": 50,
         }
-        score_components.append(('regime', regime_scores.get(regime, 50), 0.25))
+        score_components.append(("regime", regime_scores.get(regime, 50), 0.25))
 
-        # GARCH vol regime
-        garch = result.get('garch', {})
-        vol_reg = garch.get('vol_regime', 'NORMAL')
-        vol_scores = {'LOW': 75, 'NORMAL': 60, 'HIGH': 35}
-        score_components.append(('vol', vol_scores.get(vol_reg, 60), 0.15))
+        garch = result.get("garch", {})
+        vol_reg = garch.get("vol_regime", "NORMAL")
+        vol_scores = {"LOW": 75, "NORMAL": 60, "HIGH": 35}
+        score_components.append(("vol", vol_scores.get(vol_reg, 60), 0.15))
 
-        # Sentiment
-        sentiment = result.get('sentiment', {})
-        sent_score_raw = (sentiment.get('composite', 0) or 0)
-        sent_score = np.clip((float(sent_score_raw) + 1) / 2 * 100, 0, 100)
-        score_components.append(('sentiment', sent_score, 0.10))
+        sentiment = result.get("sentiment", {})
+        sent_raw = float(sentiment.get("composite", 0) or 0)
+        sent_score = np.clip((sent_raw + 1) / 2 * 100, 0, 100)
+        score_components.append(("sentiment", sent_score, 0.10))
 
-        # Kalman trend
-        kalman = result.get('kalman', {})
-        kalman_sig = kalman.get('signal_interpretation', 'MEAN_REVERTING')
-        kalman_scores = {'STRONG_TREND': 75, 'WEAK_TREND': 60, 'MEAN_REVERTING': 40}
-        score_components.append(('kalman', kalman_scores.get(kalman_sig, 50), 0.10))
+        kalman = result.get("kalman", {})
+        kalman_sig = kalman.get("signal_interpretation", "MEAN_REVERTING")
+        kalman_scores = {"STRONG_TREND": 75, "WEAK_TREND": 60, "MEAN_REVERTING": 40}
+        score_components.append(("kalman", kalman_scores.get(kalman_sig, 50), 0.10))
 
-        # Weighted score
-        total_score = sum(s * w for _, s, w in score_components)
-        total_score = float(np.clip(total_score, 0, 100))
+        total_score = float(np.clip(sum(s * w for _, s, w in score_components), 0, 100))
 
-        # Signal label
-        if total_score >= 72:   signal = 'STRONG_BUY'
-        elif total_score >= 58: signal = 'BUY'
-        elif total_score >= 42: signal = 'NEUTRAL'
-        elif total_score >= 28: signal = 'SELL'
-        else:                   signal = 'STRONG_SELL'
+        if total_score >= 72:   signal = "STRONG_BUY"
+        elif total_score >= 58: signal = "BUY"
+        elif total_score >= 42: signal = "NEUTRAL"
+        elif total_score >= 28: signal = "SELL"
+        else:                   signal = "STRONG_SELL"
 
         return signal, round(total_score)
 
     def _data_quality_score(self, result: Dict) -> int:
         score = 0
-        if result.get('price'): score += 20
-        if result.get('fundamentals'): score += 15
-        if result.get('garch'): score += 15
-        if result.get('regime'): score += 15
-        if result.get('ml_predictions', {}).get('ensemble'): score += 15
-        if result.get('options'): score += 10
-        if result.get('sentiment'): score += 10
+        if result.get("price"): score += 20
+        if result.get("fundamentals"): score += 15
+        if result.get("garch"): score += 15
+        if result.get("regime"): score += 15
+        if result.get("ml_predictions", {}).get("ensemble"): score += 15
+        if result.get("options"): score += 10
+        if result.get("sentiment"): score += 10
         return min(score, 100)
 
 
-# ── Singleton ─────────────────────────────────────────────────
-_analyzer = None
-
-def get_analyzer() -> QuantEdgeAnalyzerV6:
-    global _analyzer
-    if _analyzer is None:
-        _analyzer = QuantEdgeAnalyzerV6()
-    return _analyzer
-
-
 # ── API Endpoints ─────────────────────────────────────────────
+
 @router.post("/analyze")
 async def analyze(
     request: AnalyzeRequest,
     background_tasks: BackgroundTasks,
+    http_request: Request,
     current_user: Optional[CognitoUser] = Depends(get_optional_user),
 ):
     """
-    Main analysis endpoint.
-    Runs the full v6.0 institutional pipeline.
+    Main v6 analysis endpoint.
+    Uses app.state.redis (pool created at startup) — no new connections per request.
     """
-    from fastapi import Request as FastAPIRequest
-    import redis.asyncio as aioredis
-    from core.config import settings
+    # Use the shared Redis pool from app state — never create connections in handlers
+    redis = http_request.app.state.redis
+    analyzer: QuantEdgeAnalyzerV6 = http_request.app.state.analyzer
 
-    analyzer = get_analyzer()
-
-    # Redis cache check
     cache_key = f"analysis:v6:{request.ticker}"
+
+    # Check cache
     try:
-        r = aioredis.from_url(settings.REDIS_URL)
-        try:
-            cached = await r.get(cache_key)
-            if cached:
-                return {"data": json.loads(cached), "cached": True}
-        finally:
-            await r.aclose()
+        cached = await redis.get(cache_key)
+        if cached:
+            return {"data": json.loads(cached), "cached": True}
     except Exception:
         pass
 
-    # Run analysis
+    # Run analysis (120-second timeout enforced inside run_full_analysis)
     data = await analyzer.run_full_analysis(
         ticker=request.ticker,
         include_options=request.include_options,
@@ -733,18 +930,28 @@ async def analyze(
         target_vol=request.target_vol,
     )
 
-    # Cache in background
-    async def cache_result():
+    # Write prediction to PostgreSQL as background task (non-blocking)
+    # Uses app.state.signal_tracker (SignalTracker initialized in main_v6.py lifespan)
+    _regime = data.get("current_regime") or data.get("hmm_regime", "Unknown")
+    _regime_confidence = float(data.get("regime_confidence", 0.0) or 0.0)
+    _weights_used = data.get("ensemble_weights", data.get("weights_used", {}))
+    background_tasks.add_task(
+        http_request.app.state.signal_tracker.record_signal,
+        ticker=request.ticker,
+        analysis_result=data,
+        regime=_regime,
+        regime_confidence=_regime_confidence,
+        weights_used=_weights_used,
+    )
+
+    # Write to cache as background task
+    async def _cache():
         try:
-            r = aioredis.from_url(settings.REDIS_URL)
-            try:
-                await r.setex(cache_key, 300, json.dumps(data, default=str))
-            finally:
-                await r.aclose()
+            await redis.setex(cache_key, 300, json.dumps(data, default=str))
         except Exception:
             pass
 
-    background_tasks.add_task(cache_result)
+    background_tasks.add_task(_cache)
 
     return {"data": data, "cached": False}
 
@@ -754,5 +961,4 @@ async def get_history(
     ticker: str,
     current_user: CognitoUser = Depends(get_current_user),
 ):
-    """List historical analyses for a ticker."""
-    return {"ticker": ticker, "analyses": [], "message": "Analysis history stored in S3"}
+    return {"ticker": ticker, "analyses": [], "message": "History stored in S3"}

@@ -1,0 +1,286 @@
+###############################################################################
+#  QuantEdge v6.0 — GitHub Actions CI/CD Pipeline (Personal Use)
+#
+#  What changed vs enterprise version:
+#    - After ECS deploy, workflow finds the new task's public IP
+#    - Updates the Route53 A record quant-api-internal.dileepkapu.com
+#    - CloudFront uses this record as its ECS origin (no ALB needed)
+#    - Also updates SSM Parameter /quantedge/ecs-task-ip
+###############################################################################
+
+name: Deploy QuantEdge v6.0 Personal
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  AWS_REGION:       us-east-1
+  ECR_REPOSITORY:   quantedge-api
+  ECS_CLUSTER:      quantedge-cluster
+  ECS_SERVICE:      quantedge-api
+  S3_FRONTEND:      quantedge-frontend-dileep
+  HOSTED_ZONE_NAME: dileepkapu.com
+
+jobs:
+  ###──────────────────────────────────────────────────────────────────────────
+  # BACKEND JOB — Build Docker image, push to ECR, redeploy ECS, update DNS
+  ###──────────────────────────────────────────────────────────────────────────
+  backend:
+    name: Backend — Build, Push, Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push Docker image
+        id: build
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG:    ${{ github.sha }}
+        run: |
+          cd backend
+
+          echo "Building Docker image..."
+          docker build \
+            --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
+            --build-arg GIT_SHA=$IMAGE_TAG \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:latest \
+            .
+
+          echo "Pushing image to ECR..."
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+          echo "image_latest=$ECR_REGISTRY/$ECR_REPOSITORY:latest" >> $GITHUB_OUTPUT
+
+      - name: Force new ECS deployment
+        run: |
+          echo "Forcing ECS service redeployment..."
+          aws ecs update-service \
+            --cluster $ECS_CLUSTER \
+            --service  $ECS_SERVICE \
+            --force-new-deployment \
+            --region $AWS_REGION
+
+      - name: Wait for ECS deployment to stabilize
+        run: |
+          echo "Waiting for ECS service to stabilize (this may take 5-15 minutes on first deploy)..."
+          aws ecs wait services-stable \
+            --cluster  $ECS_CLUSTER \
+            --services $ECS_SERVICE \
+            --region   $AWS_REGION
+          echo "ECS service is stable."
+
+      - name: Get new ECS task public IP and update Route53
+        run: |
+          echo "Finding new ECS task..."
+
+          # Get the task ARN of the running task
+          TASK_ARN=$(aws ecs list-tasks \
+            --cluster $ECS_CLUSTER \
+            --service-name $ECS_SERVICE \
+            --desired-status RUNNING \
+            --region $AWS_REGION \
+            --query 'taskArns[0]' \
+            --output text)
+
+          echo "Task ARN: $TASK_ARN"
+
+          if [ "$TASK_ARN" = "None" ] || [ -z "$TASK_ARN" ]; then
+            echo "ERROR: No running tasks found"
+            exit 1
+          fi
+
+          # Get the ENI (elastic network interface) attached to this task
+          ENI_ID=$(aws ecs describe-tasks \
+            --cluster $ECS_CLUSTER \
+            --tasks $TASK_ARN \
+            --region $AWS_REGION \
+            --query 'tasks[0].attachments[0].details[?name==`networkInterfaceId`].value' \
+            --output text)
+
+          echo "ENI ID: $ENI_ID"
+
+          # Get the public IP from the ENI
+          PUBLIC_IP=$(aws ec2 describe-network-interfaces \
+            --network-interface-ids $ENI_ID \
+            --region $AWS_REGION \
+            --query 'NetworkInterfaces[0].Association.PublicIp' \
+            --output text)
+
+          echo "ECS task public IP: $PUBLIC_IP"
+
+          if [ "$PUBLIC_IP" = "None" ] || [ -z "$PUBLIC_IP" ]; then
+            echo "ERROR: Could not get public IP from ENI $ENI_ID"
+            exit 1
+          fi
+
+          # Update SSM Parameter with new IP
+          aws ssm put-parameter \
+            --name "/quantedge/ecs-task-ip" \
+            --value "$PUBLIC_IP" \
+            --type String \
+            --overwrite \
+            --region $AWS_REGION
+
+          echo "Updated SSM Parameter /quantedge/ecs-task-ip = $PUBLIC_IP"
+
+          # Get the hosted zone ID
+          ZONE_ID=$(aws route53 list-hosted-zones-by-name \
+            --dns-name $HOSTED_ZONE_NAME \
+            --query 'HostedZones[0].Id' \
+            --output text | sed 's|/hostedzone/||')
+
+          echo "Route53 Hosted Zone ID: $ZONE_ID"
+
+          # Update the internal Route53 A record with the new ECS task IP
+          # CloudFront uses this record as its origin
+          aws route53 change-resource-record-sets \
+            --hosted-zone-id $ZONE_ID \
+            --change-batch "{
+              \"Changes\": [{
+                \"Action\": \"UPSERT\",
+                \"ResourceRecordSet\": {
+                  \"Name\": \"quant-api-internal.$HOSTED_ZONE_NAME\",
+                  \"Type\": \"A\",
+                  \"TTL\": 60,
+                  \"ResourceRecords\": [{\"Value\": \"$PUBLIC_IP\"}]
+                }
+              }]
+            }"
+
+          echo "Updated Route53 quant-api-internal.$HOSTED_ZONE_NAME → $PUBLIC_IP"
+          echo "TASK_PUBLIC_IP=$PUBLIC_IP" >> $GITHUB_ENV
+
+      - name: Verify backend health
+        run: |
+          echo "Waiting 30 seconds for DNS to propagate..."
+          sleep 30
+
+          echo "Testing backend health endpoint..."
+          for i in {1..10}; do
+            RESPONSE=$(curl -sf -m 10 https://${{ secrets.REACT_APP_API_URL }}/health 2>/dev/null || echo "failed")
+            if echo "$RESPONSE" | grep -q '"healthy"'; then
+              echo "Health check passed: $RESPONSE"
+              exit 0
+            fi
+            echo "Attempt $i/10 failed, waiting 15 seconds..."
+            sleep 15
+          done
+
+          echo "WARNING: Health check did not pass within timeout."
+          echo "ECS task may still be training ML models (first deploy takes 5-10 minutes)."
+          echo "Check CloudWatch logs: aws logs tail /ecs/quantedge-api --follow --region us-east-1"
+
+      - name: Post deployment summary
+        if: always()
+        run: |
+          echo "=== BACKEND DEPLOYMENT SUMMARY ==="
+          echo "Image: ${{ steps.build.outputs.image }}"
+          echo "ECS cluster: $ECS_CLUSTER"
+          echo "ECS service: $ECS_SERVICE"
+          echo "Task public IP: $TASK_PUBLIC_IP"
+          echo "Site: https://${{ secrets.REACT_APP_API_URL }}"
+
+  ###──────────────────────────────────────────────────────────────────────────
+  # FRONTEND JOB — Build React, sync to S3, invalidate CloudFront
+  ###──────────────────────────────────────────────────────────────────────────
+  frontend:
+    name: Frontend — Build and Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build React app
+        working-directory: frontend
+        env:
+          REACT_APP_API_URL: ${{ secrets.REACT_APP_API_URL }}
+          GENERATE_SOURCEMAP: 'false'
+          NODE_ENV: production
+        run: npm run build
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ${{ env.AWS_REGION }}
+
+      - name: Deploy to S3
+        working-directory: frontend
+        run: |
+          echo "Syncing build to S3..."
+
+          # Static assets (JS, CSS, images) — long cache, immutable
+          aws s3 sync build/static s3://$S3_FRONTEND/static \
+            --cache-control "public,max-age=31536000,immutable" \
+            --delete
+
+          # HTML files — no cache (always fetch latest)
+          aws s3 sync build s3://$S3_FRONTEND \
+            --exclude "static/*" \
+            --cache-control "no-cache,no-store,must-revalidate" \
+            --delete
+
+          echo "S3 sync complete."
+
+      - name: Invalidate CloudFront cache
+        run: |
+          echo "Creating CloudFront invalidation..."
+          INVALIDATION_ID=$(aws cloudfront create-invalidation \
+            --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
+            --paths "/*" \
+            --query 'Invalidation.Id' \
+            --output text)
+
+          echo "Invalidation created: $INVALIDATION_ID"
+          echo "Waiting for invalidation to complete..."
+
+          aws cloudfront wait invalidation-completed \
+            --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
+            --id $INVALIDATION_ID
+
+          echo "CloudFront invalidation complete."
+
+      - name: Verify frontend
+        run: |
+          echo "Testing frontend..."
+          for i in {1..5}; do
+            STATUS=$(curl -sf -o /dev/null -w "%{http_code}" https://${{ secrets.REACT_APP_API_URL }} 2>/dev/null || echo "000")
+            if [ "$STATUS" = "200" ]; then
+              echo "Frontend responding with 200 OK"
+              exit 0
+            fi
+            echo "Attempt $i/5: HTTP $STATUS, waiting 10 seconds..."
+            sleep 10
+          done
+          echo "WARNING: Frontend health check did not confirm 200 within timeout."

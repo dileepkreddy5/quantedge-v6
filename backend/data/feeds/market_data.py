@@ -1,30 +1,73 @@
 """
-QuantEdge v5.0 — Market Data Feed
+QuantEdge v6.0 — Market Data Feed
 ====================================
-Fetches real OHLCV, fundamentals, options data.
-Primary: yFinance (free, real-time)
-Fallback: Alpha Vantage (25 calls/day free tier)
-Premium: Polygon.io (when available)
+© 2026 Dileep Kumar Reddy Kapu. All Rights Reserved.
+
+Thin wrapper classes that delegate to polygon_feed.py.
+Class names and method signatures are identical to v5.0 so
+analysis_v6.py imports work without any changes.
+
+Data source: Polygon.io REST API (Starter Plus — $29/mo)
+yFinance is completely removed.
+
+Classes (backward-compatible interface):
+    MarketDataFeed      → wraps PolygonMarketFeed
+    FundamentalDataFeed → wraps PolygonFundamentalFeed
+    OptionsDataFeed     → wraps PolygonOptionsFeed
+    SentimentDataFeed   → wraps PolygonNewsFeed (news only; Reddit removed)
+
+Redis client is optional. When None, Polygon calls are made without caching.
+The redis client is injected at runtime by QuantEdgeAnalyzerV6 when available.
 """
 
 import asyncio
-import aiohttp
 import pandas as pd
 import numpy as np
-from typing import Dict, Optional
-import time
+from typing import Dict, List, Optional
 from loguru import logger
+
 from core.config import settings
+from data.feeds.polygon_feed import (
+    PolygonMarketFeed,
+    PolygonFundamentalFeed,
+    PolygonOptionsFeed,
+    PolygonNewsFeed,
+)
 
-try:
-    import yfinance as yf
-    YFINANCE_OK = True
-except ImportError:
-    YFINANCE_OK = False
 
+# ---------------------------------------------------------------------------
+# Internal helper
+# ---------------------------------------------------------------------------
+
+def _polygon_api_key() -> str:
+    """Return POLYGON_API_KEY from settings; raise clearly if missing."""
+    key = settings.POLYGON_API_KEY
+    if not key:
+        raise RuntimeError(
+            "POLYGON_API_KEY is not set. "
+            "Add it to your environment or AWS Secrets Manager."
+        )
+    return key
+
+
+# ---------------------------------------------------------------------------
+# MarketDataFeed
+# ---------------------------------------------------------------------------
 
 class MarketDataFeed:
-    """Primary market data source using yFinance"""
+    """
+    Primary market data source backed by Polygon.io.
+    Backward-compatible replacement for yFinance-based v5 class.
+    """
+
+    def __init__(self, redis_client=None):
+        self._redis = redis_client
+
+    def _feed(self) -> PolygonMarketFeed:
+        return PolygonMarketFeed(
+            api_key=_polygon_api_key(),
+            redis_client=self._redis,
+        )
 
     async def get_price_history(
         self,
@@ -33,300 +76,301 @@ class MarketDataFeed:
         interval: str = "1d",
     ) -> pd.DataFrame:
         """
-        Fetch historical OHLCV data.
-        Returns DataFrame with columns: open, high, low, close, volume
+        Fetch historical OHLCV data from Polygon.
+        Returns DataFrame with lowercase columns: open, high, low, close, volume, returns
+        Caches in Redis with key polygon:v1:{ticker}:ohlcv (TTL 1 hour).
+        Retries with exponential backoff on HTTP 429.
         """
-        loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(None, self._fetch_sync, ticker, years, interval)
-
-    def _fetch_sync(self, ticker: str, years: int, interval: str) -> pd.DataFrame:
-        if not YFINANCE_OK:
-            return pd.DataFrame()
         try:
-            stock = yf.Ticker(ticker)
-            df = stock.history(period=f"{years}y", interval=interval)
+            df = await self._feed().get_price_history(ticker=ticker, years=years)
             if df.empty:
+                logger.warning(f"Empty price history returned for {ticker}")
                 return pd.DataFrame()
-            df.columns = [c.lower().replace(" ", "_") for c in df.columns]
-            df = df[["open", "high", "low", "close", "volume"]].dropna()
-            df.index = pd.to_datetime(df.index)
-            df = df[df["close"] > 0]
-            logger.info(f"✅ Price data: {ticker} — {len(df)} rows, {df.index[0].date()} to {df.index[-1].date()}")
+
+            # Normalise column names to lowercase
+            df.columns = [c.lower() for c in df.columns]
+
+            # Ensure 'returns' column exists
+            if "returns" not in df.columns:
+                if "close" in df.columns:
+                    df["returns"] = df["close"].pct_change().fillna(0)
+
+            logger.info(
+                f"✅ Price data: {ticker} — {len(df)} rows, "
+                f"{df.index[0].date()} to {df.index[-1].date()}"
+            )
             return df
-        except Exception as e:
-            logger.error(f"Price fetch error {ticker}: {e}")
+
+        except Exception as exc:
+            logger.error(f"Price history error {ticker}: {exc}")
             return pd.DataFrame()
 
     async def get_realtime_quote(self, ticker: str) -> Dict:
-        """Current price, volume, bid/ask"""
-        loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(None, self._fetch_quote_sync, ticker)
-
-    def _fetch_quote_sync(self, ticker: str) -> Dict:
+        """
+        Current price, volume, bid/ask from Polygon snapshot API.
+        Falls back to last close from price history if snapshot unavailable.
+        """
         try:
-            stock = yf.Ticker(ticker)
-            info = stock.info
-            fast = stock.fast_info
+            feed = self._feed()
+            if hasattr(feed, "get_snapshot"):
+                snap = await feed.get_snapshot(ticker)
+                if snap:
+                    return snap
+
+            # Fallback: pull last row from price history
+            df = await self.get_price_history(ticker, years=1)
+            if df.empty:
+                return {}
+
+            last = df.iloc[-1]
             return {
-                "price": info.get("currentPrice") or info.get("regularMarketPrice"),
-                "open": info.get("open"),
-                "high": info.get("dayHigh"),
-                "low": info.get("dayLow"),
-                "volume": info.get("volume"),
-                "avg_volume": info.get("averageVolume"),
-                "market_cap": info.get("marketCap"),
-                "bid": info.get("bid"),
-                "ask": info.get("ask"),
-                "bid_size": info.get("bidSize"),
-                "ask_size": info.get("askSize"),
-                "pre_market": info.get("preMarketPrice"),
-                "after_hours": info.get("postMarketPrice"),
+                "price": float(last.get("close", 0)),
+                "open": float(last.get("open", 0)),
+                "high": float(last.get("high", 0)),
+                "low": float(last.get("low", 0)),
+                "volume": float(last.get("volume", 0)),
+                "avg_volume": None,
+                "market_cap": None,
+                "bid": None,
+                "ask": None,
+                "bid_size": None,
+                "ask_size": None,
+                "pre_market": None,
+                "after_hours": None,
             }
-        except Exception as e:
-            logger.error(f"Quote fetch error {ticker}: {e}")
+
+        except Exception as exc:
+            logger.error(f"Realtime quote error {ticker}: {exc}")
             return {}
 
+    def inject_redis(self, redis_client) -> None:
+        """Called after app.state.redis is available."""
+        self._redis = redis_client
+
+
+# ---------------------------------------------------------------------------
+# FundamentalDataFeed
+# ---------------------------------------------------------------------------
 
 class FundamentalDataFeed:
-    """Fundamental data from yFinance"""
+    """Fundamental data backed by Polygon.io financials API."""
+
+    def __init__(self, redis_client=None):
+        self._redis = redis_client
+
+    def _feed(self) -> PolygonFundamentalFeed:
+        return PolygonFundamentalFeed(
+            api_key=_polygon_api_key(),
+            redis_client=self._redis,
+        )
 
     async def get_fundamentals(self, ticker: str) -> Dict:
-        loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(None, self._fetch_fundamentals_sync, ticker)
-
-    def _fetch_fundamentals_sync(self, ticker: str) -> Dict:
+        """
+        Returns fundamental dict.
+        Required keys per spec: pe_ratio, pb_ratio, eps_ttm, revenue_growth,
+        debt_to_equity, current_ratio, roe, roa, gross_margin, market_cap
+        Caches with key polygon:v1:{ticker}:fundamentals (TTL 24 hours).
+        """
         try:
-            stock = yf.Ticker(ticker)
-            info = stock.info
+            data = await self._feed().get_fundamentals(ticker=ticker)
+            if not data:
+                logger.warning(f"Empty fundamentals returned for {ticker}")
+                return {"name": ticker}
 
-            # Financials
-            try:
-                income = stock.income_stmt
-                balance = stock.balance_sheet
-                cashflow = stock.cashflow
-            except Exception:
-                income = balance = cashflow = None
+            normalised: Dict = {}
 
-            def safe_get(d, key, default=None):
-                try:
-                    v = d.get(key, default)
-                    return float(v) if v is not None else default
-                except Exception:
-                    return default
+            # Identity
+            normalised["name"] = data.get("name") or ticker
+            for k in ("sector", "industry", "exchange", "country"):
+                if data.get(k):
+                    normalised[k] = data[k]
+            normalised["description"] = (data.get("description", "") or "")[:500]
 
-            fundamentals = {
-                # Identity
-                "name": info.get("longName", info.get("shortName", ticker)),
-                "sector": info.get("sector"),
-                "industry": info.get("industry"),
-                "exchange": info.get("exchange"),
-                "country": info.get("country"),
-                "description": (info.get("longBusinessSummary", "") or "")[:500],
+            # All numeric keys — copy if present
+            numeric_keys = [
+                "pe_ratio", "pb_ratio", "price_to_book", "forward_pe",
+                "peg_ratio", "price_to_sales", "ev_ebitda", "ev_revenue",
+                "enterprise_value", "market_cap",
+                "gross_margin", "operating_margin", "ebitda_margin",
+                "net_margin", "roe", "roa", "roic",
+                "revenue_growth", "earnings_growth", "revenue_ttm",
+                "ebitda", "free_cash_flow", "eps_ttm", "eps_forward",
+                "total_debt", "total_cash", "debt_to_equity",
+                "current_ratio", "quick_ratio",
+                "dividend_yield", "dividend_rate", "payout_ratio",
+                "week_52_high", "week_52_low", "beta",
+                "short_interest", "shares_outstanding", "float_shares",
+                "institutional_ownership", "insider_ownership",
+            ]
+            for k in numeric_keys:
+                v = data.get(k)
+                if v is not None:
+                    try:
+                        normalised[k] = float(v)
+                    except (TypeError, ValueError):
+                        pass
 
-                # Valuation
-                "pe_ratio": safe_get(info, "trailingPE"),
-                "forward_pe": safe_get(info, "forwardPE"),
-                "peg_ratio": safe_get(info, "pegRatio"),
-                "price_to_book": safe_get(info, "priceToBook"),
-                "price_to_sales": safe_get(info, "priceToSalesTrailing12Months"),
-                "ev_ebitda": safe_get(info, "enterpriseToEbitda"),
-                "ev_revenue": safe_get(info, "enterpriseToRevenue"),
-                "enterprise_value": safe_get(info, "enterpriseValue"),
-                "market_cap": safe_get(info, "marketCap"),
+            # Alias: price_to_book → pb_ratio
+            if "price_to_book" in normalised and "pb_ratio" not in normalised:
+                normalised["pb_ratio"] = normalised["price_to_book"]
 
-                # Trading
-                "week_52_high": safe_get(info, "fiftyTwoWeekHigh"),
-                "week_52_low": safe_get(info, "fiftyTwoWeekLow"),
-                "beta": safe_get(info, "beta"),
-                "short_interest": safe_get(info, "shortPercentOfFloat"),
-                "shares_outstanding": safe_get(info, "sharesOutstanding"),
-                "float_shares": safe_get(info, "floatShares"),
-                "shares_short": safe_get(info, "sharesShort"),
-                "institutional_ownership": safe_get(info, "institutionPercentHeld"),
-                "insider_ownership": safe_get(info, "insiderPercentHeld"),
+            # Earnings date
+            if data.get("earnings_date"):
+                normalised["earnings_date"] = str(data["earnings_date"])
 
-                # Profitability
-                "gross_margin": safe_get(info, "grossMargins"),
-                "operating_margin": safe_get(info, "operatingMargins"),
-                "ebitda_margin": safe_get(info, "ebitdaMargins"),
-                "net_margin": safe_get(info, "profitMargins"),
-                "roe": safe_get(info, "returnOnEquity"),
-                "roa": safe_get(info, "returnOnAssets"),
-                "roic": None,  # Calculated below
+            # Derived metrics
+            if normalised.get("free_cash_flow") and normalised.get("market_cap"):
+                normalised["fcf_yield"] = (
+                    normalised["free_cash_flow"] / normalised["market_cap"]
+                )
+            if normalised.get("free_cash_flow") and normalised.get("revenue_ttm"):
+                normalised["fcf_margin"] = (
+                    normalised["free_cash_flow"] / normalised["revenue_ttm"]
+                )
 
-                # Growth
-                "revenue_growth": safe_get(info, "revenueGrowth"),
-                "earnings_growth": safe_get(info, "earningsGrowth"),
-                "revenue_ttm": safe_get(info, "totalRevenue"),
-                "ebitda": safe_get(info, "ebitda"),
-                "free_cash_flow": safe_get(info, "freeCashflow"),
-                "eps_ttm": safe_get(info, "trailingEps"),
-                "eps_forward": safe_get(info, "forwardEps"),
+            return {k: v for k, v in normalised.items() if v is not None}
 
-                # Balance Sheet
-                "total_debt": safe_get(info, "totalDebt"),
-                "total_cash": safe_get(info, "totalCash"),
-                "debt_to_equity": safe_get(info, "debtToEquity"),
-                "current_ratio": safe_get(info, "currentRatio"),
-                "quick_ratio": safe_get(info, "quickRatio"),
-                "interest_coverage": None,
-
-                # Dividends
-                "dividend_yield": safe_get(info, "dividendYield"),
-                "dividend_rate": safe_get(info, "dividendRate"),
-                "payout_ratio": safe_get(info, "payoutRatio"),
-
-                # Earnings
-                "earnings_date": str(info.get("earningsTimestamp", "")),
-                "earnings_quarterly_growth": safe_get(info, "earningsQuarterlyGrowth"),
-                "surprise_history": None,  # From EDGAR pipeline
-            }
-
-            # Calculate ROIC if possible
-            if fundamentals["ebitda"] and fundamentals["total_debt"] is not None:
-                invested_capital = (fundamentals["total_debt"] or 0) + (safe_get(info, "totalStockholderEquity") or 0)
-                if invested_capital > 0:
-                    nopat = (fundamentals["ebitda"] or 0) * 0.7
-                    fundamentals["roic"] = nopat / invested_capital
-
-            # FCF yield
-            if fundamentals["free_cash_flow"] and fundamentals["market_cap"]:
-                fundamentals["fcf_yield"] = fundamentals["free_cash_flow"] / fundamentals["market_cap"]
-
-            # FCF margin
-            if fundamentals["free_cash_flow"] and fundamentals["revenue_ttm"]:
-                fundamentals["fcf_margin"] = fundamentals["free_cash_flow"] / fundamentals["revenue_ttm"]
-
-            return {k: v for k, v in fundamentals.items() if v is not None}
-
-        except Exception as e:
-            logger.error(f"Fundamentals fetch error {ticker}: {e}")
+        except Exception as exc:
+            logger.error(f"Fundamentals error {ticker}: {exc}")
             return {"name": ticker}
 
+    def inject_redis(self, redis_client) -> None:
+        self._redis = redis_client
+
+
+# ---------------------------------------------------------------------------
+# OptionsDataFeed
+# ---------------------------------------------------------------------------
 
 class OptionsDataFeed:
-    """Real options chain data from yFinance"""
+    """Options chain data backed by Polygon.io options API."""
+
+    def __init__(self, redis_client=None):
+        self._redis = redis_client
+
+    def _feed(self) -> PolygonOptionsFeed:
+        return PolygonOptionsFeed(
+            api_key=_polygon_api_key(),
+            redis_client=self._redis,
+        )
 
     async def get_chain(self, ticker: str, max_expiries: int = 6) -> pd.DataFrame:
-        loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(None, self._fetch_chain_sync, ticker, max_expiries)
-
-    def _fetch_chain_sync(self, ticker: str, max_expiries: int) -> pd.DataFrame:
+        """
+        Returns options chain DataFrame.
+        Columns: strike, expiry, call_iv, put_iv,
+                 call_delta, put_delta, call_gamma, put_gamma,
+                 call_volume, put_volume, call_oi, put_oi,
+                 days_to_expiry, iv, open_interest_call, open_interest_put,
+                 volume_call, volume_put
+        Caches with key polygon:v1:{ticker}:options (TTL 15 minutes).
+        """
         try:
-            stock = yf.Ticker(ticker)
-            expirations = stock.options
-            if not expirations:
+            df = await self._feed().get_chain(ticker=ticker)
+            if df.empty:
+                logger.warning(f"Empty options chain for {ticker}")
                 return pd.DataFrame()
 
-            all_rows = []
-            for exp in expirations[:max_expiries]:
-                try:
-                    chain = stock.option_chain(exp)
-                    dte = (pd.Timestamp(exp) - pd.Timestamp.now()).days
+            # Normalise column name aliases
+            col_aliases = {
+                "impliedVolatility": "iv",
+                "implied_volatility": "iv",
+                "openInterest": "open_interest_call",
+                "volume": "volume_call",
+            }
+            df = df.rename(columns=col_aliases)
 
-                    # Process calls
-                    calls = chain.calls.copy()
-                    calls["option_type"] = "call"
-                    calls["expiry"] = exp
-                    calls["days_to_expiry"] = dte
+            # Ensure backward-compat columns exist with NaN defaults
+            required_cols = [
+                "call_iv", "put_iv",
+                "call_delta", "put_delta",
+                "call_gamma", "put_gamma",
+                "call_volume", "put_volume",
+                "call_oi", "put_oi",
+                "strike", "expiry", "days_to_expiry",
+            ]
+            for col in required_cols:
+                if col not in df.columns:
+                    df[col] = np.nan
 
-                    # Process puts
-                    puts = chain.puts.copy()
-                    puts["option_type"] = "put"
-                    puts["expiry"] = exp
-                    puts["days_to_expiry"] = dte
+            # Keep only rows with positive DTE
+            df = df[df["days_to_expiry"] > 0].copy()
 
-                    # Merge calls/puts by strike for GEX calculation
-                    for _, call_row in calls.iterrows():
-                        k = call_row.get("strike", 0)
-                        put_row = puts[puts["strike"] == k]
-                        row = {
-                            "strike": k,
-                            "days_to_expiry": dte,
-                            "iv": float(call_row.get("impliedVolatility", 0.25)),
-                            "open_interest_call": float(call_row.get("openInterest", 0)),
-                            "volume_call": float(call_row.get("volume", 0)),
-                            "open_interest_put": float(put_row["openInterest"].iloc[0]) if len(put_row) > 0 else 0,
-                            "volume_put": float(put_row["volume"].iloc[0]) if len(put_row) > 0 else 0,
-                        }
-                        all_rows.append(row)
-                except Exception:
-                    continue
-
-            if not all_rows:
-                return pd.DataFrame()
-
-            df = pd.DataFrame(all_rows)
-            df = df[df["days_to_expiry"] > 0]
-            logger.info(f"✅ Options: {ticker} — {len(df)} strikes across {max_expiries} expiries")
+            logger.info(f"✅ Options: {ticker} — {len(df)} strikes")
             return df
 
-        except Exception as e:
-            logger.error(f"Options fetch error {ticker}: {e}")
+        except Exception as exc:
+            logger.error(f"Options chain error {ticker}: {exc}")
             return pd.DataFrame()
 
+    def inject_redis(self, redis_client) -> None:
+        self._redis = redis_client
+
+
+# ---------------------------------------------------------------------------
+# SentimentDataFeed
+# ---------------------------------------------------------------------------
 
 class SentimentDataFeed:
-    """News and Reddit sentiment data"""
+    """
+    News sentiment data backed by Polygon.io news API.
+
+    Reddit removed in v6 — Polygon provides institutional-quality
+    news sourcing (SEC, WSJ, Reuters, Bloomberg aggregated).
+
+    Method signature get_news_and_reddit() kept for backward compatibility.
+    """
+
+    def __init__(self, redis_client=None):
+        self._redis = redis_client
+
+    def _feed(self) -> PolygonNewsFeed:
+        return PolygonNewsFeed(
+            api_key=_polygon_api_key(),
+            redis_client=self._redis,
+        )
 
     async def get_news_and_reddit(self, ticker: str) -> Dict:
-        tasks = await asyncio.gather(
-            self._get_news(ticker),
-            self._get_reddit(ticker),
-            return_exceptions=True,
-        )
-        news = tasks[0] if not isinstance(tasks[0], Exception) else []
-        reddit = tasks[1] if not isinstance(tasks[1], Exception) else []
-        return {"news": news, "reddit": reddit}
-
-    async def _get_news(self, ticker: str) -> list:
-        loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(None, self._fetch_news_sync, ticker)
-
-    def _fetch_news_sync(self, ticker: str) -> list:
+        """
+        Returns {'news': [...], 'reddit': []}.
+        news: list of article dicts with keys:
+              title, description, publisher, timestamp, url, sentiment_score
+        reddit: always empty list (removed in v6)
+        Caches with key polygon:v1:{ticker}:news (TTL 30 minutes).
+        """
         try:
-            stock = yf.Ticker(ticker)
-            news = stock.news or []
-            return [{
-                "title": n.get("title", ""),
-                "publisher": n.get("publisher", ""),
-                "timestamp": n.get("providerPublishTime", 0),
-                "url": n.get("link", ""),
-            } for n in news[:10]]
-        except Exception:
-            return []
+            articles = await self._feed().get_news(ticker=ticker, limit=50)
+            if not articles:
+                logger.warning(f"No news articles returned for {ticker}")
+                articles = []
 
-    async def _get_reddit(self, ticker: str) -> list:
-        """Fetch recent Reddit posts mentioning the ticker"""
-        if not settings.REDDIT_CLIENT_ID or not settings.REDDIT_CLIENT_SECRET:
-            return []
-        try:
-            loop = asyncio.get_running_loop()
-            return await loop.run_in_executor(None, self._fetch_reddit_sync, ticker)
-        except Exception:
-            return []
+            normalised_news = []
+            for art in articles:
+                publisher = art.get("publisher", {})
+                publisher_name = (
+                    publisher.get("name", "")
+                    if isinstance(publisher, dict)
+                    else str(publisher)
+                )
+                normalised_news.append({
+                    "title": art.get("title", ""),
+                    "description": art.get("description", "") or art.get("summary", ""),
+                    "publisher": publisher_name,
+                    "timestamp": art.get("published_utc", ""),
+                    "url": art.get("article_url", art.get("url", "")),
+                    "sentiment_score": art.get("sentiment_score"),
+                })
 
-    def _fetch_reddit_sync(self, ticker: str) -> list:
-        try:
-            import praw
-            reddit = praw.Reddit(
-                client_id=settings.REDDIT_CLIENT_ID,
-                client_secret=settings.REDDIT_CLIENT_SECRET,
-                user_agent="QuantEdge/5.0 (by Dileep)",
-            )
-            posts = []
-            for sub in ["wallstreetbets", "investing", "stocks"]:
-                subreddit = reddit.subreddit(sub)
-                for post in subreddit.search(ticker, limit=10, time_filter="week"):
-                    posts.append({
-                        "title": post.title,
-                        "body": (post.selftext or "")[:500],
-                        "score": post.score,
-                        "num_comments": post.num_comments,
-                        "subreddit": sub,
-                        "timestamp": post.created_utc,
-                    })
-            return posts[:30]
-        except Exception as e:
-            logger.debug(f"Reddit fetch error: {e}")
-            return []
+            logger.info(f"✅ News: {ticker} — {len(normalised_news)} articles")
+            return {"news": normalised_news, "reddit": []}
+
+        except Exception as exc:
+            logger.error(f"Sentiment/news error {ticker}: {exc}")
+            return {"news": [], "reddit": []}
+
+    async def get_news(self, ticker: str, limit: int = 50) -> List[Dict]:
+        """Direct access to news list (used by FinBERT pipeline)."""
+        result = await self.get_news_and_reddit(ticker)
+        return result.get("news", [])
+
+    def inject_redis(self, redis_client) -> None:
+        self._redis = redis_client

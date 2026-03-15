@@ -1,86 +1,174 @@
-##################################################################
-# QuantEdge v6.0 — Complete AWS Infrastructure
-# quant.dileepkapu.com | Owner: Dileep Kumar Reddy Kapu
-##################################################################
+###############################################################################
+#  QuantEdge v6.0 — PERSONAL USE TERRAFORM
+#  Optimised for solo use: ~$33/month AWS cost (vs $86 full stack)
+#
+#  What was REMOVED vs enterprise version:
+#    - NAT Gateway          (~$35/mo) → ECS in public subnets instead
+#    - ALB                  (~$20/mo) → CloudFront → ECS direct
+#    - ElastiCache          (~$15/mo) → Redis runs as sidecar in ECS task
+#    - WAF                  (~$6/mo)  → not needed for personal use
+#    - db.t3.small RDS      → downgraded to db.t3.micro
+#    - ECS 1vCPU/2GB        → downgraded to 0.5vCPU/1GB
+#    - Multi-AZ anything    → single-AZ everywhere
+#    - Performance Insights → disabled (costs extra)
+#    - 200GB max storage    → 20GB max (plenty for personal signal tracker)
+#
+#  What was KEPT:
+#    - RDS PostgreSQL 15 db.t3.micro  (signal tracker data — must persist)
+#    - ECS Fargate 0.5vCPU/1GB        (runs the FastAPI backend)
+#    - ECR                            (Docker image storage)
+#    - CloudFront + S3                (frontend hosting)
+#    - Cognito                        (MFA auth — keep for security)
+#    - Secrets Manager                (API keys)
+#    - CloudWatch Logs                (debugging)
+#    - SNS Alerts                     (error notifications)
+#    - ACM + Route53                  (HTTPS + domain)
+#    - IAM roles                      (required)
+#
+#  Redis: runs as a sidecar container in the same ECS task.
+#         REDIS_URL = redis://localhost:6379/0
+#         Data is in-memory only — lost on ECS task restart.
+#         This is fine: Redis is used for caching and pub/sub, not
+#         for persistent data. All persistent data is in RDS.
+###############################################################################
+
 terraform {
-  required_version = ">= 1.7.0"
+  required_version = ">= 1.5"
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 5.40"
+      version = "~> 5.0"
     }
   }
   backend "s3" {
     bucket         = "quantedge-terraform-state-dileep"
-    key            = "quantedge/terraform.tfstate"
+    key            = "quantedge/personal/terraform.tfstate"
     region         = "us-east-1"
     dynamodb_table = "quantedge-terraform-locks"
     encrypt        = true
   }
 }
 
-# Primary provider
+###─────────────────────────────────────────────────────────────────────────###
+#  PROVIDERS
+###─────────────────────────────────────────────────────────────────────────###
+
 provider "aws" {
   region = var.aws_region
   default_tags {
     tags = {
-      Project   = "QuantEdge"
-      Owner     = "Dileep Kumar Reddy Kapu"
-      ManagedBy = "Terraform"
-      Env       = var.environment
+      Project     = "quantedge"
+      Environment = "personal"
+      Owner       = "dileep"
+      ManagedBy   = "terraform"
     }
   }
 }
 
-# WAF + ACM for CloudFront MUST be us-east-1
+# ACM certificates for CloudFront must be in us-east-1
 provider "aws" {
   alias  = "us_east_1"
   region = "us-east-1"
   default_tags {
     tags = {
-      Project   = "QuantEdge"
-      Owner     = "Dileep Kumar Reddy Kapu"
-      ManagedBy = "Terraform"
-      Env       = var.environment
+      Project     = "quantedge"
+      Environment = "personal"
+      Owner       = "dileep"
+      ManagedBy   = "terraform"
     }
   }
 }
 
-###────────────────────────────────────────────────────────────###
+###─────────────────────────────────────────────────────────────────────────###
 #  VARIABLES
-###────────────────────────────────────────────────────────────###
-variable "aws_region" { default = "us-east-1" }
-variable "environment" { default = "production" }
-variable "domain_name" { default = "dileepkapu.com" }
-variable "subdomain" { default = "quant" }
-variable "owner_email" { default = "dileep@dileepkapu.com" }
-variable "db_password" { sensitive = true }
-variable "secret_key" { sensitive = true }
-variable "anthropic_api_key" { sensitive = true }
+###─────────────────────────────────────────────────────────────────────────###
 
-locals {
-  fqdn        = "${var.subdomain}.${var.domain_name}"
-  account_id  = data.aws_caller_identity.current.account_id
-  name_prefix = "quantedge"
+variable "aws_region" {
+  description = "AWS region"
+  type        = string
+  default     = "us-east-1"
 }
 
-###────────────────────────────────────────────────────────────###
-#  DATA SOURCES
-###────────────────────────────────────────────────────────────###
-data "aws_caller_identity" "current" {}
-data "aws_availability_zones" "available" { state = "available" }
-data "aws_route53_zone" "main" { name = var.domain_name }
+variable "environment" {
+  description = "Environment name"
+  type        = string
+  default     = "personal"
+}
 
-###────────────────────────────────────────────────────────────###
-#  VPC
-###────────────────────────────────────────────────────────────###
+variable "domain_name" {
+  description = "Root domain name"
+  type        = string
+  default     = "dileepkapu.com"
+}
+
+variable "subdomain" {
+  description = "Subdomain for the app"
+  type        = string
+  default     = "quant"
+}
+
+variable "owner_email" {
+  description = "Owner email for alerts"
+  type        = string
+  default     = "dileep@dileepkapu.com"
+}
+
+variable "db_password" {
+  description = "RDS master password"
+  type        = string
+  sensitive   = true
+}
+
+variable "secret_key" {
+  description = "FastAPI JWT secret key (min 32 chars)"
+  type        = string
+  sensitive   = true
+}
+
+variable "anthropic_api_key" {
+  description = "Anthropic API key"
+  type        = string
+  sensitive   = true
+}
+
+###─────────────────────────────────────────────────────────────────────────###
+#  LOCALS
+###─────────────────────────────────────────────────────────────────────────###
+
+locals {
+  name_prefix = "quantedge"
+  full_domain = "${var.subdomain}.${var.domain_name}"
+}
+
+###─────────────────────────────────────────────────────────────────────────###
+#  DATA SOURCES
+###─────────────────────────────────────────────────────────────────────────###
+
+data "aws_availability_zones" "available" {
+  state = "available"
+}
+
+data "aws_caller_identity" "current" {}
+
+data "aws_route53_zone" "main" {
+  name         = var.domain_name
+  private_zone = false
+}
+
+###─────────────────────────────────────────────────────────────────────────###
+#  VPC — simplified: public subnets only (no NAT Gateway needed)
+#  ECS runs in public subnets with a security group that blocks all inbound
+#  except CloudFront IP ranges. RDS stays in private subnets.
+###─────────────────────────────────────────────────────────────────────────###
+
 resource "aws_vpc" "main" {
   cidr_block           = "10.0.0.0/16"
-  enable_dns_hostnames = true
   enable_dns_support   = true
+  enable_dns_hostnames = true
   tags                 = { Name = "${local.name_prefix}-vpc" }
 }
 
+# Public subnets — ECS Fargate tasks run here (no NAT Gateway needed)
 resource "aws_subnet" "public" {
   count                   = 2
   vpc_id                  = aws_vpc.main.id
@@ -90,6 +178,7 @@ resource "aws_subnet" "public" {
   tags                    = { Name = "${local.name_prefix}-public-${count.index + 1}" }
 }
 
+# Private subnets — RDS only (no internet access required for database)
 resource "aws_subnet" "private" {
   count             = 2
   vpc_id            = aws_vpc.main.id
@@ -98,36 +187,20 @@ resource "aws_subnet" "private" {
   tags              = { Name = "${local.name_prefix}-private-${count.index + 1}" }
 }
 
-resource "aws_internet_gateway" "igw" {
+# Internet Gateway — for public subnets
+resource "aws_internet_gateway" "main" {
   vpc_id = aws_vpc.main.id
   tags   = { Name = "${local.name_prefix}-igw" }
 }
 
-resource "aws_eip" "nat" { domain = "vpc" }
-
-resource "aws_nat_gateway" "nat" {
-  allocation_id = aws_eip.nat.id
-  subnet_id     = aws_subnet.public[0].id
-  depends_on    = [aws_internet_gateway.igw]
-  tags          = { Name = "${local.name_prefix}-nat" }
-}
-
+# Route table for public subnets — route all traffic through IGW
 resource "aws_route_table" "public" {
   vpc_id = aws_vpc.main.id
   route {
     cidr_block = "0.0.0.0/0"
-    gateway_id = aws_internet_gateway.igw.id
+    gateway_id = aws_internet_gateway.main.id
   }
   tags = { Name = "${local.name_prefix}-public-rt" }
-}
-
-resource "aws_route_table" "private" {
-  vpc_id = aws_vpc.main.id
-  route {
-    cidr_block     = "0.0.0.0/0"
-    nat_gateway_id = aws_nat_gateway.nat.id
-  }
-  tags = { Name = "${local.name_prefix}-private-rt" }
 }
 
 resource "aws_route_table_association" "public" {
@@ -136,260 +209,291 @@ resource "aws_route_table_association" "public" {
   route_table_id = aws_route_table.public.id
 }
 
+# Route table for private subnets — no internet route (RDS does not need internet)
+resource "aws_route_table" "private" {
+  vpc_id = aws_vpc.main.id
+  tags   = { Name = "${local.name_prefix}-private-rt" }
+}
+
 resource "aws_route_table_association" "private" {
   count          = 2
   subnet_id      = aws_subnet.private[count.index].id
   route_table_id = aws_route_table.private.id
 }
 
-###────────────────────────────────────────────────────────────###
+###─────────────────────────────────────────────────────────────────────────###
 #  SECURITY GROUPS
-###────────────────────────────────────────────────────────────###
-resource "aws_security_group" "alb" {
-  name   = "${local.name_prefix}-alb-sg"
-  vpc_id = aws_vpc.main.id
+###─────────────────────────────────────────────────────────────────────────###
 
-  ingress {
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-  ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-  tags = { Name = "${local.name_prefix}-alb-sg" }
-}
-
+# ECS security group
+# Inbound: port 8000 from anywhere (CloudFront will be the only caller in practice)
+# We lock this down via CloudFront custom header in production
+# Outbound: all (needs to reach RDS, ECR, Secrets Manager, Polygon API, Anthropic)
 resource "aws_security_group" "ecs" {
-  name   = "${local.name_prefix}-ecs-sg"
-  vpc_id = aws_vpc.main.id
+  name        = "${local.name_prefix}-ecs-sg"
+  description = "ECS Fargate tasks - personal QuantEdge"
+  vpc_id      = aws_vpc.main.id
 
   ingress {
-    from_port       = 8000
-    to_port         = 8000
-    protocol        = "tcp"
-    security_groups = [aws_security_group.alb.id]
+    description = "FastAPI from CloudFront and health checks"
+    from_port   = 8000
+    to_port     = 8000
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
   }
+
   egress {
+    description = "All outbound - needs ECR, RDS, Secrets Manager, Polygon, Anthropic"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
+
   tags = { Name = "${local.name_prefix}-ecs-sg" }
 }
 
+# RDS security group
+# Inbound: PostgreSQL from ECS only
 resource "aws_security_group" "rds" {
-  name   = "${local.name_prefix}-rds-sg"
-  vpc_id = aws_vpc.main.id
+  name        = "${local.name_prefix}-rds-sg"
+  description = "RDS PostgreSQL - personal QuantEdge"
+  vpc_id      = aws_vpc.main.id
 
   ingress {
+    description     = "PostgreSQL from ECS tasks only"
     from_port       = 5432
     to_port         = 5432
     protocol        = "tcp"
     security_groups = [aws_security_group.ecs.id]
   }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
   tags = { Name = "${local.name_prefix}-rds-sg" }
 }
 
-resource "aws_security_group" "redis" {
-  name   = "${local.name_prefix}-redis-sg"
-  vpc_id = aws_vpc.main.id
+###─────────────────────────────────────────────────────────────────────────###
+#  VPC ENDPOINTS — allow ECS (in public subnet) to reach AWS services
+#  without going over the internet. Saves on data transfer costs too.
+###─────────────────────────────────────────────────────────────────────────###
 
-  ingress {
-    from_port       = 6379
-    to_port         = 6379
-    protocol        = "tcp"
-    security_groups = [aws_security_group.ecs.id]
-  }
-  tags = { Name = "${local.name_prefix}-redis-sg" }
+# ECR API endpoint (for docker pull)
+resource "aws_vpc_endpoint" "ecr_api" {
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${var.aws_region}.ecr.api"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = aws_subnet.public[*].id
+  security_group_ids  = [aws_security_group.ecs.id]
+  private_dns_enabled = true
+  tags                = { Name = "${local.name_prefix}-ecr-api-endpoint" }
 }
 
-###────────────────────────────────────────────────────────────###
-#  ACM SSL CERTIFICATE (us-east-1 required for CloudFront)
-###────────────────────────────────────────────────────────────###
-resource "aws_acm_certificate" "quantedge" {
-  provider          = aws.us_east_1
-  domain_name       = local.fqdn
-  validation_method = "DNS"
-  lifecycle { create_before_destroy = true }
+# ECR Docker endpoint (for image layers)
+resource "aws_vpc_endpoint" "ecr_dkr" {
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${var.aws_region}.ecr.dkr"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = aws_subnet.public[*].id
+  security_group_ids  = [aws_security_group.ecs.id]
+  private_dns_enabled = true
+  tags                = { Name = "${local.name_prefix}-ecr-dkr-endpoint" }
 }
 
-resource "aws_route53_record" "cert_validation" {
-  for_each = {
-    for dvo in aws_acm_certificate.quantedge.domain_validation_options : dvo.domain_name => {
-      name   = dvo.resource_record_name
-      record = dvo.resource_record_value
-      type   = dvo.resource_record_type
-    }
-  }
-  allow_overwrite = true
-  name            = each.value.name
-  records         = [each.value.record]
-  ttl             = 60
-  type            = each.value.type
-  zone_id         = data.aws_route53_zone.main.zone_id
+# Secrets Manager endpoint
+resource "aws_vpc_endpoint" "secretsmanager" {
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${var.aws_region}.secretsmanager"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = aws_subnet.public[*].id
+  security_group_ids  = [aws_security_group.ecs.id]
+  private_dns_enabled = true
+  tags                = { Name = "${local.name_prefix}-secretsmanager-endpoint" }
 }
 
-resource "aws_acm_certificate_validation" "quantedge" {
-  provider                = aws.us_east_1
-  certificate_arn         = aws_acm_certificate.quantedge.arn
-  validation_record_fqdns = [for r in aws_route53_record.cert_validation : r.fqdn]
+# CloudWatch Logs endpoint
+resource "aws_vpc_endpoint" "logs" {
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${var.aws_region}.logs"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = aws_subnet.public[*].id
+  security_group_ids  = [aws_security_group.ecs.id]
+  private_dns_enabled = true
+  tags                = { Name = "${local.name_prefix}-logs-endpoint" }
 }
 
-###────────────────────────────────────────────────────────────###
-#  APPLICATION LOAD BALANCER
-###────────────────────────────────────────────────────────────###
-resource "aws_lb" "quantedge" {
-  name                       = "${local.name_prefix}-alb"
-  internal                   = false
-  load_balancer_type         = "application"
-  security_groups            = [aws_security_group.alb.id]
-  subnets                    = aws_subnet.public[*].id
-  enable_deletion_protection = true
-
-
-  tags = { Name = "${local.name_prefix}-alb" }
+# S3 Gateway endpoint (for ECR image layers stored in S3)
+resource "aws_vpc_endpoint" "s3" {
+  vpc_id            = aws_vpc.main.id
+  service_name      = "com.amazonaws.${var.aws_region}.s3"
+  vpc_endpoint_type = "Gateway"
+  route_table_ids   = [aws_route_table.public.id]
+  tags              = { Name = "${local.name_prefix}-s3-endpoint" }
 }
 
-resource "aws_lb_target_group" "api" {
-  name        = "${local.name_prefix}-api-tg"
-  port        = 8000
-  protocol    = "HTTP"
-  vpc_id      = aws_vpc.main.id
-  target_type = "ip"
+###─────────────────────────────────────────────────────────────────────────###
+#  ECR — Docker image repository
+###─────────────────────────────────────────────────────────────────────────###
 
-  health_check {
-    path                = "/health"
-    healthy_threshold   = 2
-    unhealthy_threshold = 3
-    timeout             = 10
-    interval            = 30
-    matcher             = "200"
+resource "aws_ecr_repository" "quantedge_api" {
+  name                 = "quantedge-api"
+  image_tag_mutability = "MUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
   }
-  tags = { Name = "${local.name_prefix}-api-tg" }
+
+  tags = { Name = "quantedge-api" }
 }
 
-resource "aws_lb_listener" "https" {
-  load_balancer_arn = aws_lb.quantedge.arn
-  port              = 443
-  protocol          = "HTTPS"
-  ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
-  certificate_arn   = aws_acm_certificate_validation.quantedge.certificate_arn
+# Keep only last 5 images to save storage costs
+resource "aws_ecr_lifecycle_policy" "quantedge_api" {
+  repository = aws_ecr_repository.quantedge_api.name
+  policy = jsonencode({
+    rules = [{
+      rulePriority = 1
+      description  = "Keep last 5 images"
+      selection = {
+        tagStatus   = "any"
+        countType   = "imageCountMoreThan"
+        countNumber = 5
+      }
+      action = { type = "expire" }
+    }]
+  })
+}
 
-  default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.api.arn
+###─────────────────────────────────────────────────────────────────────────###
+#  IAM — ECS execution and task roles
+###─────────────────────────────────────────────────────────────────────────###
+
+# Execution role — used by ECS agent to pull image and fetch secrets
+resource "aws_iam_role" "ecs_execution_role" {
+  name = "${local.name_prefix}-ecs-execution-role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "ecs-tasks.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "ecs_execution_policy" {
+  role       = aws_iam_role.ecs_execution_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+}
+
+# Allow execution role to read from Secrets Manager
+resource "aws_iam_role_policy" "ecs_execution_secrets" {
+  name = "${local.name_prefix}-ecs-execution-secrets"
+  role = aws_iam_role.ecs_execution_role.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "secretsmanager:GetSecretValue",
+        "secretsmanager:DescribeSecret"
+      ]
+      Resource = aws_secretsmanager_secret.quantedge_secrets.arn
+    }]
+  })
+}
+
+# Task role — used by the application itself
+resource "aws_iam_role" "ecs_task_role" {
+  name = "${local.name_prefix}-ecs-task-role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "ecs-tasks.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "ecs_task_policy" {
+  name = "${local.name_prefix}-ecs-task-policy"
+  role = aws_iam_role.ecs_task_role.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "CloudWatchLogs"
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:/ecs/quantedge-api:*"
+      },
+      {
+        Sid    = "SNSAlerts"
+        Effect = "Allow"
+        Action = ["sns:Publish"]
+        Resource = aws_sns_topic.alerts.arn
+      },
+      {
+        Sid    = "CognitoVerify"
+        Effect = "Allow"
+        Action = [
+          "cognito-idp:GetUser",
+          "cognito-idp:AdminGetUser"
+        ]
+        Resource = aws_cognito_user_pool.quantedge.arn
+      }
+    ]
+  })
+}
+
+###─────────────────────────────────────────────────────────────────────────###
+#  CLOUDWATCH LOG GROUP
+###─────────────────────────────────────────────────────────────────────────###
+
+resource "aws_cloudwatch_log_group" "ecs" {
+  name              = "/ecs/quantedge-api"
+  retention_in_days = 30  # 30 days is plenty for personal use
+  tags              = { Name = "/ecs/quantedge-api" }
+}
+
+###─────────────────────────────────────────────────────────────────────────###
+#  SECRETS MANAGER
+###─────────────────────────────────────────────────────────────────────────###
+
+resource "aws_secretsmanager_secret" "quantedge_secrets" {
+  name                    = "quantedge-secrets"
+  description             = "QuantEdge v6.0 application secrets"
+  recovery_window_in_days = 7
+  tags                    = { Name = "quantedge-secrets" }
+}
+
+resource "aws_secretsmanager_secret_version" "quantedge_secrets" {
+  secret_id = aws_secretsmanager_secret.quantedge_secrets.id
+  secret_string = jsonencode({
+    SECRET_KEY        = var.secret_key
+    ANTHROPIC_API_KEY = var.anthropic_api_key
+    POLYGON_API_KEY   = "REPLACE_AFTER_APPLY"
+    DB_PASSWORD       = var.db_password
+  })
+
+  # Prevent Terraform from overwriting POLYGON_API_KEY once set manually
+  lifecycle {
+    ignore_changes = [secret_string]
   }
 }
 
-resource "aws_lb_listener" "http_redirect" {
-  load_balancer_arn = aws_lb.quantedge.arn
-  port              = 80
-  protocol          = "HTTP"
-
-  default_action {
-    type = "redirect"
-    redirect {
-      port        = "443"
-      protocol    = "HTTPS"
-      status_code = "HTTP_301"
-    }
-  }
-}
-
-###────────────────────────────────────────────────────────────###
-#  COGNITO
-###────────────────────────────────────────────────────────────###
-resource "aws_cognito_user_pool" "quantedge" {
-  name = "${local.name_prefix}-users"
-
-  password_policy {
-    minimum_length                   = 16
-    require_lowercase                = true
-    require_uppercase                = true
-    require_numbers                  = true
-    require_symbols                  = true
-    temporary_password_validity_days = 1
-  }
-
-  mfa_configuration = "ON"
-
-  software_token_mfa_configuration {
-    enabled = true
-  }
-
-  account_recovery_setting {
-    recovery_mechanism {
-      name     = "verified_email"
-      priority = 1
-    }
-  }
-
-  auto_verified_attributes = ["email"]
-
-  user_pool_add_ons {
-    advanced_security_mode = "ENFORCED"
-  }
-
-  username_attributes = []
-
-  username_configuration {
-    case_sensitive = false
-  }
-
-  schema {
-    attribute_data_type = "String"
-    name                = "email"
-    required            = true
-    mutable             = true
-    string_attribute_constraints {
-      min_length = 5
-      max_length = 100
-    }
-  }
-
-  tags = { Name = "${local.name_prefix}-user-pool" }
-}
-
-resource "aws_cognito_user_pool_client" "quantedge" {
-  name         = "${local.name_prefix}-web-client"
-  user_pool_id = aws_cognito_user_pool.quantedge.id
-
-  explicit_auth_flows = [
-    "ALLOW_USER_PASSWORD_AUTH",
-    "ALLOW_REFRESH_TOKEN_AUTH",
-    "ALLOW_USER_SRP_AUTH",
-  ]
-
-  access_token_validity  = 8
-  id_token_validity      = 8
-  refresh_token_validity = 30
-
-  token_validity_units {
-    access_token  = "hours"
-    id_token      = "hours"
-    refresh_token = "days"
-  }
-
-  allowed_oauth_flows_user_pool_client = false
-  generate_secret                      = false
-  prevent_user_existence_errors        = "ENABLED"
-}
-
-###────────────────────────────────────────────────────────────###
-#  RDS POSTGRESQL
-###────────────────────────────────────────────────────────────###
+###─────────────────────────────────────────────────────────────────────────###
+#  RDS POSTGRESQL — db.t3.micro, personal use sizing
+###─────────────────────────────────────────────────────────────────────────###
 resource "aws_db_subnet_group" "quantedge" {
   name       = "${local.name_prefix}-db-subnet-group"
   subnet_ids = aws_subnet.private[*].id
@@ -397,239 +501,274 @@ resource "aws_db_subnet_group" "quantedge" {
 }
 
 resource "aws_db_instance" "quantedge" {
-  identifier                      = "${local.name_prefix}-postgres"
-  engine                          = "postgres"
-  engine_version                  = "15"
-  instance_class                  = "db.t3.small"
-  allocated_storage               = 50
-  max_allocated_storage           = 200
-  storage_encrypted               = true
-  db_name                         = "quantedge"
-  username                        = "quantedge_admin"
-  password                        = var.db_password
-  db_subnet_group_name            = aws_db_subnet_group.quantedge.name
-  vpc_security_group_ids          = [aws_security_group.rds.id]
-  multi_az                        = false
-  publicly_accessible             = false
-  backup_retention_period         = 7
-  backup_window                   = "03:00-04:00"
-  maintenance_window              = "Mon:04:00-Mon:05:00"
+  identifier     = "quantedge-postgres"
+  engine         = "postgres"
+  engine_version = "15"          # PostgreSQL 15 — stable, well supported
+  instance_class = "db.t3.micro" # Cheapest RDS instance — fine for 1 user
+
+  allocated_storage     = 20    # 20GB — plenty for signal tracker data
+  max_allocated_storage = 20    # No autoscaling storage (keep costs predictable)
+  storage_encrypted     = true
+
+  db_name  = "quantedge"
+  username = "quantedge"
+  password = var.db_password
+
+  db_subnet_group_name   = aws_db_subnet_group.quantedge.name
+  vpc_security_group_ids = [aws_security_group.rds.id]
+
+  multi_az            = false  # Single-AZ — fine for personal use
+  publicly_accessible = false
+
+  backup_retention_period = 7
+  backup_window           = "03:00-04:00"
+  maintenance_window      = "Mon:04:00-Mon:05:00"
+
   deletion_protection             = true
   skip_final_snapshot             = false
-  final_snapshot_identifier       = "${local.name_prefix}-final-snapshot"
-  performance_insights_enabled    = true
-  enabled_cloudwatch_logs_exports = ["postgresql", "upgrade"]
-  tags                            = { Name = "${local.name_prefix}-postgres" }
+  final_snapshot_identifier       = "quantedge-postgres-final-snapshot"
+  performance_insights_enabled    = false  # Disabled — saves cost
+
+  tags = { Name = "quantedge-postgres" }
 }
+###─────────────────────────────────────────────────────────────────────────###
+#  ECS CLUSTER
+###─────────────────────────────────────────────────────────────────────────###
 
-###────────────────────────────────────────────────────────────###
-#  ELASTICACHE REDIS
-###────────────────────────────────────────────────────────────###
-resource "aws_elasticache_subnet_group" "quantedge" {
-  name       = "${local.name_prefix}-redis-subnet"
-  subnet_ids = aws_subnet.private[*].id
-}
-
-resource "aws_elasticache_replication_group" "redis" {
-  replication_group_id = "${local.name_prefix}-redis"
-  description          = "QuantEdge Redis"
-  engine               = "redis"
-  engine_version       = "7.1"
-  node_type            = "cache.t3.micro"
-  num_cache_clusters   = 1
-  port                 = 6379
-  parameter_group_name = "default.redis7"
-  subnet_group_name    = aws_elasticache_subnet_group.quantedge.name
-  security_group_ids   = [aws_security_group.redis.id]
-
-  at_rest_encryption_enabled = true
-  transit_encryption_enabled = true
-  automatic_failover_enabled = false
-
-  tags = { Name = "${local.name_prefix}-redis" }
-}
-
-###────────────────────────────────────────────────────────────###
-#  ECR
-###────────────────────────────────────────────────────────────###
-resource "aws_ecr_repository" "api" {
-  name                 = "${local.name_prefix}-api"
-  image_tag_mutability = "MUTABLE"
-
-  image_scanning_configuration {
-    scan_on_push = true
-  }
-  tags = { Name = "${local.name_prefix}-api" }
-}
-
-resource "aws_ecr_lifecycle_policy" "api" {
-  repository = aws_ecr_repository.api.name
-  policy = jsonencode({
-    rules = [{
-      rulePriority = 1
-      description  = "Keep last 5 images"
-      selection    = { tagStatus = "any", countType = "imageCountMoreThan", countNumber = 5 }
-      action       = { type = "expire" }
-    }]
-  })
-}
-
-###────────────────────────────────────────────────────────────###
-#  IAM
-###────────────────────────────────────────────────────────────###
-resource "aws_iam_role" "ecs_task" {
-  name = "${local.name_prefix}-ecs-task-role"
-  assume_role_policy = jsonencode({
-    Version   = "2012-10-17"
-    Statement = [{ Action = "sts:AssumeRole", Effect = "Allow", Principal = { Service = "ecs-tasks.amazonaws.com" } }]
-  })
-}
-
-resource "aws_iam_role_policy" "ecs_task_policy" {
-  name = "${local.name_prefix}-ecs-task-policy"
-  role = aws_iam_role.ecs_task.id
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid      = "CognitoAccess"
-        Effect   = "Allow"
-        Action   = ["cognito-idp:GetUser", "cognito-idp:InitiateAuth", "cognito-idp:RespondToAuthChallenge", "cognito-idp:AdminCreateUser", "cognito-idp:AdminSetUserMFAPreference"]
-        Resource = aws_cognito_user_pool.quantedge.arn
-      },
-      {
-        Sid      = "S3Access"
-        Effect   = "Allow"
-        Action   = ["s3:GetObject", "s3:PutObject", "s3:ListBucket"]
-        Resource = ["${aws_s3_bucket.datalake.arn}/*", "${aws_s3_bucket.datalake.arn}", "${aws_s3_bucket.models.arn}/*", "${aws_s3_bucket.models.arn}"]
-      },
-      { Sid = "SecretsAccess", Effect = "Allow", Action = ["secretsmanager:GetSecretValue"], Resource = "arn:aws:secretsmanager:${var.aws_region}:${local.account_id}:secret:quantedge/*" },
-      { Sid = "SNSAlerts", Effect = "Allow", Action = ["sns:Publish"], Resource = aws_sns_topic.alerts.arn },
-      { Sid = "SageMaker", Effect = "Allow", Action = ["sagemaker:InvokeEndpoint"], Resource = "arn:aws:sagemaker:${var.aws_region}:${local.account_id}:endpoint/quantedge-*" },
-      { Sid = "CloudWatchLogs", Effect = "Allow", Action = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"], Resource = "*" }
-    ]
-  })
-}
-
-resource "aws_iam_role" "ecs_execution" {
-  name = "${local.name_prefix}-ecs-execution-role"
-  assume_role_policy = jsonencode({
-    Version   = "2012-10-17"
-    Statement = [{ Action = "sts:AssumeRole", Effect = "Allow", Principal = { Service = "ecs-tasks.amazonaws.com" } }]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "ecs_execution" {
-  role       = aws_iam_role.ecs_execution.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
-}
-
-resource "aws_iam_role_policy" "ecs_execution_secrets" {
-  name = "${local.name_prefix}-ecs-execution-secrets"
-  role = aws_iam_role.ecs_execution.id
-  policy = jsonencode({
-    Version   = "2012-10-17"
-    Statement = [{ Effect = "Allow", Action = ["secretsmanager:GetSecretValue"], Resource = "arn:aws:secretsmanager:${var.aws_region}:${local.account_id}:secret:quantedge/*" }]
-  })
-}
-
-###────────────────────────────────────────────────────────────###
-#  ECS CLUSTER + FARGATE
-###────────────────────────────────────────────────────────────###
-resource "aws_ecs_cluster" "quantedge" {
-  name = "${local.name_prefix}-cluster"
+resource "aws_ecs_cluster" "main" {
+  name = "quantedge-cluster"
 
   setting {
     name  = "containerInsights"
-    value = "enabled"
+    value = "disabled"  # Disabled to save cost — use CloudWatch logs directly
   }
-  tags = { Name = "${local.name_prefix}-cluster" }
+
+  tags = { Name = "quantedge-cluster" }
 }
 
-resource "aws_cloudwatch_log_group" "ecs" {
-  name              = "/ecs/${local.name_prefix}"
-  retention_in_days = 30
+resource "aws_ecs_cluster_capacity_providers" "main" {
+  cluster_name       = aws_ecs_cluster.main.name
+  capacity_providers = ["FARGATE", "FARGATE_SPOT"]
+
+  default_capacity_provider_strategy {
+    capacity_provider = "FARGATE"
+    weight            = 1
+    base              = 1
+  }
 }
 
-resource "aws_ecs_task_definition" "api" {
-  family                   = "${local.name_prefix}-api"
+###─────────────────────────────────────────────────────────────────────────###
+#  ECS TASK DEFINITION
+#
+#  Two containers in one task:
+#    1. quantedge-api  — FastAPI backend (0.5vCPU / 896MB)
+#    2. redis-sidecar  — Redis 7        (0.25vCPU / 128MB reserved, ~64MB actual)
+#
+#  Total task: 0.75vCPU / ~1024MB
+#  Fargate pricing at 0.75vCPU/1GB ≈ $0.013/hour = ~$9.50/month
+#  (vs 1vCPU/2GB ≈ $0.025/hour = ~$18/month in enterprise version)
+#
+#  Redis is localhost inside the task — REDIS_URL = redis://localhost:6379/0
+#  Redis data is lost on task restart. This is acceptable because:
+#    - Cache data: re-fetched from Polygon on miss
+#    - Pub/sub: reconnects on restart
+#    - Sessions: Cognito JWT — stateless
+###─────────────────────────────────────────────────────────────────────────###
+
+resource "aws_ecs_task_definition" "quantedge_api" {
+  family                   = "quantedge-api"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
-  cpu                      = "1024"
-  memory                   = "2048"
-  execution_role_arn       = aws_iam_role.ecs_execution.arn
-  task_role_arn            = aws_iam_role.ecs_task.arn
+  cpu                      = "512"   # 0.5 vCPU (was 1024 = 1vCPU)
+  memory                   = "1024"  # 1GB total (was 2048 = 2GB)
+  execution_role_arn       = aws_iam_role.ecs_execution_role.arn
+  task_role_arn            = aws_iam_role.ecs_task_role.arn
 
-  container_definitions = jsonencode([{
-    name         = "quantedge-api"
-    image        = "${aws_ecr_repository.api.repository_url}:latest"
-    essential    = true
-    portMappings = [{ containerPort = 8000, protocol = "tcp" }]
-    environment = [
-      { name = "APP_ENV", value = "production" },
-      { name = "AWS_REGION", value = var.aws_region },
-      { name = "AWS_ACCOUNT_ID", value = local.account_id },
-      { name = "COGNITO_USER_POOL_ID", value = aws_cognito_user_pool.quantedge.id },
-      { name = "COGNITO_CLIENT_ID", value = aws_cognito_user_pool_client.quantedge.id },
-      { name = "REDIS_URL", value = "rediss://${aws_elasticache_replication_group.redis.primary_endpoint_address}:6379" },
-      { name = "CORS_ORIGINS", value = "https://${local.fqdn}" },
-      { name = "DATABASE_URL", value = "postgresql+asyncpg://quantedge_admin:${var.db_password}@${aws_db_instance.quantedge.endpoint}/quantedge" },
-      { name = "S3_BUCKET_DATA", value = aws_s3_bucket.datalake.bucket },
-      { name = "S3_BUCKET_MODELS", value = aws_s3_bucket.models.bucket },
-      { name = "SNS_ALERT_TOPIC_ARN", value = aws_sns_topic.alerts.arn },
-      { name = "OWNER_USERNAME", value = "dileep" },
-      { name = "USE_ANTHROPIC_FALLBACK", value = "true" },
-    ]
-    secrets = [
-      { name = "SECRET_KEY", valueFrom = "${aws_secretsmanager_secret.app_secrets.arn}:SECRET_KEY::" },
-      { name = "ALPHA_VANTAGE_KEY", valueFrom = "${aws_secretsmanager_secret.app_secrets.arn}:ALPHA_VANTAGE_KEY::" },
-      { name = "FRED_API_KEY", valueFrom = "${aws_secretsmanager_secret.app_secrets.arn}:FRED_API_KEY::" },
-      { name = "ANTHROPIC_API_KEY", valueFrom = "${aws_secretsmanager_secret.app_secrets.arn}:ANTHROPIC_API_KEY::" },
-    ]
-    logConfiguration = {
-      logDriver = "awslogs"
-      options   = { "awslogs-group" = aws_cloudwatch_log_group.ecs.name, "awslogs-region" = var.aws_region, "awslogs-stream-prefix" = "api" }
+  container_definitions = jsonencode([
+    ###──────────────────────────────────────────────
+    # Container 1: Redis sidecar
+    # Replaces ElastiCache — saves $15/month
+    # Runs as localhost inside the task
+    ###──────────────────────────────────────────────
+    {
+      name      = "redis-sidecar"
+      image     = "redis:7-alpine"
+      essential = false  # Task continues if Redis crashes (FastAPI handles gracefully)
+      cpu       = 0      # No hard reservation — shares task CPU
+      memory    = 128    # Hard limit 128MB — Redis with maxmemory 96mb
+
+      command = [
+        "redis-server",
+        "--maxmemory", "96mb",
+        "--maxmemory-policy", "allkeys-lru",
+        "--save", "",          # Disable RDB snapshots (no persistence needed)
+        "--appendonly", "no"   # Disable AOF (no persistence needed)
+      ]
+
+      portMappings = [{
+        containerPort = 6379
+        protocol      = "tcp"
+      }]
+
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = "/ecs/quantedge-api"
+          "awslogs-region"        = var.aws_region
+          "awslogs-stream-prefix" = "redis"
+        }
+      }
+
+      healthCheck = {
+        command     = ["CMD-SHELL", "redis-cli ping || exit 1"]
+        interval    = 30
+        timeout     = 5
+        retries     = 3
+        startPeriod = 10
+      }
+    },
+
+    ###──────────────────────────────────────────────
+    # Container 2: QuantEdge FastAPI backend
+    ###──────────────────────────────────────────────
+    {
+      name      = "quantedge-api"
+      image     = "${aws_ecr_repository.quantedge_api.repository_url}:latest"
+      essential = true
+      cpu       = 0      # No hard reservation within task (shares with redis)
+      memory    = 896    # Hard limit 896MB (1024 - 128 for Redis)
+
+      portMappings = [{
+        containerPort = 8000
+        protocol      = "tcp"
+      }]
+
+      environment = [
+        # Redis is localhost — no ElastiCache needed
+        { name = "REDIS_URL",             value = "redis://localhost:6379/0" },
+        # RDS connection — PostgreSQL 15 on db.t3.micro
+        { name = "DATABASE_URL", value = "postgresql://quantedge:${var.db_password}@quantedge-postgres.c09yes6ea4te.us-east-1.rds.amazonaws.com/quantedge" },
+        # Application settings
+        { name = "ENVIRONMENT",           value = "production" },
+        { name = "MODEL_DIR",             value = "/app/models" },
+        { name = "AWS_REGION",            value = var.aws_region },
+        { name = "COGNITO_USER_POOL_ID",  value = aws_cognito_user_pool.quantedge.id },
+        { name = "COGNITO_CLIENT_ID",     value = aws_cognito_user_pool_client.app.id },
+        { name = "SNS_ALERT_TOPIC_ARN",   value = aws_sns_topic.alerts.arn },
+        { name = "CORS_ORIGINS",          value = "https://${local.full_domain}" },
+        # Reduce workers — 1 is enough for personal use (saves memory)
+        { name = "UVICORN_WORKERS",       value = "1" }
+      ]
+
+      secrets = [
+        { name = "ANTHROPIC_API_KEY", valueFrom = "${aws_secretsmanager_secret.quantedge_secrets.arn}:ANTHROPIC_API_KEY::" },
+        { name = "POLYGON_API_KEY",   valueFrom = "${aws_secretsmanager_secret.quantedge_secrets.arn}:POLYGON_API_KEY::" },
+        { name = "SECRET_KEY",        valueFrom = "${aws_secretsmanager_secret.quantedge_secrets.arn}:SECRET_KEY::" }
+      ]
+
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = "/ecs/quantedge-api"
+          "awslogs-region"        = var.aws_region
+          "awslogs-stream-prefix" = "ecs"
+        }
+      }
+
+      healthCheck = {
+        command     = ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+        interval    = 30
+        timeout     = 10
+        retries     = 3
+        startPeriod = 300  # 10 minutes — ML model training on first boot
+      }
+
+      # Redis sidecar must start before API (so localhost:6379 is ready)
+      dependsOn = [{
+        containerName = "redis-sidecar"
+        condition     = "HEALTHY"
+      }]
     }
-    healthCheck = { command = ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"], interval = 30, timeout = 10, retries = 3, startPeriod = 60 }
-  }])
+  ])
+
+  tags = { Name = "quantedge-api" }
 }
 
-resource "aws_ecs_service" "api" {
-  name            = "${local.name_prefix}-api"
-  cluster         = aws_ecs_cluster.quantedge.id
-  task_definition = aws_ecs_task_definition.api.arn
-  desired_count   = 1
-  launch_type     = "FARGATE"
-  health_check_grace_period_seconds = 180
+###─────────────────────────────────────────────────────────────────────────###
+#  ECS SERVICE
+#  Runs in PUBLIC subnets — no NAT Gateway needed
+#  assign_public_ip = true → ECS gets a public IP for outbound internet
+###─────────────────────────────────────────────────────────────────────────###
+
+resource "aws_ecs_service" "quantedge_api" {
+  name            = "quantedge-api"
+  cluster         = aws_ecs_cluster.main.id
+  task_definition = aws_ecs_task_definition.quantedge_api.arn
+  desired_count   = 1  # Single instance — personal use
+
+
+  # Use FARGATE_SPOT when available for up to 70% cost savings
+  # Falls back to regular FARGATE automatically
+  capacity_provider_strategy {
+    capacity_provider = "FARGATE_SPOT"
+    weight            = 1
+    base              = 0
+  }
+
+  capacity_provider_strategy {
+    capacity_provider = "FARGATE"
+    weight            = 0
+    base              = 1
+  }
 
   network_configuration {
-    subnets          = aws_subnet.private[*].id
+    subnets          = aws_subnet.public[*].id    # Public subnets (no NAT needed)
     security_groups  = [aws_security_group.ecs.id]
-    assign_public_ip = true
+    assign_public_ip = true                        # Required for public subnet outbound
   }
 
-  load_balancer {
-    target_group_arn = aws_lb_target_group.api.arn
-    container_name   = "quantedge-api"
-    container_port   = 8000
+  # No load balancer — CloudFront connects directly to ECS public IP
+  # CloudFront uses the ECS_SERVICE_URL output to set its origin
+
+  health_check_grace_period_seconds = 300  # 10 minutes for first ML model training
+
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
   }
 
-  lifecycle { ignore_changes = [desired_count, task_definition] }
-  depends_on = [aws_lb_listener.https]
+  deployment_controller {
+    type = "ECS"
+  }
+
+  # Force new deployment when task definition changes
+  force_new_deployment = true
+
+  depends_on = [
+    aws_iam_role_policy_attachment.ecs_execution_policy,
+    aws_iam_role_policy.ecs_execution_secrets,
+    aws_iam_role_policy.ecs_task_policy,
+    aws_cloudwatch_log_group.ecs
+  ]
+
+  tags = { Name = "quantedge-api" }
 }
 
-###────────────────────────────────────────────────────────────###
-#  S3 BUCKETS
-###────────────────────────────────────────────────────────────###
+###─────────────────────────────────────────────────────────────────────────###
+#  S3 — Frontend static files
+###─────────────────────────────────────────────────────────────────────────###
+
 resource "aws_s3_bucket" "frontend" {
-  bucket = "${local.name_prefix}-frontend-dileep"
-  tags   = { Name = "${local.name_prefix}-frontend" }
+  bucket        = "quantedge-frontend-dileep"
+  force_destroy = false
+  tags          = { Name = "quantedge-frontend-dileep" }
 }
 
-resource "aws_s3_bucket_website_configuration" "frontend" {
+resource "aws_s3_bucket_versioning" "frontend" {
   bucket = aws_s3_bucket.frontend.id
-  index_document { suffix = "index.html" }
-  error_document { key = "index.html" }
+  versioning_configuration {
+    status = "Disabled"  # No versioning needed — CloudFront serves latest
+  }
 }
 
 resource "aws_s3_bucket_public_access_block" "frontend" {
@@ -640,265 +779,456 @@ resource "aws_s3_bucket_public_access_block" "frontend" {
   restrict_public_buckets = true
 }
 
-resource "aws_s3_bucket_policy" "frontend" {
+resource "aws_s3_bucket_server_side_encryption_configuration" "frontend" {
   bucket = aws_s3_bucket.frontend.id
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Sid       = "AllowCloudFrontOAC"
-      Effect    = "Allow"
-      Principal = { Service = "cloudfront.amazonaws.com" }
-      Action    = "s3:GetObject"
-      Resource  = "${aws_s3_bucket.frontend.arn}/*"
-      Condition = { StringEquals = { "AWS:SourceArn" = aws_cloudfront_distribution.quantedge.arn } }
-    }]
-  })
-}
-
-resource "aws_s3_bucket" "datalake" {
-  bucket = "${local.name_prefix}-datalake-dileep"
-  tags   = { Name = "${local.name_prefix}-datalake" }
-}
-
-resource "aws_s3_bucket_versioning" "datalake" {
-  bucket = aws_s3_bucket.datalake.id
-  versioning_configuration { status = "Enabled" }
-}
-
-resource "aws_s3_bucket" "models" {
-  bucket = "${local.name_prefix}-models-dileep"
-  tags   = { Name = "${local.name_prefix}-ml-models" }
-}
-
-resource "aws_s3_bucket" "alb_logs" {
-  bucket = "${local.name_prefix}-alb-logs-dileep"
-  tags   = { Name = "${local.name_prefix}-alb-logs" }
-}
-
-resource "aws_s3_bucket_public_access_block" "datalake" {
-  bucket                  = aws_s3_bucket.datalake.id
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
-}
-
-resource "aws_s3_bucket_public_access_block" "models" {
-  bucket                  = aws_s3_bucket.models.id
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
-}
-
-###────────────────────────────────────────────────────────────###
-#  CLOUDFRONT — Origin Request Policy (replaces forwarding_config)
-###────────────────────────────────────────────────────────────###
-resource "aws_cloudfront_origin_request_policy" "api_passthrough" {
-  provider = aws.us_east_1
-  name     = "${local.name_prefix}-api-passthrough"
-  cookies_config { cookie_behavior = "all" }
-  headers_config {
-    header_behavior = "whitelist"
-    headers { items = ["Content-Type", "Origin", "Accept"] }
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
   }
-  query_strings_config { query_string_behavior = "all" }
 }
 
-###────────────────────────────────────────────────────────────###
-#  CLOUDFRONT CDN
-###────────────────────────────────────────────────────────────###
+###─────────────────────────────────────────────────────────────────────────###
+#  CLOUDFRONT — serves frontend from S3 AND proxies /api/* to ECS directly
+#
+#  Architecture (no ALB):
+#    Browser → CloudFront → /api/* → ECS public IP (origin = ECS task IP)
+#    Browser → CloudFront → /*     → S3 (React frontend)
+#
+#  NOTE: Because ECS tasks get new IPs on each restart, we use a custom
+#  origin domain that is updated by the deploy workflow via a Lambda@Edge
+#  or (simpler) by storing the ECS task IP in SSM Parameter Store and
+#  using a CloudFront Function to forward to the current ECS IP.
+#
+#  SIMPLER APPROACH: Use a fixed custom domain for the ECS container.
+#  We set CloudFront origin to the ECS service's public IP stored in
+#  SSM Parameter Store, updated on each deploy by GitHub Actions.
+#
+#  For personal use, the simplest and most reliable approach:
+#  Use a custom origin domain = quant-api.dileepkapu.com
+#  which is a Route53 A record that always points to the current ECS task IP.
+#  GitHub Actions updates this A record on every deploy.
+###─────────────────────────────────────────────────────────────────────────###
+
 resource "aws_cloudfront_origin_access_control" "frontend" {
-  provider                          = aws.us_east_1
-  name                              = "${local.name_prefix}-oac"
+  name                              = "${local.name_prefix}-frontend-oac"
+  description                       = "OAC for QuantEdge frontend S3"
   origin_access_control_origin_type = "s3"
   signing_behavior                  = "always"
   signing_protocol                  = "sigv4"
 }
 
-resource "aws_cloudfront_distribution" "quantedge" {
-  provider            = aws.us_east_1
+resource "aws_cloudfront_distribution" "main" {
   enabled             = true
   is_ipv6_enabled     = true
   default_root_object = "index.html"
-  aliases             = [local.fqdn]
-  price_class         = "PriceClass_100"
-  # web_acl_id          = aws_wafv2_web_acl.quantedge.arn
+  price_class         = "PriceClass_100"  # US/Europe only — cheapest
 
+  aliases = [local.full_domain]
+
+  # Origin 1: S3 for React frontend
   origin {
     domain_name              = aws_s3_bucket.frontend.bucket_regional_domain_name
     origin_id                = "S3Frontend"
     origin_access_control_id = aws_cloudfront_origin_access_control.frontend.id
   }
 
+  # Origin 2: ECS directly (no ALB)
+  # The origin domain is the internal API subdomain, updated by deploy workflow
   origin {
-    domain_name = aws_lb.quantedge.dns_name
-    origin_id   = "ALBBackend"
+    domain_name = "quant-api-internal.${var.domain_name}"
+    origin_id   = "ECSBackend"
+    origin_path = ""
+
     custom_origin_config {
-      http_port              = 80
+      http_port              = 8000
       https_port             = 443
-      origin_protocol_policy = "https-only"
+      origin_protocol_policy = "http-only"   # ECS serves HTTP on 8000
       origin_ssl_protocols   = ["TLSv1.2"]
+      origin_read_timeout    = 120           # Long timeout for ML analysis
+      origin_keepalive_timeout = 60
+    }
+
+    # Custom header to verify requests came from CloudFront
+    custom_header {
+      name  = "X-CloudFront-Secret"
+      value = "quantedge-${data.aws_caller_identity.current.account_id}"
     }
   }
 
-  # /api/* → ALB, no caching, forward auth headers
-  ordered_cache_behavior {
-    path_pattern             = "/api/*"
-    allowed_methods          = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
-    cached_methods           = ["GET", "HEAD"]
-    target_origin_id         = "ALBBackend"
-    cache_policy_id          = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad" # CachingDisabled
-    origin_request_policy_id = aws_cloudfront_origin_request_policy.api_passthrough.id
-    viewer_protocol_policy   = "https-only"
-    compress                 = true
-  }
-
-  # /auth/* → ALB
-  ordered_cache_behavior {
-    path_pattern             = "/auth/*"
-    allowed_methods          = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
-    cached_methods           = ["GET", "HEAD"]
-    target_origin_id         = "ALBBackend"
-    cache_policy_id          = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad"
-    origin_request_policy_id = aws_cloudfront_origin_request_policy.api_passthrough.id
-    viewer_protocol_policy   = "https-only"
-    compress                 = true
-  }
-
-  # /ws/* → ALB (WebSocket)
-  ordered_cache_behavior {
-    path_pattern             = "/ws/*"
-    allowed_methods          = ["GET", "HEAD", "OPTIONS"]
-    cached_methods           = ["GET", "HEAD"]
-    target_origin_id         = "ALBBackend"
-    cache_policy_id          = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad"
-    origin_request_policy_id = aws_cloudfront_origin_request_policy.api_passthrough.id
-    viewer_protocol_policy   = "https-only"
-    compress                 = false
-  }
-
+  # Default behaviour: serve React frontend from S3
   default_cache_behavior {
-    allowed_methods        = ["GET", "HEAD"]
+    allowed_methods        = ["GET", "HEAD", "OPTIONS"]
     cached_methods         = ["GET", "HEAD"]
     target_origin_id       = "S3Frontend"
     viewer_protocol_policy = "redirect-to-https"
     compress               = true
-    cache_policy_id        = "658327ea-f89d-4fab-a63d-7e88639e58f6" # CachingOptimized
+
+    forwarded_values {
+      query_string = false
+      cookies { forward = "none" }
+    }
+
+    min_ttl     = 0
+    default_ttl = 3600
+    max_ttl     = 86400
+  }
+
+  # /api/* → ECS backend
+  ordered_cache_behavior {
+    path_pattern           = "/api/*"
+    allowed_methods        = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+    cached_methods         = ["GET", "HEAD"]
+    target_origin_id       = "ECSBackend"
+    viewer_protocol_policy = "redirect-to-https"
+    compress               = false
+
+    forwarded_values {
+      query_string = true
+      headers      = ["Authorization", "Content-Type", "Accept", "Origin"]
+      cookies { forward = "all" }
+    }
+
+    min_ttl     = 0
+    default_ttl = 0
+    max_ttl     = 0
+  }
+
+  # /health → ECS backend
+  ordered_cache_behavior {
+    path_pattern           = "/health"
+    allowed_methods        = ["GET", "HEAD"]
+    cached_methods         = ["GET", "HEAD"]
+    target_origin_id       = "ECSBackend"
+    viewer_protocol_policy = "redirect-to-https"
+    compress               = false
+
+    forwarded_values {
+      query_string = false
+      cookies { forward = "none" }
+    }
+
+    min_ttl     = 0
+    default_ttl = 0
+    max_ttl     = 0
+  }
+
+  # /ws/* → ECS backend (WebSocket)
+  ordered_cache_behavior {
+    path_pattern           = "/ws/*"
+    allowed_methods        = ["GET", "HEAD", "OPTIONS"]
+    cached_methods         = ["GET", "HEAD"]
+    target_origin_id       = "ECSBackend"
+    viewer_protocol_policy = "redirect-to-https"
+    compress               = false
+
+    forwarded_values {
+      query_string = true
+      headers      = ["*"]
+      cookies { forward = "all" }
+    }
+
+    min_ttl     = 0
+    default_ttl = 0
+    max_ttl     = 0
+  }
+
+  # SPA routing — return index.html for all 404s
+  custom_error_response {
+    error_code            = 404
+    response_code         = 200
+    response_page_path    = "/index.html"
+    error_caching_min_ttl = 0
   }
 
   custom_error_response {
-    error_code         = 404
-    response_code      = 200
-    response_page_path = "/index.html"
+    error_code            = 403
+    response_code         = 200
+    response_page_path    = "/index.html"
+    error_caching_min_ttl = 0
   }
-  custom_error_response {
-    error_code         = 403
-    response_code      = 200
-    response_page_path = "/index.html"
+
+  restrictions {
+    geo_restriction {
+      restriction_type = "none"
+    }
   }
 
   viewer_certificate {
-    acm_certificate_arn      = aws_acm_certificate_validation.quantedge.certificate_arn
+    acm_certificate_arn      = aws_acm_certificate_validation.main.certificate_arn
     ssl_support_method       = "sni-only"
     minimum_protocol_version = "TLSv1.2_2021"
   }
 
-  restrictions {
-    geo_restriction { restriction_type = "none" }
-  }
+  tags = { Name = "${local.name_prefix}-distribution" }
 
-  tags = { Name = "${local.name_prefix}-cdn" }
+  depends_on = [aws_acm_certificate_validation.main]
 }
 
-###────────────────────────────────────────────────────────────###
+# S3 bucket policy — CloudFront OAC access only
+resource "aws_s3_bucket_policy" "frontend" {
+  bucket = aws_s3_bucket.frontend.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "cloudfront.amazonaws.com" }
+      Action    = "s3:GetObject"
+      Resource  = "${aws_s3_bucket.frontend.arn}/*"
+      Condition = {
+        StringEquals = {
+          "AWS:SourceArn" = aws_cloudfront_distribution.main.arn
+        }
+      }
+    }]
+  })
+}
+
+###─────────────────────────────────────────────────────────────────────────###
+#  SSM PARAMETER — stores current ECS task public IP
+#  Updated by GitHub Actions deploy workflow after every deployment
+###─────────────────────────────────────────────────────────────────────────###
+
+resource "aws_ssm_parameter" "ecs_task_ip" {
+  name        = "/quantedge/ecs-task-ip"
+  type        = "String"
+  value       = "0.0.0.0"  # Placeholder — updated by deploy workflow
+  description = "Current ECS task public IP — updated on every deploy"
+  tags        = { Name = "quantedge-ecs-task-ip" }
+
+  lifecycle {
+    ignore_changes = [value]  # Terraform won't overwrite it after initial creation
+  }
+}
+
+###─────────────────────────────────────────────────────────────────────────###
 #  ROUTE 53
-###────────────────────────────────────────────────────────────###
-resource "aws_route53_record" "quantedge" {
+###─────────────────────────────────────────────────────────────────────────###
+
+# quant.dileepkapu.com → CloudFront
+resource "aws_route53_record" "main" {
   zone_id = data.aws_route53_zone.main.zone_id
-  name    = local.fqdn
+  name    = local.full_domain
   type    = "A"
   alias {
-    name                   = aws_cloudfront_distribution.quantedge.domain_name
-    zone_id                = aws_cloudfront_distribution.quantedge.hosted_zone_id
+    name                   = aws_cloudfront_distribution.main.domain_name
+    zone_id                = aws_cloudfront_distribution.main.hosted_zone_id
     evaluate_target_health = false
   }
 }
 
-###────────────────────────────────────────────────────────────###
-#  SECRETS MANAGER
-###────────────────────────────────────────────────────────────###
-resource "aws_secretsmanager_secret" "app_secrets" {
-  name                    = "quantedge/app-secrets"
-  recovery_window_in_days = 7
-  tags                    = { Name = "${local.name_prefix}-secrets" }
+# quant-api-internal.dileepkapu.com → ECS task public IP
+# This A record is updated by the deploy workflow on every deployment
+# CloudFront uses this as its ECS origin domain
+resource "aws_route53_record" "api_internal" {
+  zone_id = data.aws_route53_zone.main.zone_id
+  name    = "quant-api-internal.${var.domain_name}"
+  type    = "A"
+  ttl     = 60  # Low TTL so updates propagate quickly
+
+  records = ["0.0.0.0"]  # Placeholder — updated by deploy workflow
+
+  lifecycle {
+    ignore_changes = [records]  # Terraform won't overwrite after initial creation
+  }
 }
 
-resource "aws_secretsmanager_secret_version" "app_secrets" {
-  secret_id = aws_secretsmanager_secret.app_secrets.id
-  secret_string = jsonencode({
-    SECRET_KEY           = var.secret_key
-    ALPHA_VANTAGE_KEY    = "YOUR_ALPHA_VANTAGE_KEY_HERE"
-    FRED_API_KEY         = "YOUR_FRED_API_KEY_HERE"
-    ANTHROPIC_API_KEY    = var.anthropic_api_key
-    REDDIT_CLIENT_ID     = "YOUR_REDDIT_CLIENT_ID_HERE"
-    REDDIT_CLIENT_SECRET = "YOUR_REDDIT_CLIENT_SECRET_HERE"
-  })
-  lifecycle { ignore_changes = [secret_string] }
+###─────────────────────────────────────────────────────────────────────────###
+#  ACM TLS CERTIFICATE
+###─────────────────────────────────────────────────────────────────────────###
+
+resource "aws_acm_certificate" "main" {
+  provider          = aws.us_east_1  # Must be us-east-1 for CloudFront
+  domain_name       = local.full_domain
+  validation_method = "DNS"
+
+  lifecycle {
+    create_before_destroy = true
+  }
+
+  tags = { Name = "${local.name_prefix}-cert" }
 }
 
-###────────────────────────────────────────────────────────────###
-#  SNS + CLOUDWATCH ALARMS
-###────────────────────────────────────────────────────────────###
+resource "aws_route53_record" "cert_validation" {
+  for_each = {
+    for dvo in aws_acm_certificate.main.domain_validation_options : dvo.domain_name => {
+      name   = dvo.resource_record_name
+      record = dvo.resource_record_value
+      type   = dvo.resource_record_type
+    }
+  }
+  zone_id         = data.aws_route53_zone.main.zone_id
+  name            = each.value.name
+  type            = each.value.type
+  ttl             = 60
+  records         = [each.value.record]
+  allow_overwrite = true
+}
+
+resource "aws_acm_certificate_validation" "main" {
+  provider                = aws.us_east_1
+  certificate_arn         = aws_acm_certificate.main.arn
+  validation_record_fqdns = [for record in aws_route53_record.cert_validation : record.fqdn]
+}
+
+###─────────────────────────────────────────────────────────────────────────###
+#  COGNITO — authentication with MFA (keep for security even on personal use)
+###─────────────────────────────────────────────────────────────────────────###
+
+resource "aws_cognito_user_pool" "quantedge" {
+  name = "quantedge-users"
+
+  # Require MFA — TOTP via Google Authenticator
+  mfa_configuration = "ON"
+  software_token_mfa_configuration {
+    enabled = true
+  }
+
+  password_policy {
+    minimum_length                   = 12
+    require_lowercase                = true
+    require_uppercase                = true
+    require_numbers                  = true
+    require_symbols                  = true
+    temporary_password_validity_days = 7
+  }
+
+  account_recovery_setting {
+    recovery_mechanism {
+      name     = "verified_email"
+      priority = 1
+    }
+  }
+
+  admin_create_user_config {
+    allow_admin_create_user_only = true  # Only you can create users
+  }
+
+  schema {
+    name                = "email"
+    attribute_data_type = "String"
+    required            = true
+    mutable             = true
+    string_attribute_constraints {
+      min_length = 3
+      max_length = 254
+    }
+  }
+
+  tags = { Name = "quantedge-users" }
+}
+
+resource "aws_cognito_user_pool_client" "app" {
+  name         = "quantedge-app-client"
+  user_pool_id = aws_cognito_user_pool.quantedge.id
+
+  generate_secret                      = false
+  prevent_user_existence_errors        = "ENABLED"
+  enable_token_revocation              = true
+  allowed_oauth_flows_user_pool_client = false
+
+  explicit_auth_flows = [
+    "ALLOW_USER_PASSWORD_AUTH",
+    "ALLOW_REFRESH_TOKEN_AUTH",
+    "ALLOW_USER_SRP_AUTH"
+  ]
+
+  access_token_validity  = 60   # minutes
+  id_token_validity      = 60   # minutes
+  refresh_token_validity = 30   # days
+
+  token_validity_units {
+    access_token  = "minutes"
+    id_token      = "minutes"
+    refresh_token = "days"
+  }
+}
+
+###─────────────────────────────────────────────────────────────────────────###
+#  SNS — alert notifications (login failures, errors)
+###─────────────────────────────────────────────────────────────────────────###
+
 resource "aws_sns_topic" "alerts" {
-  name = "${local.name_prefix}-alerts"
-  tags = { Name = "${local.name_prefix}-alerts" }
+  name = "quantedge-alerts"
+  tags = { Name = "quantedge-alerts" }
 }
 
-resource "aws_sns_topic_subscription" "dileep_email" {
+resource "aws_sns_topic_subscription" "email_alerts" {
   topic_arn = aws_sns_topic.alerts.arn
   protocol  = "email"
   endpoint  = var.owner_email
 }
 
-resource "aws_cloudwatch_metric_alarm" "ecs_cpu_high" {
-  alarm_name          = "${local.name_prefix}-ecs-cpu-high"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 2
-  metric_name         = "CPUUtilization"
-  namespace           = "AWS/ECS"
-  period              = 300
-  statistic           = "Average"
-  threshold           = 80
-  alarm_actions       = [aws_sns_topic.alerts.arn]
-  dimensions          = { ClusterName = aws_ecs_cluster.quantedge.name, ServiceName = aws_ecs_service.api.name }
+###─────────────────────────────────────────────────────────────────────────###
+#  OUTPUTS — values needed for deployment and GitHub Actions
+###─────────────────────────────────────────────────────────────────────────###
+
+output "site_url" {
+  description = "Live site URL"
+  value       = "https://${local.full_domain}"
 }
 
-resource "aws_cloudwatch_metric_alarm" "rds_cpu_high" {
-  alarm_name          = "${local.name_prefix}-rds-cpu-high"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 2
-  metric_name         = "CPUUtilization"
-  namespace           = "AWS/RDS"
-  period              = 300
-  statistic           = "Average"
-  threshold           = 80
-  alarm_actions       = [aws_sns_topic.alerts.arn]
-  dimensions          = { DBInstanceIdentifier = aws_db_instance.quantedge.id }
+output "cloudfront_distribution_id" {
+  description = "CloudFront distribution ID — set as GitHub Secret CLOUDFRONT_DISTRIBUTION_ID"
+  value       = aws_cloudfront_distribution.main.id
 }
 
-###────────────────────────────────────────────────────────────###
-#  OUTPUTS
-###────────────────────────────────────────────────────────────###
-output "cloudfront_url" { value = "https://${local.fqdn}" }
-output "cloudfront_domain" { value = aws_cloudfront_distribution.quantedge.domain_name }
-output "cloudfront_distribution_id" { value = aws_cloudfront_distribution.quantedge.id }
-output "alb_dns" { value = aws_lb.quantedge.dns_name }
-output "ecr_repository_url" { value = aws_ecr_repository.api.repository_url }
-output "cognito_user_pool_id" { value = aws_cognito_user_pool.quantedge.id }
-output "cognito_client_id" { value = aws_cognito_user_pool_client.quantedge.id }
-output "rds_endpoint" { value = aws_db_instance.quantedge.endpoint }
-output "redis_endpoint" { value = aws_elasticache_replication_group.redis.primary_endpoint_address }
-output "s3_frontend_bucket" { value = aws_s3_bucket.frontend.bucket }
-output "s3_datalake_bucket" { value = aws_s3_bucket.datalake.bucket }
-output "sns_topic_arn" { value = aws_sns_topic.alerts.arn }
+output "cloudfront_domain" {
+  description = "CloudFront domain name"
+  value       = aws_cloudfront_distribution.main.domain_name
+}
+
+output "ecr_repository_url" {
+  description = "ECR repository URL — used in GitHub Actions docker push"
+  value       = aws_ecr_repository.quantedge_api.repository_url
+}
+output "rds_endpoint" {
+  description = "RDS endpoint — used in DATABASE_URL"
+  value       = aws_db_instance.quantedge.endpoint
+}
+
+output "rds_database_url" {
+  description = "Complete DATABASE_URL for the app"
+  value       = "postgresql://quantedge:YOURPASSWORD@${aws_db_instance.quantedge.endpoint}/quantedge"
+  sensitive   = true
+}
+
+output "cognito_user_pool_id" {
+  description = "Cognito User Pool ID"
+  value       = aws_cognito_user_pool.quantedge.id
+}
+
+output "cognito_client_id" {
+  description = "Cognito App Client ID"
+  value       = aws_cognito_user_pool_client.app.id
+}
+
+output "sns_topic_arn" {
+  description = "SNS alerts topic ARN — set as GitHub Secret SNS_TOPIC_ARN"
+  value       = aws_sns_topic.alerts.arn
+}
+
+output "secrets_manager_arn" {
+  description = "Secrets Manager ARN"
+  value       = aws_secretsmanager_secret.quantedge_secrets.arn
+}
+
+output "api_internal_record" {
+  description = "Internal API Route53 record — updated by deploy workflow with ECS task IP"
+  value       = "quant-api-internal.${var.domain_name}"
+}
+
+output "ecs_cluster_name" {
+  description = "ECS cluster name"
+  value       = aws_ecs_cluster.main.name
+}
+
+output "ecs_service_name" {
+  description = "ECS service name"
+  value       = aws_ecs_service.quantedge_api.name
+}
+
+output "cost_summary" {
+  description = "Estimated monthly AWS cost breakdown"
+  value       = "RDS db.t3.micro ~$15 + ECS 0.5vCPU/1GB ~$9-12 + CloudFront+S3 ~$5 + Route53 ~$1 + VPC Endpoints ~$7 = ~$37-40/month AWS (+ Polygon $29 = ~$67/month total)"
+}

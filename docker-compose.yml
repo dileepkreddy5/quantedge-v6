@@ -1,154 +1,60 @@
-# QuantEdge v6.0 — Local Development Docker Compose
-# © 2026 Dileep Kumar Reddy Kapu. All Rights Reserved.
+###############################################################################
+#  QuantEdge v6.0 — docker-compose.yml (Personal Use)
 #
-# Usage:
-#   docker-compose up -d           # Start all services
-#   docker-compose logs -f api     # Tail API logs
-#   docker-compose down            # Stop all
-#   docker-compose exec api bash   # Shell into API container
+#  Matches production ECS architecture exactly:
+#    - Redis runs as a sidecar alongside the backend (same network)
+#    - REDIS_URL = redis://localhost:6379/0 (matches ECS task definition)
+#    - PostgreSQL runs separately (matches RDS in production)
+#
+#  Start for local dev:
+#    docker-compose up -d
+#    export $(cat .env | xargs)
+#    uvicorn main_v6:app --reload --port 8000
+###############################################################################
 
 version: "3.9"
 
 services:
-  # ── PostgreSQL ───────────────────────────────────────────────
-  db:
+
+  # PostgreSQL — matches RDS db.t3.micro, PostgreSQL 15 in production
+  postgres:
     image: postgres:15-alpine
     container_name: quantedge-db
     environment:
-      POSTGRES_DB: quantedge
-      POSTGRES_USER: quantedge
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-quantedge_dev_pass}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+      POSTGRES_DB:       quantedge
+      POSTGRES_USER:     quantedge
+      POSTGRES_PASSWORD: quantedge
     ports:
       - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/schema.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U quantedge -d quantedge"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  # ── Redis ─────────────────────────────────────────────────────
-  redis:
-    image: redis:7-alpine
-    container_name: quantedge-redis
-    command: redis-server --requirepass ${REDIS_PASSWORD:-redis_dev_pass}
-    volumes:
-      - redis_data:/data
-    ports:
-      - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-
-  # ── FastAPI Backend ───────────────────────────────────────────
-  api:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: quantedge-api
-    environment:
-      - DATABASE_URL=postgresql://quantedge:${POSTGRES_PASSWORD:-quantedge_dev_pass}@db:5432/quantedge
-      - REDIS_URL=redis://:${REDIS_PASSWORD:-redis_dev_pass}@redis:6379/0
-      - AWS_REGION=${AWS_REGION:-us-east-1}
-      - COGNITO_USER_POOL_ID=${COGNITO_USER_POOL_ID:-}
-      - COGNITO_CLIENT_ID=${COGNITO_CLIENT_ID:-}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - FRED_API_KEY=${FRED_API_KEY:-}
-      - NEWSAPI_KEY=${NEWSAPI_KEY:-}
-      - REDDIT_CLIENT_ID=${REDDIT_CLIENT_ID:-}
-      - REDDIT_CLIENT_SECRET=${REDDIT_CLIENT_SECRET:-}
-      - OWNER_USERNAME=${OWNER_USERNAME:-dileep}
-      - OWNER_EMAIL=${OWNER_EMAIL:-dileep@dileepkapu.com}
-      - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production-min-32-chars}
-      - AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID:-123456789012}
-      - SNS_ALERT_TOPIC_ARN=${SNS_ALERT_TOPIC_ARN:-}
-      - USE_ANTHROPIC_FALLBACK=true
-    volumes:
-      - ./backend:/app
-      - model_storage:/app/ml/saved_models
-    ports:
-      - "8000:8000"
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    command: >
-      uvicorn main_v6:app
-      --host 0.0.0.0
-      --port 8000
-      --reload
-      --log-level info
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
 
-  # ── Celery Worker ─────────────────────────────────────────────
-  celery-worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: quantedge-celery-worker
-    environment:
-      - DATABASE_URL=postgresql://quantedge:${POSTGRES_PASSWORD:-quantedge_dev_pass}@db:5432/quantedge
-      - REDIS_URL=redis://:${REDIS_PASSWORD:-redis_dev_pass}@redis:6379/0
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - FRED_API_KEY=${FRED_API_KEY:-}
-      - NEWSAPI_KEY=${NEWSAPI_KEY:-}
-      - REDDIT_CLIENT_ID=${REDDIT_CLIENT_ID:-}
-      - REDDIT_CLIENT_SECRET=${REDDIT_CLIENT_SECRET:-}
-      - MODEL_DIR=/app/ml/saved_models
-      - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production-min-32-chars}
-      - OWNER_USERNAME=${OWNER_USERNAME:-dileep}
-    volumes:
-      - ./backend:/app
-      - model_storage:/app/ml/saved_models
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    command: celery -A tasks worker --loglevel=info --concurrency=2
-
-  # ── Celery Beat Scheduler ─────────────────────────────────────
-  celery-beat:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: quantedge-celery-beat
-    environment:
-      - REDIS_URL=redis://:${REDIS_PASSWORD:-redis_dev_pass}@redis:6379/0
-      - DATABASE_URL=postgresql://quantedge:${POSTGRES_PASSWORD:-quantedge_dev_pass}@db:5432/quantedge
-      - MODEL_DIR=/app/ml/saved_models
-    volumes:
-      - ./backend:/app
-      - model_storage:/app/ml/saved_models
-    depends_on:
-      redis:
-        condition: service_healthy
-    command: celery -A tasks beat --loglevel=info
-
-  # ── PgAdmin (optional, dev only) ──────────────────────────────
-  pgadmin:
-    image: dpage/pgadmin4:latest
-    container_name: quantedge-pgadmin
-    environment:
-      PGADMIN_DEFAULT_EMAIL: admin@quantedge.local
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
+  # Redis — matches the sidecar container in production ECS task
+  # REDIS_URL = redis://localhost:6379/0 (same as production)
+  redis:
+    image: redis:7-alpine
+    container_name: quantedge-redis
     ports:
-      - "5050:80"
-    depends_on:
-      - db
-    profiles:
-      - debug  # Only starts when: docker-compose --profile debug up
+      - "6379:6379"
+    command: >
+      redis-server
+      --maxmemory 96mb
+      --maxmemory-policy allkeys-lru
+      --save ""
+      --appendonly no
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
 
 volumes:
   postgres_data:
-  redis_data:
-  model_storage:
