@@ -898,7 +898,7 @@ class QuantEdgeAnalyzerV6:
 
 @router.post("/analyze")
 async def analyze(
-    body: AnalyzeRequest,
+    req: AnalyzeRequest,
     background_tasks: BackgroundTasks,
     http_request: Request,
     current_user: Optional[CognitoUser] = Depends(get_optional_user),
@@ -911,7 +911,7 @@ async def analyze(
     redis = http_request.app.state.redis
     analyzer: QuantEdgeAnalyzerV6 = http_request.app.state.analyzer
 
-    cache_key = f"analysis:v6:{body.ticker}"
+    cache_key = f"analysis:v6:{req.ticker}"
 
     # Check cache
     try:
@@ -923,11 +923,11 @@ async def analyze(
 
     # Run analysis (120-second timeout enforced inside run_full_analysis)
     data = await analyzer.run_full_analysis(
-        ticker=body.ticker,
-        include_options=body.include_options,
-        include_sentiment=body.include_sentiment,
-        mc_paths=body.mc_paths,
-        target_vol=body.target_vol,
+        ticker=req.ticker,
+        include_options=req.include_options,
+        include_sentiment=req.include_sentiment,
+        mc_paths=req.mc_paths,
+        target_vol=req.target_vol,
     )
 
     # Write prediction to PostgreSQL as background task (non-blocking)
@@ -937,7 +937,7 @@ async def analyze(
     _weights_used = data.get("ensemble_weights", data.get("weights_used", {}))
     background_tasks.add_task(
         http_request.app.state.signal_tracker.record_signal,
-        ticker=body.ticker,
+        ticker=req.ticker,
         analysis_result=data,
         regime=_regime,
         regime_confidence=_regime_confidence,
