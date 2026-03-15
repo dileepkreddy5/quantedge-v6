@@ -587,8 +587,8 @@ resource "aws_ecs_task_definition" "quantedge_api" {
   family                   = "quantedge-api"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
-  cpu                      = "512"   # 0.5 vCPU (was 1024 = 1vCPU)
-  memory                   = "1024"  # 1GB total (was 2048 = 2GB)
+  cpu                      = "2048"  # 2 vCPU
+  memory                   = "4096"  # 4GB total
   execution_role_arn       = aws_iam_role.ecs_execution_role.arn
   task_role_arn            = aws_iam_role.ecs_task_role.arn
 
@@ -644,7 +644,7 @@ resource "aws_ecs_task_definition" "quantedge_api" {
       image     = "${aws_ecr_repository.quantedge_api.repository_url}:latest"
       essential = true
       cpu       = 0      # No hard reservation within task (shares with redis)
-      memory    = 896    # Hard limit 896MB (1024 - 128 for Redis)
+      memory    = 3968    # Hard limit 3968MB (4096 - 128 for Redis)
 
       portMappings = [{
         containerPort = 8000
