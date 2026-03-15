@@ -26,7 +26,7 @@ from loguru import logger
 
 from auth.cognito_auth import get_current_user, get_optional_user, CognitoUser
 from core.config import settings
-# signal_tracker accessed via request.app.state.signal_tracker (set in main_v6.py lifespan)
+# signal_tracker accessed via body.app.state.signal_tracker (set in main_v6.py lifespan)
 
 from data.feeds.market_data import MarketDataFeed, FundamentalDataFeed
 from data.feeds.market_data import OptionsDataFeed, SentimentDataFeed
@@ -898,20 +898,20 @@ class QuantEdgeAnalyzerV6:
 
 @router.post("/analyze")
 async def analyze(
-    request: AnalyzeRequest,
+    body: AnalyzeRequest,
     background_tasks: BackgroundTasks,
     http_request: Request,
     current_user: Optional[CognitoUser] = Depends(get_optional_user),
 ):
     """
     Main v6 analysis endpoint.
-    Uses app.state.redis (pool created at startup) — no new connections per request.
+    Uses app.state.redis (pool created at startup) — no new connections per body.
     """
     # Use the shared Redis pool from app state — never create connections in handlers
     redis = http_request.app.state.redis
     analyzer: QuantEdgeAnalyzerV6 = http_request.app.state.analyzer
 
-    cache_key = f"analysis:v6:{request.ticker}"
+    cache_key = f"analysis:v6:{body.ticker}"
 
     # Check cache
     try:
@@ -923,11 +923,11 @@ async def analyze(
 
     # Run analysis (120-second timeout enforced inside run_full_analysis)
     data = await analyzer.run_full_analysis(
-        ticker=request.ticker,
-        include_options=request.include_options,
-        include_sentiment=request.include_sentiment,
-        mc_paths=request.mc_paths,
-        target_vol=request.target_vol,
+        ticker=body.ticker,
+        include_options=body.include_options,
+        include_sentiment=body.include_sentiment,
+        mc_paths=body.mc_paths,
+        target_vol=body.target_vol,
     )
 
     # Write prediction to PostgreSQL as background task (non-blocking)
@@ -937,7 +937,7 @@ async def analyze(
     _weights_used = data.get("ensemble_weights", data.get("weights_used", {}))
     background_tasks.add_task(
         http_request.app.state.signal_tracker.record_signal,
-        ticker=request.ticker,
+        ticker=body.ticker,
         analysis_result=data,
         regime=_regime,
         regime_confidence=_regime_confidence,
