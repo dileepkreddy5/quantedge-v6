@@ -898,7 +898,7 @@ class QuantEdgeAnalyzerV6:
 
 @router.post("/analyze")
 async def analyze(
-    body: AnalyzeRequest = Body(...),
+    body: AnalyzeRequest,
     background_tasks: BackgroundTasks,
     http_request: Request,
     current_user: Optional[CognitoUser] = Depends(get_optional_user),
