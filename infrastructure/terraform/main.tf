@@ -902,6 +902,26 @@ resource "aws_cloudfront_distribution" "main" {
     max_ttl     = 0
   }
 
+  # /auth/* → ECS backend (authentication endpoints)
+  ordered_cache_behavior {
+    path_pattern           = "/auth/*"
+    allowed_methods        = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
+    cached_methods         = ["GET", "HEAD"]
+    target_origin_id       = "ECSBackend"
+    viewer_protocol_policy = "redirect-to-https"
+    compress               = false
+
+    forwarded_values {
+      query_string = true
+      headers      = ["Authorization", "Content-Type"]
+      cookies { forward = "none" }
+    }
+
+    min_ttl     = 0
+    default_ttl = 0
+    max_ttl     = 0
+  }
+
   # /health → ECS backend
   ordered_cache_behavior {
     path_pattern           = "/health"
