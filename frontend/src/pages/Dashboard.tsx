@@ -97,10 +97,12 @@ export default function Dashboard() {
 
     try {
       const res = await api.post('/api/v6/analyze', {
-        ticker: symbol,
-        include_options: true,
-        include_sentiment: true,
-        mc_paths: 100000,
+        req: {
+          ticker: symbol,
+          include_options: true,
+          include_sentiment: true,
+          mc_paths: 100000,
+        }
       });
       setData(res.data.data);
       toast.success(`Analysis complete: ${symbol}`, { icon: '✅' });
