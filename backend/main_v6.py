@@ -171,28 +171,16 @@ async def lifespan(app: FastAPI):
         await conn.execute("CREATE TABLE IF NOT EXISTS regime_performance (regime VARCHAR(30) NOT NULL, period_start DATE NOT NULL, period_end DATE, mean_ic FLOAT, icir FLOAT, hit_rate FLOAT, n_signals INTEGER, PRIMARY KEY (regime, period_start))")
         await conn.execute("CREATE TABLE IF NOT EXISTS model_weights_history (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), recorded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), regime VARCHAR(30) NOT NULL, weights JSONB NOT NULL, ic_basis FLOAT, n_signals_used INTEGER)")
     logger.info("✅ Database tables verified/created")
-    # 3. FinBERT pipeline — used by analysis_v6.py _compute_sentiment
-    try:
-        from transformers import pipeline as hf_pipeline
-        app.state.finbert = hf_pipeline(
-            "text-classification",
-            model="ProsusAI/finbert",
-            device=-1,
-        )
-        logger.info("✅ FinBERT (ProsusAI/finbert) loaded")
-    except Exception as e:
-        logger.warning(f"⚠️  FinBERT load failed: {e}")
-        app.state.finbert = None
+    # 3. FinBERT — loaded lazily on first request to avoid startup timeout
+    app.state.finbert = None
+    logger.info("✅ FinBERT will load on first analysis request (lazy)")
 
     # 4. QuantEdgeAnalyzerV6 — all ML models loaded into memory now
     app.state.analyzer = QuantEdgeAnalyzerV6()
     logger.info("✅ QuantEdgeAnalyzerV6 initialized")
 
-    # 5. ML model files — train if missing before first request
-    try:
-        await _ensure_models_trained(app.state.analyzer)
-    except Exception as e:
-        logger.error(f"Model check error (non-fatal): {e}")
+    # 5. ML model files — trained lazily on first analysis request
+    logger.info("✅ ML models will train on first analysis request (lazy)")
 
     # 6. SignalTracker — uses shared DB pool
     app.state.signal_tracker = SignalTracker(db_pool=app.state.db)
