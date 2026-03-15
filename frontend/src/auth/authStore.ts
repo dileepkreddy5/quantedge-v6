@@ -38,6 +38,14 @@ export const useAuthStore = create<AuthState>()(
           set({ mfaSession: data.session, mfaUsername: username });
           return { requires_mfa: true, session: data.session };
         }
+        // MFA off — tokens returned directly, save them now
+        set({
+          accessToken:     data.access_token,
+          refreshToken:    data.refresh_token,
+          isAuthenticated: true,
+          mfaSession:      null,
+          mfaUsername:     null,
+        });
         return { requires_mfa: false };
       },
 
