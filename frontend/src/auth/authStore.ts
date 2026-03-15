@@ -7,11 +7,8 @@ import axios, { AxiosInstance } from 'axios';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-const API_BASE =
-  process.env.REACT_APP_API_URL ||
-  (process.env.NODE_ENV === 'production'
-    ? 'https://quant.dileepkapu.com'
-    : 'http://localhost:8000');
+const _raw = process.env.REACT_APP_API_URL || (process.env.NODE_ENV === 'production' ? 'quant.dileepkapu.com' : 'localhost:8000');
+const API_BASE = _raw.startsWith('http') ? _raw : (process.env.NODE_ENV === 'production' ? `https://${_raw}` : `http://${_raw}`);
 
 interface AuthState {
   accessToken: string | null;
