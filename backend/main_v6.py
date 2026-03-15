@@ -211,10 +211,8 @@ async def lifespan(app: FastAPI):
         logger.error(f"APScheduler error: {e}")
 
     # 8. Cache warmer
-    warmer_task = asyncio.create_task(
-        _cache_warmer(app.state.redis, app.state.analyzer)
-    )
-    app.state.warmer_task = warmer_task
+    # Cache warmer disabled — crashes task on first run
+    app.state.warmer_task = None
 
     logger.info("✅ QuantEdge v6.0 ready")
     yield
