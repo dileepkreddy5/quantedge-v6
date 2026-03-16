@@ -237,7 +237,6 @@ async def lifespan(app: FastAPI):
     logger.info("✅ Redis pool closed")
 
     if app.state.db:
-    if app.state.db:
         await app.state.db.close()
     logger.info("✅ PostgreSQL pool closed")
 
