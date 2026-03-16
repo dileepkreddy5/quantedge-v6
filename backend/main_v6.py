@@ -183,7 +183,7 @@ async def lifespan(app: FastAPI):
     logger.info("✅ ML models will train on first analysis request (lazy)")
 
     # 6. SignalTracker — uses shared DB pool
-    app.state.signal_tracker = SignalTracker(db_pool=app.state.db)
+    app.state.signal_tracker = SignalTracker(db_pool=app.state.db) if app.state.db else None
     logger.info("✅ SignalTracker initialized")
 
     # 7. APScheduler — OutcomeFillerJob daily at 18:00 ET
@@ -193,6 +193,8 @@ async def lifespan(app: FastAPI):
         from apscheduler.triggers.cron import CronTrigger
         import pytz
 
+        if not app.state.signal_tracker:
+            raise Exception("No DB — skipping scheduler")
         outcome_job = OutcomeFillerJob(signal_tracker=app.state.signal_tracker)
         scheduler = AsyncIOScheduler(timezone=pytz.utc)
         scheduler.add_job(
@@ -232,7 +234,8 @@ async def lifespan(app: FastAPI):
     await app.state.redis.aclose()
     logger.info("✅ Redis pool closed")
 
-    await app.state.db.close()
+    if app.state.db:
+        await app.state.db.close()
     logger.info("✅ PostgreSQL pool closed")
 
 
