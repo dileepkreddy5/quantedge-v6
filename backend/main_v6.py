@@ -137,41 +137,41 @@ async def lifespan(app: FastAPI):
     )
     logger.info(f"✅ Redis pool: {settings.REDIS_URL[:40]}...")
 
-    # 2. PostgreSQL connection pool
-    db_url = settings.DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
-    app.state.db = await asyncpg.create_pool(
-        db_url,
-        min_size=2,
-        max_size=10,
-        command_timeout=30,
-    )
-    logger.info("✅ PostgreSQL pool connected")
+    # 2. PostgreSQL — optional, graceful fallback if RDS is stopped
+    app.state.db = None
+    try:
+        db_url = settings.DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
+        app.state.db = await asyncpg.create_pool(
+            db_url, min_size=1, max_size=5, command_timeout=10,
+        )
+        logger.info("✅ PostgreSQL pool connected")
+        async with app.state.db.acquire() as conn:
+            await conn.execute('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"')
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS signals (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    ticker VARCHAR(10) NOT NULL,
+                    generated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    hmm_regime VARCHAR(30) NOT NULL,
+                    hmm_confidence FLOAT NOT NULL,
+                    garch_vol_forecast FLOAT, garch_regime VARCHAR(20), hmm_state_probs JSONB,
+                    kalman_trend FLOAT, kalman_uncertainty FLOAT,
+                    lstm_pred_5d FLOAT, lstm_pred_21d FLOAT, lstm_pred_63d FLOAT, lstm_uncertainty FLOAT,
+                    xgb_signal FLOAT, xgb_confidence FLOAT, xgb_shap_values JSONB,
+                    lgb_signal FLOAT, lgb_confidence FLOAT,
+                    ensemble_signal FLOAT NOT NULL, ensemble_direction VARCHAR(10), weights_used JSONB NOT NULL,
+                    cvar_95 FLOAT, vol_scale FLOAT, recommended_position FLOAT,
+                    ret_5d FLOAT, ret_21d FLOAT, ret_63d FLOAT, barrier_hit VARCHAR(20), ic_contribution FLOAT
+                )""")
+            await conn.execute("CREATE TABLE IF NOT EXISTS performance_daily (date DATE PRIMARY KEY, ic_21d FLOAT, icir_21d FLOAT, hit_rate FLOAT, n_signals INTEGER, model_ics JSONB)")
+            await conn.execute("CREATE TABLE IF NOT EXISTS regime_performance (regime VARCHAR(30) NOT NULL, period_start DATE NOT NULL, period_end DATE, mean_ic FLOAT, icir FLOAT, hit_rate FLOAT, n_signals INTEGER, PRIMARY KEY (regime, period_start))")
+            await conn.execute("CREATE TABLE IF NOT EXISTS model_weights_history (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), recorded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), regime VARCHAR(30) NOT NULL, weights JSONB NOT NULL, ic_basis FLOAT, n_signals_used INTEGER)")
+        logger.info("✅ Database tables verified/created")
+    except Exception as e:
+        logger.warning(f"PostgreSQL unavailable (RDS stopped) — running without DB: {e}")
+        app.state.db = None
 
-
-    # 2b. Auto-create tables if they do not exist
-    async with app.state.db.acquire() as conn:
-        await conn.execute("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\"")
-        await conn.execute("""
-            CREATE TABLE IF NOT EXISTS signals (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                ticker VARCHAR(10) NOT NULL,
-                generated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                hmm_regime VARCHAR(30) NOT NULL,
-                hmm_confidence FLOAT NOT NULL,
-                garch_vol_forecast FLOAT, garch_regime VARCHAR(20), hmm_state_probs JSONB,
-                kalman_trend FLOAT, kalman_uncertainty FLOAT,
-                lstm_pred_5d FLOAT, lstm_pred_21d FLOAT, lstm_pred_63d FLOAT, lstm_uncertainty FLOAT,
-                xgb_signal FLOAT, xgb_confidence FLOAT, xgb_shap_values JSONB,
-                lgb_signal FLOAT, lgb_confidence FLOAT,
-                ensemble_signal FLOAT NOT NULL, ensemble_direction VARCHAR(10), weights_used JSONB NOT NULL,
-                cvar_95 FLOAT, vol_scale FLOAT, recommended_position FLOAT,
-                ret_5d FLOAT, ret_21d FLOAT, ret_63d FLOAT, barrier_hit VARCHAR(20), ic_contribution FLOAT
-            )""")
-        await conn.execute("CREATE TABLE IF NOT EXISTS performance_daily (date DATE PRIMARY KEY, ic_21d FLOAT, icir_21d FLOAT, hit_rate FLOAT, n_signals INTEGER, model_ics JSONB)")
-        await conn.execute("CREATE TABLE IF NOT EXISTS regime_performance (regime VARCHAR(30) NOT NULL, period_start DATE NOT NULL, period_end DATE, mean_ic FLOAT, icir FLOAT, hit_rate FLOAT, n_signals INTEGER, PRIMARY KEY (regime, period_start))")
-        await conn.execute("CREATE TABLE IF NOT EXISTS model_weights_history (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), recorded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), regime VARCHAR(30) NOT NULL, weights JSONB NOT NULL, ic_basis FLOAT, n_signals_used INTEGER)")
-    logger.info("✅ Database tables verified/created")
-    # 3. FinBERT — loaded lazily on first request to avoid startup timeout
+        # 3. FinBERT — loaded lazily on first request to avoid startup timeout
     app.state.finbert = None
     logger.info("✅ FinBERT will load on first analysis request (lazy)")
 
@@ -195,6 +195,8 @@ async def lifespan(app: FastAPI):
 
         if not app.state.signal_tracker:
             raise Exception("No DB — skipping scheduler")
+        if not app.state.signal_tracker:
+            raise Exception("No DB")
         outcome_job = OutcomeFillerJob(signal_tracker=app.state.signal_tracker)
         scheduler = AsyncIOScheduler(timezone=pytz.utc)
         scheduler.add_job(
@@ -234,6 +236,7 @@ async def lifespan(app: FastAPI):
     await app.state.redis.aclose()
     logger.info("✅ Redis pool closed")
 
+    if app.state.db:
     if app.state.db:
         await app.state.db.close()
     logger.info("✅ PostgreSQL pool closed")
