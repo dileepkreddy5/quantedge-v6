@@ -1063,11 +1063,8 @@ resource "aws_acm_certificate_validation" "main" {
 resource "aws_cognito_user_pool" "quantedge" {
   name = "quantedge-users"
 
-  # Require MFA — TOTP via Google Authenticator
-  mfa_configuration = "ON"
-  software_token_mfa_configuration {
-    enabled = true
-  }
+  # MFA disabled — personal site, no MFA needed
+  mfa_configuration = "OFF"
 
   password_policy {
     minimum_length                   = 12
