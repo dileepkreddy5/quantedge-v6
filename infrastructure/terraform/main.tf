@@ -291,58 +291,15 @@ resource "aws_security_group" "rds" {
 #  without going over the internet. Saves on data transfer costs too.
 ###─────────────────────────────────────────────────────────────────────────###
 
-# ECR API endpoint (for docker pull)
-resource "aws_vpc_endpoint" "ecr_api" {
-  vpc_id              = aws_vpc.main.id
-  service_name        = "com.amazonaws.${var.aws_region}.ecr.api"
-  vpc_endpoint_type   = "Interface"
-  subnet_ids          = aws_subnet.public[*].id
-  security_group_ids  = [aws_security_group.ecs.id]
-  private_dns_enabled = true
-  tags                = { Name = "${local.name_prefix}-ecr-api-endpoint" }
-}
 
-# ECR Docker endpoint (for image layers)
-resource "aws_vpc_endpoint" "ecr_dkr" {
-  vpc_id              = aws_vpc.main.id
-  service_name        = "com.amazonaws.${var.aws_region}.ecr.dkr"
-  vpc_endpoint_type   = "Interface"
-  subnet_ids          = aws_subnet.public[*].id
-  security_group_ids  = [aws_security_group.ecs.id]
-  private_dns_enabled = true
-  tags                = { Name = "${local.name_prefix}-ecr-dkr-endpoint" }
-}
 
-# Secrets Manager endpoint
-resource "aws_vpc_endpoint" "secretsmanager" {
-  vpc_id              = aws_vpc.main.id
-  service_name        = "com.amazonaws.${var.aws_region}.secretsmanager"
-  vpc_endpoint_type   = "Interface"
-  subnet_ids          = aws_subnet.public[*].id
-  security_group_ids  = [aws_security_group.ecs.id]
-  private_dns_enabled = true
-  tags                = { Name = "${local.name_prefix}-secretsmanager-endpoint" }
-}
 
-# CloudWatch Logs endpoint
-resource "aws_vpc_endpoint" "logs" {
-  vpc_id              = aws_vpc.main.id
-  service_name        = "com.amazonaws.${var.aws_region}.logs"
-  vpc_endpoint_type   = "Interface"
-  subnet_ids          = aws_subnet.public[*].id
-  security_group_ids  = [aws_security_group.ecs.id]
-  private_dns_enabled = true
-  tags                = { Name = "${local.name_prefix}-logs-endpoint" }
-}
 
-# S3 Gateway endpoint (for ECR image layers stored in S3)
-resource "aws_vpc_endpoint" "s3" {
-  vpc_id            = aws_vpc.main.id
-  service_name      = "com.amazonaws.${var.aws_region}.s3"
-  vpc_endpoint_type = "Gateway"
-  route_table_ids   = [aws_route_table.public.id]
-  tags              = { Name = "${local.name_prefix}-s3-endpoint" }
-}
+
+
+
+
+
 
 ###─────────────────────────────────────────────────────────────────────────###
 #  ECR — Docker image repository
