@@ -935,14 +935,15 @@ async def analyze(
     _regime = data.get("current_regime") or data.get("hmm_regime", "Unknown")
     _regime_confidence = float(data.get("regime_confidence", 0.0) or 0.0)
     _weights_used = data.get("ensemble_weights", data.get("weights_used", {}))
-    background_tasks.add_task(
-        http_request.app.state.signal_tracker.record_signal,
-        ticker=req.ticker,
-        analysis_result=data,
-        regime=_regime,
-        regime_confidence=_regime_confidence,
-        weights_used=_weights_used,
-    )
+    if http_request.app.state.signal_tracker:
+        background_tasks.add_task(
+            http_request.app.state.signal_tracker.record_signal,
+            ticker=req.ticker,
+            analysis_result=data,
+            regime=_regime,
+            regime_confidence=_regime_confidence,
+            weights_used=_weights_used,
+        )
 
     # Write to cache as background task
     async def _cache():
