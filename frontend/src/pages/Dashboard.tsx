@@ -277,7 +277,7 @@ export default function Dashboard() {
               QUANTEDGE
             </div>
             <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 11, color: '#4a3428', letterSpacing: 3, marginBottom: 40 }}>
-              INSTITUTIONAL · QUANTITATIVE · ANALYTICS · v5.0
+              INSTITUTIONAL · QUANTITATIVE · ANALYTICS · v6.0
             </div>
             <div style={{ fontFamily: "'Outfit',sans-serif", color: '#9d8b7a', fontSize: 14, marginBottom: 40 }}>
               Enter a ticker above and run institutional-grade analysis
