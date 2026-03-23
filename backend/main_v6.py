@@ -233,7 +233,7 @@ async def lifespan(app: FastAPI):
                     data = await app.state.analyzer.run_full_analysis(
                         ticker=ticker,
                         include_options=False,
-                        include_sentiment=False,
+                        include_sentiment=True,
                         mc_paths=1000,
                     )
                     await app.state.redis.setex(
