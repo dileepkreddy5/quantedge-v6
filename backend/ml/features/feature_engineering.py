@@ -859,7 +859,17 @@ class FeaturePipeline:
         if n < min_window + 10:
             raise ValueError(f"Need at least {min_window + 10} rows, got {n}")
         rows, dates, feature_names = [], [], None
-        for i in range(min_window, n, step):
+        # Cap at 300 samples max for speed — enough for robust training
+        # With step=5, 1254 days gives 750 potential samples
+        # We take every Nth to get ~250 evenly spaced samples
+        indices = list(range(min_window, n, step))
+        if len(indices) > 300:
+            # Subsample evenly to 300 points
+            import math
+            every_n = math.ceil(len(indices) / 300)
+            indices = indices[::every_n]
+
+        for i in indices:
             window_df = df.iloc[max(0, i - lookback_days):i].copy()
             if len(window_df) < 63:
                 continue

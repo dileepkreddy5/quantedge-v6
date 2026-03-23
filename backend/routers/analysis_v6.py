@@ -120,7 +120,7 @@ class QuantEdgeAnalyzerV6:
         # Hard timeout: prevents hung external calls from blocking the server forever
         return await asyncio.wait_for(
             self._run_pipeline(ticker, include_options, include_sentiment, mc_paths, target_vol),
-            timeout=120.0,
+            timeout=180.0,
         )
 
     async def _run_pipeline(
@@ -574,8 +574,8 @@ class QuantEdgeAnalyzerV6:
                 X_hist, feature_names, dates = self.feature_pipeline.build_historical_feature_matrix(
                     df=price_data,
                     fundamentals=fundamentals or {},
-                    lookback_days=504,
-                    step=1,
+                    lookback_days=126,
+                    step=5,
                 )
             except Exception as e:
                 logger.warning(f"build_historical_feature_matrix failed: {e}")
