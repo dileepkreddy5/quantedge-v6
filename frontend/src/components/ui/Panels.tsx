@@ -758,14 +758,11 @@ export function FundamentalsPanel({ data }: { data: any }) {
         <SectionTitle>◈ DUPONT DECOMPOSITION — ROE ATTRIBUTION</SectionTitle>
         <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:0,marginBottom:16}}>
           {[
-            ["NET MARGIN", fp(data.net_margin), "Profitability
-(Net Income / Revenue)", gc(data.net_margin)],
+            ["NET MARGIN", fp(data.net_margin), "Profitability / Net Income / Revenue", gc(data.net_margin)],
             ["×", "", "", "#4a3428"],
-            ["ASSET TURNOVER", data.revenue_ttm&&data.total_assets?f(Number(data.revenue_ttm)/Number(data.total_assets),3):"—", "Efficiency
-(Revenue / Assets)", "#d4c4b0"],
+            ["ASSET TURNOVER", data.revenue_ttm&&data.total_assets?f(Number(data.revenue_ttm)/Number(data.total_assets),3):"—", "Efficiency / Revenue / Assets", "#d4c4b0"],
             ["×", "", "", "#4a3428"],
-            ["LEVERAGE", data.total_assets&&data.total_equity?f(Number(data.total_assets)/Number(data.total_equity),2)+"×":"—", "Financial Leverage
-(Assets / Equity)", "#e8b84b"],
+            ["LEVERAGE", data.total_assets&&data.total_equity?f(Number(data.total_assets)/Number(data.total_equity),2)+"×":"—", "Financial Leverage / Assets / Equity", "#e8b84b"],
           ].map(([l,v,desc,c],i)=>(
             <div key={i} style={{textAlign:"center",padding:"12px 8px",borderRight:i<4?"1px solid rgba(212,149,108,0.08)":"none",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column"}}>
               {l!=="×" ? <>
