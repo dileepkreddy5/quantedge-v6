@@ -1043,15 +1043,35 @@ class QuantEdgeAnalyzerV6:
 
 @router.post("/analyze")
 async def analyze(
-    req: AnalyzeRequest,
     background_tasks: BackgroundTasks,
     http_request: Request,
+    req: AnalyzeRequest = None,
     current_user: Optional[CognitoUser] = Depends(get_optional_user),
 ):
     """
     Main v6 analysis endpoint.
+    Accepts both flat body {ticker,...} and nested {req:{ticker,...}} for compatibility.
     Uses app.state.redis (pool created at startup) — no new connections per body.
     """
+    # Handle both body shapes:
+    # Shape A (frontend): { "ticker": "MSFT", "include_options": true, ... }
+    # Shape B (legacy):   { "req": { "ticker": "MSFT", ... } }
+    if req is None:
+        try:
+            body = await http_request.json()
+            # Shape A — flat body
+            if "ticker" in body:
+                req = AnalyzeRequest(**body)
+            # Shape B — nested under "req"
+            elif "req" in body:
+                req = AnalyzeRequest(**body["req"])
+            else:
+                raise HTTPException(status_code=422, detail="Request must contain 'ticker' field")
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=422, detail=f"Invalid request body: {e}")
+
     # Use the shared Redis pool from app state — never create connections in handlers
     redis = http_request.app.state.redis
     analyzer: QuantEdgeAnalyzerV6 = http_request.app.state.analyzer
@@ -1076,7 +1096,6 @@ async def analyze(
     )
 
     # Write prediction to PostgreSQL as background task (non-blocking)
-    # Uses app.state.signal_tracker (SignalTracker initialized in main_v6.py lifespan)
     _regime = data.get("current_regime") or data.get("hmm_regime", "Unknown")
     _regime_confidence = float(data.get("regime_confidence", 0.0) or 0.0)
     _weights_used = data.get("ensemble_weights", data.get("weights_used", {}))
