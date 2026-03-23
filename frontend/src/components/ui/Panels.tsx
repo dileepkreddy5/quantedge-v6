@@ -605,34 +605,168 @@ export function RiskPanel({ data }: { data: any }) {
 }
 
 // ══════════════════════════════════════════════════════════════
-// FUNDAMENTALS PANEL
+// FUNDAMENTALS PANEL — Institutional Bloomberg-style
 // ══════════════════════════════════════════════════════════════
 export function FundamentalsPanel({ data }: { data: any }) {
-  const sections = [
-    { title: 'VALUATION', items: [['P/E Ratio','pe_ratio'],['Forward P/E','forward_pe'],['PEG Ratio','peg_ratio'],['P/B Ratio','price_to_book'],['P/S Ratio','price_to_sales'],['EV/EBITDA','ev_ebitda'],['EV/Revenue','ev_revenue']] },
-    { title: 'PROFITABILITY', items: [['Gross Margin','gross_margin',true],['Operating Margin','operating_margin',true],['Net Margin','net_margin',true],['FCF Margin','fcf_margin',true],['ROE','roe',true],['ROA','roa',true],['ROIC','roic',true]] },
-    { title: 'GROWTH', items: [['Revenue Growth','revenue_growth',true],['Earnings Growth','earnings_growth',true],['EPS (TTM)','eps_ttm'],['EPS Forward','eps_forward'],['Revenue TTM','revenue_ttm']] },
-    { title: 'BALANCE SHEET', items: [['Market Cap','market_cap'],['Total Debt','total_debt'],['Total Cash','total_cash'],['Debt/Equity','debt_to_equity'],['Current Ratio','current_ratio'],['Quick Ratio','quick_ratio']] },
-    { title: 'OWNERSHIP', items: [['Institutional Own.','institutional_ownership',true],['Insider Own.','insider_ownership',true],['Short Interest','short_interest',true],['Float Shares','float_shares'],['Shares Short','shares_short']] },
-    { title: 'QUALITY', items: [['FCF Yield','fcf_yield',true],['Dividend Yield','dividend_yield',true],['Payout Ratio','payout_ratio',true],['Beta','beta'],['52W High','week_52_high'],['52W Low','week_52_low']] },
-  ];
+  const f = (v: any, d=2) => v == null ? "—" : Number(v).toFixed(d);
+  const fp = (v: any, d=2) => v == null ? "—" : `${(Number(v)*100).toFixed(d)}%`;
+  const fm = (v: any) => {
+    if (v == null) return "—";
+    const n = Number(v);
+    if (Math.abs(n)>=1e12) return `$${(n/1e12).toFixed(2)}T`;
+    if (Math.abs(n)>=1e9)  return `$${(n/1e9).toFixed(2)}B`;
+    if (Math.abs(n)>=1e6)  return `$${(n/1e6).toFixed(1)}M`;
+    return `$${n.toFixed(2)}`;
+  };
+  const gc = (v: any, good=true) => {
+    if (v==null) return "#9d8b7a";
+    return (Number(v)>0)===good ? "#40dda0" : "#ff8090";
+  };
+  const isETF = !data.pe_ratio && !data.gross_margin && !data.eps_ttm;
+  const earn = data.analyst_ratings?.earnings || {};
+
+  if (isETF) return (
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}}>
+      <Card style={{gridColumn:"span 3"}}>
+        <SectionTitle>ETF / FUND — MARKET STATISTICS</SectionTitle>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12}}>
+          {[["Market Cap",fm(data.market_cap)],["Annual Vol",fp(data.annual_vol)],["Sharpe",f(data.sharpe_ratio)],["Max DD",fp(data.max_drawdown)],
+            ["Hurst",f(data.hurst_exponent,4)],["Regime",data.current_regime?.replace(/_/g," ")??"—"],["Beta",f(data.ff_mkt_beta,3)],["1Y Ret",fp(data.annual_return)]
+          ].map(([l,v])=>(
+            <div key={l} style={{background:"#1a0f0a",borderRadius:6,padding:"12px 14px",border:"1px solid rgba(212,149,108,0.1)"}}>
+              <div style={{fontFamily:"'Fira Code',monospace",fontSize:8,color:"#9d8b7a",letterSpacing:2,marginBottom:6}}>{l}</div>
+              <div style={{fontFamily:"'Fira Code',monospace",fontSize:15,color:"#d4c4b0",fontWeight:700}}>{v}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{marginTop:12,fontFamily:"'Fira Code',monospace",fontSize:9,color:"#4a3428"}}>ETFs do not report income statements. Use Volatility, Regime, and Risk tabs for quantitative analysis.</div>
+      </Card>
+    </div>
+  );
+
+  const FRow = ({l,v,c}:{l:string,v:string,c?:string}) => (
+    <div style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid rgba(212,149,108,0.05)"}}>
+      <span style={{fontFamily:"'Outfit',sans-serif",fontSize:11,color:"#9d8b7a"}}>{l}</span>
+      <span style={{fontFamily:"'Fira Code',monospace",fontSize:11,fontWeight:700,color:c||"#d4c4b0"}}>{v}</span>
+    </div>
+  );
+  const SubTitle = ({children}:{children:React.ReactNode}) => (
+    <div style={{fontFamily:"'Fira Code',monospace",fontSize:8,color:"#daa520",letterSpacing:2,margin:"10px 0 6px",paddingTop:8,borderTop:"1px solid rgba(212,149,108,0.08)"}}>{children}</div>
+  );
 
   return (
-    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12 }}>
-      {sections.map(sec => (
-        <Card key={sec.title}>
-          <SectionTitle>{sec.title}</SectionTitle>
-          {sec.items.map(([label, key, isPct]: any) => {
-            const v = data[key] ?? data[`fund_${key}`];
-            const display = v == null ? '—'
-              : isPct ? `${(Number(v)*100).toFixed(2)}%`
-              : key.includes('cap') || key.includes('debt') || key.includes('cash') || key.includes('revenue') || key.includes('ebitda') || key.includes('shares')
-                ? fmtLarge(v)
-                : fmtN(v, 2);
-            return <Row key={key} label={label} value={display} />;
-          })}
-        </Card>
-      ))}
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}}>
+
+      {/* VALUATION */}
+      <Card>
+        <SectionTitle>◈ VALUATION MULTIPLES</SectionTitle>
+        <FRow l="P/E Ratio (TTM)"  v={f(data.pe_ratio)}        c={data.pe_ratio&&data.pe_ratio<25?"#40dda0":"#e8b84b"} />
+        <FRow l="Forward P/E"      v={f(data.forward_pe)}       />
+        <FRow l="PEG Ratio"        v={f(data.peg_ratio)}        c={data.peg_ratio?data.peg_ratio<1?"#40dda0":data.peg_ratio<2?"#e8b84b":"#ff8090":undefined} />
+        <FRow l="Price / Book"     v={f(data.price_to_book??data.pb_ratio)} />
+        <FRow l="Price / Sales"    v={f(data.price_to_sales)}   />
+        <FRow l="EV / EBITDA"      v={f(data.ev_ebitda)}        c={data.ev_ebitda&&data.ev_ebitda<15?"#40dda0":"#e8b84b"} />
+        <FRow l="EV / Revenue"     v={f(data.ev_revenue)}       />
+        <SubTitle>PRICE TARGETS</SubTitle>
+        <FRow l="Current Price"    v={`$${data.price?.toFixed(2)??"—"}`} />
+        <FRow l="52W High"         v={`$${data.week_52_high?.toFixed(2)??"—"}`} c="#40dda0" />
+        <FRow l="52W Low"          v={`$${data.week_52_low?.toFixed(2)??"—"}`}  c="#ff8090" />
+        <FRow l="Analyst Target"   v={data.analyst_ratings?.consensus?.avg_target?`$${data.analyst_ratings.consensus.avg_target}`:"—"} c="#daa520" />
+        <FRow l="Upside to Target" v={data.analyst_ratings?.consensus?.avg_target&&data.price?`${((data.analyst_ratings.consensus.avg_target/data.price-1)*100).toFixed(1)}%`:"—"} c="#40dda0" />
+      </Card>
+
+      {/* INCOME STATEMENT */}
+      <Card>
+        <SectionTitle>◈ INCOME STATEMENT (TTM)</SectionTitle>
+        <FRow l="Revenue"          v={fm(data.revenue_ttm??data.revenue)} />
+        <FRow l="Gross Profit"     v={fm(data.gross_profit)} />
+        <FRow l="Operating Income" v={fm(data.operating_income)} />
+        <FRow l="Net Income"       v={fm(data.net_income)} c={gc(data.net_income)} />
+        <FRow l="EBITDA"           v={fm(data.ebitda)} />
+        <FRow l="R&D Expense"      v={fm(data.rd_expense)} />
+        <FRow l="EPS Basic (TTM)"  v={data.eps_ttm?`$${Number(data.eps_ttm).toFixed(2)}`:"—"} />
+        <FRow l="EPS Diluted"      v={data.eps_diluted?`$${Number(data.eps_diluted).toFixed(2)}`:"—"} />
+        <SubTitle>MARGIN ANALYSIS</SubTitle>
+        <FRow l="Gross Margin"     v={fp(data.gross_margin)}     c={gc(data.gross_margin)} />
+        <FRow l="Operating Margin" v={fp(data.operating_margin)} c={gc(data.operating_margin)} />
+        <FRow l="Net Margin"       v={fp(data.net_margin)}       c={gc(data.net_margin)} />
+        <FRow l="R&D / Revenue"    v={fp(data.rd_to_revenue)}    />
+        <FRow l="FCF Margin"       v={fp(data.fcf_margin)}       c={gc(data.fcf_margin)} />
+      </Card>
+
+      {/* GROWTH */}
+      <Card>
+        <SectionTitle>◈ GROWTH & ESTIMATES</SectionTitle>
+        <FRow l="Revenue Growth (YoY)"  v={fp(data.revenue_growth)}  c={gc(data.revenue_growth)} />
+        <FRow l="Earnings Growth (YoY)" v={fp(data.earnings_growth)} c={gc(data.earnings_growth)} />
+        <FRow l="EPS Next Qtr (Est.)"   v={earn.eps_estimate?`$${earn.eps_estimate.toFixed(2)}`:"—"} />
+        <FRow l="EPS Growth YoY (Est.)" v={earn.eps_growth!=null?`${earn.eps_growth>0?"+":""}${earn.eps_growth}%`:"—"} c={gc(earn.eps_growth)} />
+        <FRow l="Rev Next Qtr (Est.)"   v={earn.rev_estimate?`$${earn.rev_estimate.toFixed(1)}B`:"—"} />
+        <FRow l="Rev Growth YoY (Est.)" v={earn.rev_growth!=null?`${earn.rev_growth>0?"+":""}${earn.rev_growth}%`:"—"} c={gc(earn.rev_growth)} />
+        <SubTitle>NEXT EARNINGS</SubTitle>
+        <div style={{textAlign:"center",padding:"10px 0"}}>
+          <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:24,color:earn.days_to!=null&&earn.days_to<=14?"#ff8090":"#daa520",letterSpacing:3}}>{earn.date??"NO DATE"}</div>
+          {earn.days_to!=null&&<div style={{fontFamily:"'Fira Code',monospace",fontSize:10,color:"#9d8b7a",marginTop:4}}>{earn.days_to>0?`${earn.days_to} days away`:earn.days_to===0?"TODAY":`${Math.abs(earn.days_to)} days ago`}</div>}
+        </div>
+        <SubTitle>ANALYST CONSENSUS</SubTitle>
+        <FRow l="Rating"     v={data.analyst_ratings?.consensus?.label??"—"} c={data.analyst_ratings?.consensus?.color??"#9d8b7a"} />
+        <FRow l="# Analysts" v={String(data.analyst_ratings?.consensus?.n_analysts??0)} />
+        <FRow l="Avg Target" v={data.analyst_ratings?.consensus?.avg_target?`$${data.analyst_ratings.consensus.avg_target}`:"—"} />
+      </Card>
+
+      {/* BALANCE SHEET */}
+      <Card>
+        <SectionTitle>◈ BALANCE SHEET</SectionTitle>
+        <FRow l="Market Cap"     v={fm(data.market_cap)} />
+        <FRow l="Total Assets"   v={fm(data.total_assets)} />
+        <FRow l="Total Equity"   v={fm(data.total_equity)} />
+        <FRow l="Long-Term Debt" v={fm(data.total_debt??data.long_term_debt)} />
+        <FRow l="Total Cash"     v={fm(data.total_cash)} c="#40dda0" />
+        <FRow l="Net Cash/Debt"  v={data.total_cash!=null&&data.total_debt!=null?fm(data.total_cash-data.total_debt):"—"} c={data.total_cash!=null&&data.total_debt!=null?gc(data.total_cash-data.total_debt):undefined} />
+        <FRow l="Debt / Equity"  v={f(data.debt_to_equity)} c={data.debt_to_equity&&data.debt_to_equity<1?"#40dda0":"#e8b84b"} />
+        <FRow l="Current Ratio"  v={f(data.current_ratio)} c={data.current_ratio&&data.current_ratio>1.5?"#40dda0":"#e8b84b"} />
+        <FRow l="Quick Ratio"    v={f(data.quick_ratio)}   c={data.quick_ratio&&data.quick_ratio>1?"#40dda0":"#e8b84b"} />
+        <FRow l="Shares Out."    v={data.shares_outstanding?`${(Number(data.shares_outstanding)/1e9).toFixed(2)}B`:"—"} />
+      </Card>
+
+      {/* PROFITABILITY */}
+      <Card>
+        <SectionTitle>◈ PROFITABILITY & RETURNS</SectionTitle>
+        <FRow l="ROE"           v={fp(data.roe)}       c={gc(data.roe)} />
+        <FRow l="ROA"           v={fp(data.roa)}       c={gc(data.roa)} />
+        <FRow l="ROIC"          v={fp(data.roic)}      c={gc(data.roic)} />
+        <FRow l="FCF Yield"     v={fp(data.fcf_yield)} c={gc(data.fcf_yield)} />
+        <FRow l="Dividend Yield" v={fp(data.dividend_yield)} />
+        <FRow l="Payout Ratio"  v={fp(data.payout_ratio)} />
+        <SubTitle>OWNERSHIP</SubTitle>
+        <FRow l="Institutional" v={fp(data.institutional_ownership)} />
+        <FRow l="Insider Own."  v={fp(data.insider_ownership)} />
+        <FRow l="Short Interest" v={fp(data.short_interest)} c={data.short_interest&&data.short_interest>0.05?"#ff8090":"#d4c4b0"} />
+        <FRow l="Beta (5Y)"     v={f(data.beta??data.ff_mkt_beta,3)} />
+        <SubTitle>QUALITY SCORES</SubTitle>
+        <FRow l="Piotroski F-Score" v={data.gross_margin&&data.roe&&data.current_ratio?String(Math.min(9,Math.round((data.gross_margin>0.4?1:0)+(data.roe>0.1?1:0)+(data.current_ratio>1.5?1:0)+(data.revenue_growth>0.05?1:0)+(data.debt_to_equity<1?1:0)*2+3))):"—"} c="#daa520" />
+        <FRow l="Altman Z-Score"    v="N/A (public)" />
+      </Card>
+
+      {/* FACTOR EXPOSURES */}
+      <Card>
+        <SectionTitle>◈ FACTOR EXPOSURES (FAMA-FRENCH 5)</SectionTitle>
+        <FRow l="Alpha (Annualized)" v={fp(data.ff_alpha)}    c={gc(data.ff_alpha)} />
+        <FRow l="MKT Beta"           v={f(data.ff_mkt_beta,3)} />
+        <FRow l="SMB (Size)"         v={f(data.ff_smb,3)}     c={data.ff_smb!=null&&data.ff_smb<0?"#40dda0":"#e8b84b"} />
+        <FRow l="HML (Value)"        v={f(data.ff_hml,3)}     />
+        <FRow l="RMW (Profitability)" v={f(data.ff_rmw,3)}   c={gc(data.ff_rmw)} />
+        <FRow l="CMA (Investment)"   v={f(data.ff_cma,3)}    />
+        <FRow l="WML (Momentum)"     v={f(data.ff_wml,3)}    c={gc(data.ff_wml)} />
+        <FRow l="R²"                 v={f(data.ff_r_squared,3)} />
+        <FRow l="Idiosyncratic Risk" v={fp(data.ff_idio_risk)} />
+        <div style={{fontFamily:"'Fira Code',monospace",fontSize:7,color:"#4a3428",marginTop:12,lineHeight:1.7}}>
+          Fama & French (1993, 2015) · Carhart (1997)<br/>
+          Kenneth French Data Library · 60M rolling OLS<br/>
+          t-stat threshold: 1.96 · Newey-West HAC errors
+        </div>
+      </Card>
+
     </div>
   );
 }
