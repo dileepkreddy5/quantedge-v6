@@ -18,6 +18,7 @@ Mathematical References:
 """
 
 import numpy as np
+from loguru import logger
 import pandas as pd
 from scipy import stats
 from scipy.signal import butter, filtfilt
@@ -836,6 +837,48 @@ class FeaturePipeline:
                     if v is not None}
 
         return features
+
+
+    def build_historical_feature_matrix(
+        self,
+        df: pd.DataFrame,
+        fundamentals: Dict,
+        lookback_days: int = 504,
+        step: int = 1,
+    ):
+        import numpy as np
+        df = df.copy()
+        df.columns = [c.lower() for c in df.columns]
+        for col in ["high", "low", "volume"]:
+            if col not in df.columns:
+                df[col] = df["close"] if col != "volume" else 1_000_000
+        if "open" not in df.columns:
+            df["open"] = df["close"].shift(1).fillna(df["close"])
+        n = len(df)
+        min_window = max(lookback_days, 63)
+        if n < min_window + 10:
+            raise ValueError(f"Need at least {min_window + 10} rows, got {n}")
+        rows, dates, feature_names = [], [], None
+        for i in range(min_window, n, step):
+            window_df = df.iloc[max(0, i - lookback_days):i].copy()
+            if len(window_df) < 63:
+                continue
+            try:
+                feat_dict = self.build_feature_matrix(window_df, fundamentals)
+                if feature_names is None:
+                    feature_names = sorted(feat_dict.keys())
+                row = [float(feat_dict.get(k, 0.0)) for k in feature_names]
+                row = [v if np.isfinite(v) else 0.0 for v in row]
+                rows.append(row)
+                dates.append(df.index[i])
+            except Exception:
+                continue
+        if not rows:
+            raise ValueError("No valid feature rows could be computed")
+        X_hist = np.array(rows, dtype=np.float64)
+        dates_idx = pd.DatetimeIndex(dates)
+        logger.info(f"build_historical_feature_matrix: {X_hist.shape[0]} samples, {X_hist.shape[1]} features")
+        return X_hist, feature_names, dates_idx
 
     def normalize_features(self, features: Dict[str, float]) -> np.ndarray:
         """
