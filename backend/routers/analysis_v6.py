@@ -586,8 +586,8 @@ class QuantEdgeAnalyzerV6:
                 X_hist, feature_names, dates = self.feature_pipeline.build_historical_feature_matrix(
                     df=price_data,
                     fundamentals=fundamentals or {},
-                    lookback_days=126,
-                    step=5,
+                    lookback_days=63,
+                    step=10,
                 )
             except Exception as e:
                 logger.warning(f"build_historical_feature_matrix failed: {e}")
