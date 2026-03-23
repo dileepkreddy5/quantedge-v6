@@ -54,7 +54,7 @@ export default function Dashboard() {
       const timer = setTimeout(() => runAnalysis(sym), 500);
       return () => clearTimeout(timer);
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []); // eslint-disable-line
   const [activeTab, setActiveTab] = useState('overview');
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
