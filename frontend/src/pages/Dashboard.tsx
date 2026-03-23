@@ -113,6 +113,11 @@ export default function Dashboard() {
       setData(res.data.data);
       toast.success(`Analysis complete: ${symbol}`, { icon: '✅' });
     } catch (err: any) {
+      const status = err?.response?.status;
+      if (status === 401 || status === 403) {
+        navigate('/login');
+        return;
+      }
       const msg = err?.response?.data?.detail || 'Analysis failed';
       toast.error(msg);
     } finally {
@@ -289,7 +294,7 @@ export default function Dashboard() {
             </div>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
               {QUICK_TICKERS.map(t => (
-                <button key={t} onClick={() => runAnalysis(t)}
+                <button key={t} onClick={() => { if (user) runAnalysis(t); else navigate(`/login?redirect=${t}`); }}
                   style={{
                     background: '#2d1e18', border: '1px solid rgba(212,149,108,0.2)',
                     color: '#d4c4b0', fontFamily: "'Fira Code',monospace",
