@@ -1121,12 +1121,21 @@ async def analyze(
             weights_used=_weights_used,
         )
 
+    # Sanitize inf/nan before caching — GARCH long-run vol can produce inf when persistence≈1
+    import math
+    def _sanitize(obj):
+        if isinstance(obj, dict):  return {k: _sanitize(v) for k, v in obj.items()}
+        if isinstance(obj, list):  return [_sanitize(v) for v in obj]
+        if isinstance(obj, float) and (math.isnan(obj) or math.isinf(obj)): return None
+        return obj
+    data = _sanitize(data)
+
     # Write to cache as background task
     async def _cache():
         try:
-            await redis.setex(cache_key, 300, json.dumps(data, default=str))
-        except Exception:
-            pass
+            await redis.setex(cache_key, 3600, json.dumps(data, default=str))
+        except Exception as e:
+            logger.warning(f"Cache write error: {e}")
 
     background_tasks.add_task(_cache)
 
