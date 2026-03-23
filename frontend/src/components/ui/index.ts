@@ -11,3 +11,5 @@ export { FundamentalsPanel } from './Panels';
 export { ScenarioPanel } from './Panels';
 export { Watchlist } from './Panels';
 export { WallStreetPanel } from './Panels';
+export { PortfolioPanel } from './Panels';
+export { PerformancePanel } from './Panels';
