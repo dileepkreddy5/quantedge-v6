@@ -622,7 +622,12 @@ export function FundamentalsPanel({ data }: { data: any }) {
     if (v==null) return "#9d8b7a";
     return (Number(v)>0)===good ? "#40dda0" : "#ff8090";
   };
-  const isETF = !data.pe_ratio && !data.gross_margin && !data.eps_ttm;
+  // ETF detection: SPY/QQQ/IWM etc have no income statement data
+  // Use ticker check as primary, data absence as secondary
+  const ETF_TICKERS = ["SPY","QQQ","IWM","VTI","GLD","TLT","HYG","DIA","XLF","XLK","ARKK","VNQ"];
+  const ticker = (data.ticker || data.name || "").toUpperCase();
+  const isETF = ETF_TICKERS.includes(ticker) || 
+    (!data.pe_ratio && !data.gross_margin && !data.eps_ttm && !data.revenue_ttm && !data.revenue);
   const earn = data.analyst_ratings?.earnings || {};
 
   if (isETF) return (
@@ -746,6 +751,39 @@ export function FundamentalsPanel({ data }: { data: any }) {
         <SubTitle>QUALITY SCORES</SubTitle>
         <FRow l="Piotroski F-Score" v={data.gross_margin&&data.roe&&data.current_ratio?String(Math.min(9,Math.round((data.gross_margin>0.4?1:0)+(data.roe>0.1?1:0)+(data.current_ratio>1.5?1:0)+(data.revenue_growth>0.05?1:0)+(data.debt_to_equity<1?1:0)*2+3))):"—"} c="#daa520" />
         <FRow l="Altman Z-Score"    v="N/A (public)" />
+      </Card>
+
+      {/* DUPONT + FCF */}
+      <Card style={{gridColumn:"span 3"}}>
+        <SectionTitle>◈ DUPONT DECOMPOSITION — ROE ATTRIBUTION</SectionTitle>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:0,marginBottom:16}}>
+          {[
+            ["NET MARGIN", fp(data.net_margin), "Profitability
+(Net Income / Revenue)", gc(data.net_margin)],
+            ["×", "", "", "#4a3428"],
+            ["ASSET TURNOVER", data.revenue_ttm&&data.total_assets?f(Number(data.revenue_ttm)/Number(data.total_assets),3):"—", "Efficiency
+(Revenue / Assets)", "#d4c4b0"],
+            ["×", "", "", "#4a3428"],
+            ["LEVERAGE", data.total_assets&&data.total_equity?f(Number(data.total_assets)/Number(data.total_equity),2)+"×":"—", "Financial Leverage
+(Assets / Equity)", "#e8b84b"],
+          ].map(([l,v,desc,c],i)=>(
+            <div key={i} style={{textAlign:"center",padding:"12px 8px",borderRight:i<4?"1px solid rgba(212,149,108,0.08)":"none",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column"}}>
+              {l!=="×" ? <>
+                <div style={{fontFamily:"'Fira Code',monospace",fontSize:8,color:"#9d8b7a",letterSpacing:1,marginBottom:6,whiteSpace:"pre-line",lineHeight:1.5}}>{l}</div>
+                <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:26,color:c as string,letterSpacing:2}}>{v}</div>
+                <div style={{fontFamily:"'Fira Code',monospace",fontSize:7,color:"#4a3428",marginTop:4,whiteSpace:"pre-line",lineHeight:1.5}}>{desc}</div>
+              </> : <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:32,color:"#4a3428"}}>×</div>}
+            </div>
+          ))}
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",background:"#1a0f0a",borderRadius:6,border:"1px solid rgba(212,149,108,0.1)"}}>
+          <div style={{fontFamily:"'Fira Code',monospace",fontSize:9,color:"#daa520",letterSpacing:2,whiteSpace:"nowrap"}}>= ROE</div>
+          <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:28,color:gc(data.roe)}}>{fp(data.roe)}</div>
+          <div style={{fontFamily:"'Fira Code',monospace",fontSize:9,color:"#4a3428",lineHeight:1.6}}>
+            DuPont identity decomposes return on equity into its three drivers.<br/>
+            High ROE from leverage ({">"} 3×) is riskier than ROE from margin or turnover.
+          </div>
+        </div>
       </Card>
 
       {/* FACTOR EXPOSURES */}
