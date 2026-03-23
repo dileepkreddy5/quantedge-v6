@@ -307,7 +307,12 @@ class PolygonFundamentalFeed:
                 result["gross_profit"]    = _safe(income, "gross_profit")
                 result["operating_income"]= _safe(income, "operating_income_loss")
                 result["net_income"]      = _safe(income, "net_income_loss")
-                result["eps_ttm"]         = _safe(income, "basic_earnings_per_share")
+                result["eps_ttm"]         = _safe(income, "basic_earnings_per_share") or _safe(income, "diluted_earnings_per_share")
+                result["net_income"]      = _safe(income, "net_income_loss") or _safe(income, "net_income_loss_attributable_to_parent")
+                result["total_equity"]    = _safe(balance, "equity") or _safe(balance, "equity_attributable_to_parent")
+                result["total_debt"]      = (_safe(balance, "long_term_debt") or 0) + (_safe(balance, "current_portion_of_long_term_debt") or 0)
+                result["total_cash"]      = _safe(balance, "cash_and_cash_equivalents_including_restricted_cash") or _safe(balance, "cash_and_equivalents")
+                result["ebitda"]          = (_safe(income, "operating_income_loss") or 0) + (_safe(income, "depreciation_and_amortization") or 0)
 
                 rev_curr = _safe(income, "revenues")
                 # Revenue growth: compare to 1-year-ago filing
