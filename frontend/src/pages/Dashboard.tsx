@@ -48,12 +48,13 @@ export default function Dashboard() {
   // Auto-run analysis if ?ticker=XXX in URL (from landing page)
   useEffect(() => {
     const urlTicker = searchParams.get('ticker');
-    if (urlTicker) {
-      setInputTicker(urlTicker.toUpperCase());
-      // slight delay so component is mounted
-      setTimeout(() => runAnalysis(urlTicker.toUpperCase()), 300);
+    if (urlTicker && urlTicker.trim()) {
+      const sym = urlTicker.toUpperCase().trim();
+      setInputTicker(sym);
+      const timer = setTimeout(() => runAnalysis(sym), 500);
+      return () => clearTimeout(timer);
     }
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [activeTab, setActiveTab] = useState('overview');
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
