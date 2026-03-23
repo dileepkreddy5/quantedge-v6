@@ -11,6 +11,8 @@ import toast from 'react-hot-toast';
 import {
   SignalPanel,
   WallStreetPanel,
+  PortfolioPanel,
+  PerformancePanel,
   MLModelsPanel,
   VolatilityPanel,
   RegimePanel,
@@ -29,13 +31,14 @@ const TABS = [
   { id: 'ml',          label: '🧠 ML MODELS' },
   { id: 'volatility',  label: '📊 VOLATILITY' },
   { id: 'regime',      label: '🌡 REGIME' },
-  { id: 'options',     label: '⚙ OPTIONS' },
   { id: 'sentiment',   label: '💬 SENTIMENT' },
   { id: 'montecarlo',  label: '🎲 MONTE CARLO' },
   { id: 'risk',        label: '🛡 RISK' },
   { id: 'fundamental', label: '📋 FUNDAMENTALS' },
   { id: 'watchlist',   label: '★ WATCHLIST' },
   { id: 'wallstreet',  label: '🏦 WALL ST.' },
+  { id: 'portfolio',   label: '⚖ PORTFOLIO' },
+  { id: 'performance', label: '📈 PERFORMANCE' },
 ];
 
 const QUICK_TICKERS = ['AAPL', 'NVDA', 'TSLA', 'SPY', 'QQQ', 'MSFT', 'AMZN', 'META', 'GOOGL', 'BRK-B'];
@@ -350,13 +353,14 @@ export default function Dashboard() {
               {activeTab === 'ml'          && <MLModelsPanel data={data} />}
               {activeTab === 'volatility'  && <VolatilityPanel data={data} />}
               {activeTab === 'regime'      && <RegimePanel data={data} />}
-              {activeTab === 'options'     && <OptionsPanel data={data} />}
               {activeTab === 'sentiment'   && <SentimentPanel data={data} />}
               {activeTab === 'montecarlo'  && <MonteCarloPanel data={data} />}
               {activeTab === 'risk'        && <RiskPanel data={data} />}
               {activeTab === 'fundamental' && <FundamentalsPanel data={data} />}
               {activeTab === 'watchlist'   && <Watchlist onAnalyze={runAnalysis} />}
               {activeTab === 'wallstreet'  && <WallStreetPanel data={data} />}
+              {activeTab === 'portfolio'   && <PortfolioPanel data={data} />}
+              {activeTab === 'performance' && <PerformancePanel data={data} />}
             </div>
           </>
         )}
