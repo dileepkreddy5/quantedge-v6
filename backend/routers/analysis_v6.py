@@ -281,7 +281,10 @@ class QuantEdgeAnalyzerV6:
 
             # ── LAYER 5: RISK ENGINE ──────────────────────────
             try:
-                ret_df = pd.DataFrame({"asset": returns.tail(252)})
+                returns_for_risk = returns.tail(252).dropna()
+                if len(returns_for_risk) < 10:
+                    raise ValueError("Insufficient returns for risk engine")
+                ret_df = pd.DataFrame({"asset": returns_for_risk})
                 risk_result = self.risk_engine.full_risk_assessment(
                     returns=ret_df,
                     portfolio_nav=None,
