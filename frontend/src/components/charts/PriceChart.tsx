@@ -133,7 +133,7 @@ interface PriceChartProps { ticker: string; data: any; }
 
 export function PriceChart({ ticker, data: analysisData }: PriceChartProps) {
   const [tf, setTf]           = useState('1Y');
-  const [bars, setBars]       = useState<Bar[]>([]);
+  const [bars, setBars]       = useState<OHLCVBar[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState('');
   const [chartType, setChartType] = useState<'line'|'area'>('area');
