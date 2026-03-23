@@ -301,6 +301,12 @@ class PolygonFundamentalFeed:
                 latest = results[0] if results else {}
                 fin = latest.get("financials", {})
 
+                # Pre-initialize ALL vars before any block — prevents UnboundLocalError
+                rev_curr = gross_profit = operating_inc = net_income = None
+                eps_basic = eps_diluted = rd_expense = basic_shares = None
+                total_assets = total_equity = total_liab = curr_assets = None
+                curr_liab = long_term_debt = cash = inventory = None
+
                 # Income statement — exact Polygon field names confirmed
                 income = fin.get("income_statement", {})
                 rev_curr        = _safe(income, "revenues")
@@ -359,11 +365,6 @@ class PolygonFundamentalFeed:
                     ni_prev = _safe(inc_prev, "net_income_loss")
                     if ni_prev and net_income and ni_prev != 0:
                         result["earnings_growth"] = round((net_income - ni_prev) / abs(ni_prev), 6)
-
-                # Initialize all balance sheet vars to None before extraction
-                # Prevents UnboundLocalError in derived ratios section below
-                total_assets = total_equity = total_liab = curr_assets = None
-                curr_liab = long_term_debt = cash = inventory = None
 
                 # Balance sheet — exact Polygon field names confirmed
                 balance = fin.get("balance_sheet", {})
