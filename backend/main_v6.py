@@ -221,9 +221,37 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"APScheduler error: {e}")
 
-    # 8. Cache warmer
-    # Cache warmer disabled — crashes task on first run
-    app.state.warmer_task = None
+    # 8. Cache warmer — pre-warms top tickers so first user request is instant
+    async def _startup_warmer():
+        await asyncio.sleep(30)  # wait for ECS health checks to pass first
+        TOP = ["AAPL", "MSFT", "NVDA", "TSLA", "SPY", "QQQ", "AMZN", "META"]
+        for ticker in TOP:
+            try:
+                cache_key = f"analysis:v6:{ticker}"
+                if not await app.state.redis.exists(cache_key):
+                    logger.info(f"Cache warmer: pre-warming {ticker}...")
+                    data = await app.state.analyzer.run_full_analysis(
+                        ticker=ticker,
+                        include_options=False,
+                        include_sentiment=False,
+                        mc_paths=1000,
+                    )
+                    await app.state.redis.setex(
+                        cache_key, 3600,
+                        json.dumps(data, default=str)
+                    )
+                    logger.info(f"Cache warmer: ✅ {ticker} warmed")
+                else:
+                    logger.info(f"Cache warmer: {ticker} already cached")
+                await asyncio.sleep(10)  # space out requests
+            except asyncio.CancelledError:
+                return
+            except Exception as e:
+                logger.warning(f"Cache warmer error {ticker}: {e}")
+                await asyncio.sleep(5)
+
+    app.state.warmer_task = asyncio.create_task(_startup_warmer())
+    logger.info("✅ Cache warmer started — will pre-warm AAPL MSFT NVDA TSLA SPY QQQ AMZN META")
 
     logger.info("✅ QuantEdge v6.0 ready")
     yield
