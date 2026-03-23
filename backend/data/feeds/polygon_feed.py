@@ -301,48 +301,73 @@ class PolygonFundamentalFeed:
                 latest = results[0] if results else {}
                 fin = latest.get("financials", {})
 
-                # Income statement
+                # Income statement — exact Polygon field names confirmed
                 income = fin.get("income_statement", {})
-                result["revenue"]         = _safe(income, "revenues")
-                result["gross_profit"]    = _safe(income, "gross_profit")
-                result["operating_income"]= _safe(income, "operating_income_loss")
-                result["net_income"]      = _safe(income, "net_income_loss")
-                result["eps_ttm"]         = _safe(income, "basic_earnings_per_share") or _safe(income, "diluted_earnings_per_share")
-                result["net_income"]      = _safe(income, "net_income_loss") or _safe(income, "net_income_loss_attributable_to_parent")
-                result["total_equity"]    = _safe(balance, "equity") or _safe(balance, "equity_attributable_to_parent")
-                result["total_debt"]      = (_safe(balance, "long_term_debt") or 0) + (_safe(balance, "current_portion_of_long_term_debt") or 0)
-                result["total_cash"]      = _safe(balance, "cash_and_cash_equivalents_including_restricted_cash") or _safe(balance, "cash_and_equivalents")
-                result["ebitda"]          = (_safe(income, "operating_income_loss") or 0) + (_safe(income, "depreciation_and_amortization") or 0)
+                rev_curr        = _safe(income, "revenues")
+                gross_profit    = _safe(income, "gross_profit")
+                operating_inc   = _safe(income, "operating_income_loss")
+                net_income      = _safe(income, "net_income_loss")
+                eps_basic       = _safe(income, "basic_earnings_per_share")
+                eps_diluted     = _safe(income, "diluted_earnings_per_share")
+                rd_expense      = _safe(income, "research_and_development")
+                basic_shares    = _safe(income, "basic_average_shares")
 
-                rev_curr = _safe(income, "revenues")
-                # Revenue growth: compare to 1-year-ago filing
+                result["revenue"]          = rev_curr
+                result["revenue_ttm"]      = rev_curr
+                result["gross_profit"]     = gross_profit
+                result["operating_income"] = operating_inc
+                result["net_income"]       = net_income
+                result["eps_ttm"]          = eps_basic or eps_diluted
+                result["rd_expense"]       = rd_expense
+                result["shares_outstanding"] = basic_shares
+                result["ebitda"]           = operating_inc  # conservative
+
+                # Revenue growth YoY
                 if len(results) >= 2:
-                    income_prev = results[1].get("financials", {}).get("income_statement", {})
-                    rev_prev = _safe(income_prev, "revenues")
+                    inc_prev = results[1].get("financials", {}).get("income_statement", {})
+                    rev_prev = _safe(inc_prev, "revenues")
                     if rev_prev and rev_curr and rev_prev != 0:
-                        result["revenue_growth"] = (rev_curr - rev_prev) / abs(rev_prev)
+                        result["revenue_growth"] = round((rev_curr - rev_prev) / abs(rev_prev), 6)
+                    ni_prev = _safe(inc_prev, "net_income_loss")
+                    if ni_prev and net_income and ni_prev != 0:
+                        result["earnings_growth"] = round((net_income - ni_prev) / abs(ni_prev), 6)
 
-                # Balance sheet
+                # Balance sheet — exact Polygon field names confirmed
                 balance = fin.get("balance_sheet", {})
-                total_assets  = _safe(balance, "assets")
-                total_equity  = _safe(balance, "equity")
-                total_liab    = _safe(balance, "liabilities")
-                curr_assets   = _safe(balance, "current_assets")
-                curr_liab     = _safe(balance, "current_liabilities")
+                total_assets   = _safe(balance, "assets")
+                total_equity   = _safe(balance, "equity_attributable_to_parent") or _safe(balance, "equity")
+                total_liab     = _safe(balance, "liabilities")
+                curr_assets    = _safe(balance, "current_assets")
+                curr_liab      = _safe(balance, "current_liabilities")
+                long_term_debt = _safe(balance, "long_term_debt")
+                cash           = _safe(balance, "cash")
+                inventory      = _safe(balance, "inventory")
+
+                result["total_equity"]   = total_equity
+                result["total_assets"]   = total_assets
+                result["total_debt"]     = long_term_debt or 0
+                result["total_cash"]     = cash or 0
+                result["long_term_debt"] = long_term_debt
 
                 if total_equity and total_equity != 0:
                     if total_liab is not None:
-                        result["debt_to_equity"] = total_liab / abs(total_equity)
-                    if result.get("net_income") is not None:
-                        result["roe"] = result["net_income"] / abs(total_equity)
-                if total_assets and total_assets != 0 and result.get("net_income") is not None:
-                    result["roa"] = result["net_income"] / total_assets
+                        result["debt_to_equity"] = round(total_liab / abs(total_equity), 4)
+                    if net_income is not None:
+                        result["roe"] = round(net_income / abs(total_equity), 6)
+                if total_assets and total_assets != 0 and net_income is not None:
+                    result["roa"] = round(net_income / total_assets, 6)
                 if curr_liab and curr_liab != 0 and curr_assets is not None:
-                    result["current_ratio"] = curr_assets / curr_liab
+                    result["current_ratio"] = round(curr_assets / curr_liab, 4)
+                    result["quick_ratio"]   = round((curr_assets - (inventory or 0)) / curr_liab, 4)
 
-                # Gross margin
-                if rev_curr and rev_curr != 0 and result.get("gross_profit") is not None:
-                    result["gross_margin"] = result["gross_profit"] / rev_curr
+                # Margin ratios
+                if rev_curr and rev_curr != 0:
+                    if gross_profit is not None:
+                        result["gross_margin"]     = round(gross_profit / rev_curr, 6)
+                    if operating_inc is not None:
+                        result["operating_margin"] = round(operating_inc / rev_curr, 6)
+                    if net_income is not None:
+                        result["net_margin"]       = round(net_income / rev_curr, 6)
 
         # ── Derived ratios ──────────────────────────────────
         # Compute P/E, P/B, P/S from available data + price
