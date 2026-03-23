@@ -97,12 +97,10 @@ export default function Dashboard() {
 
     try {
       const res = await api.post('/api/v6/analyze', {
-        req: {
-          ticker: symbol,
-          include_options: true,
-          include_sentiment: true,
-          mc_paths: 100000,
-        }
+        ticker: symbol,
+        include_options: true,
+        include_sentiment: true,
+        mc_paths: 100000,
       });
       setData(res.data.data);
       toast.success(`Analysis complete: ${symbol}`, { icon: '✅' });
@@ -146,7 +144,7 @@ export default function Dashboard() {
             <div style={{
               fontFamily: "'Fira Code', monospace",
               fontSize: 8, color: '#4a3428', letterSpacing: 2, paddingTop: 2,
-            }}>v5.0</div>
+            }}>v6.0</div>
             {data && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 4 }}>
                 <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#22c55e', boxShadow: '0 0 6px #22c55e', animation: 'pulse 1.5s infinite' }} />

@@ -177,6 +177,13 @@ async def lifespan(app: FastAPI):
 
     # 4. QuantEdgeAnalyzerV6 — all ML models loaded into memory now
     app.state.analyzer = QuantEdgeAnalyzerV6()
+# Inject the shared Redis pool into all data feeds
+# so every Polygon call is cached — no cold hits per request
+    app.state.analyzer.market_feed.inject_redis(app.state.redis)
+    app.state.analyzer.fund_feed.inject_redis(app.state.redis)
+    app.state.analyzer.options_feed.inject_redis(app.state.redis)
+    app.state.analyzer.sentiment_feed.inject_redis(app.state.redis)
+    logger.info("✅ Redis injected into all data feeds")
     logger.info("✅ QuantEdgeAnalyzerV6 initialized")
 
     # 5. ML model files — trained lazily on first analysis request
@@ -224,11 +231,13 @@ async def lifespan(app: FastAPI):
     # Shutdown
     logger.info("⏹ QuantEdge shutting down...")
 
-    warmer_task.cancel()
-    try:
-        await warmer_task
-    except asyncio.CancelledError:
-        pass
+    
+    if app.state.warmer_task:
+        app.state.warmer_task.cancel()
+        try:
+            await app.state.warmer_task
+        except asyncio.CancelledError:
+            pass
 
     if app.state.scheduler:
         app.state.scheduler.shutdown(wait=False)

@@ -251,14 +251,38 @@ class PolygonFundamentalFeed:
                 result["market_cap"]   = res.get("market_cap")
                 result["description"]  = res.get("description", "")
 
-            # Financial ratios from snapshot (simple data)
+            # Snapshot — current price + prev close for P/E approximation
             snapshot = await _get_with_retry(
                 session,
                 f"{POLYGON_BASE}/v2/snapshot/locale/us/markets/stocks/tickers/{ticker.upper()}",
             )
             if snapshot and "ticker" in snapshot:
-                day = snapshot["ticker"].get("day", {})
-                result["price"]   = day.get("c")
+                snap_ticker = snapshot["ticker"]
+                day = snap_ticker.get("day", {})
+                result["price"]      = day.get("c")
+                result["prev_close"] = snap_ticker.get("prevDay", {}).get("c")
+                result["volume"]     = day.get("v")
+                result["vwap"]       = day.get("vw")
+
+                # P/E ratio from Polygon ticker details v3
+                # Polygon provides pe_ratio in the ticker details endpoint
+                details_v3 = await _get_with_retry(
+                    session,
+                    f"{POLYGON_BASE}/v3/reference/tickers/{ticker.upper()}",
+                )
+                if details_v3 and "results" in details_v3:
+                    res3 = details_v3["results"]
+                    # Polygon Starter Plus returns these in branding/metadata
+                    result["weight_index"] = res3.get("weight_index")
+                    result["list_date"]    = res3.get("list_date")
+                    result["share_class_shares_outstanding"] = res3.get("share_class_shares_outstanding")
+                    result["weighted_shares_outstanding"]    = res3.get("weighted_shares_outstanding")
+
+                    # Compute market cap from share count + price if not already set
+                    price = result.get("price", 0) or 0
+                    shares = res3.get("weighted_shares_outstanding") or res3.get("share_class_shares_outstanding")
+                    if shares and price and not result.get("market_cap"):
+                        result["market_cap"] = float(shares) * float(price)
 
             # Financials endpoint for income statement / balance sheet
             financials = await _get_with_retry(
@@ -314,6 +338,52 @@ class PolygonFundamentalFeed:
                 # Gross margin
                 if rev_curr and rev_curr != 0 and result.get("gross_profit") is not None:
                     result["gross_margin"] = result["gross_profit"] / rev_curr
+
+        # ── Derived ratios ──────────────────────────────────
+        # Compute P/E, P/B, P/S from available data + price
+        price = result.get("price", 0) or 0
+        if price > 0:
+            # P/E = price / EPS_TTM
+            eps = result.get("eps_ttm")
+            if eps and eps != 0:
+                result["pe_ratio"] = round(price / eps, 2)
+
+            # P/B = price / (equity / shares)
+            equity = result.get("total_equity") or result.get("equity")
+            shares = result.get("weighted_shares_outstanding") or result.get("share_class_shares_outstanding")
+            if equity and shares and float(shares) > 0:
+                book_per_share = float(equity) / float(shares)
+                if book_per_share > 0:
+                    result["price_to_book"] = round(price / book_per_share, 2)
+                    result["pb_ratio"]      = result["price_to_book"]
+
+            # P/S = market_cap / revenue_ttm
+            market_cap = result.get("market_cap", 0) or 0
+            revenue    = result.get("revenue") or result.get("revenue_ttm", 0) or 0
+            if market_cap > 0 and revenue > 0:
+                result["price_to_sales"] = round(market_cap / revenue, 2)
+
+            # EV/EBITDA approximation
+            ebitda = result.get("ebitda", 0) or 0
+            total_debt = result.get("total_debt", 0) or 0
+            total_cash = result.get("total_cash", 0) or 0
+            if ebitda > 0 and market_cap > 0:
+                ev = market_cap + total_debt - total_cash
+                result["ev_ebitda"] = round(ev / ebitda, 2)
+
+            # Operating margin
+            operating_income = result.get("operating_income", 0) or 0
+            if revenue > 0 and operating_income:
+                result["operating_margin"] = round(operating_income / revenue, 6)
+
+            # Net margin
+            net_income = result.get("net_income", 0) or 0
+            if revenue > 0 and net_income:
+                result["net_margin"] = round(net_income / revenue, 6)
+
+            # Revenue TTM alias
+            if revenue and not result.get("revenue_ttm"):
+                result["revenue_ttm"] = revenue
 
         # Cache result
         if result and self.redis:
