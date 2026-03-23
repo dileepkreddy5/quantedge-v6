@@ -223,7 +223,7 @@ async def lifespan(app: FastAPI):
 
     # 8. Cache warmer — pre-warms top tickers so first user request is instant
     async def _startup_warmer():
-        await asyncio.sleep(30)  # wait for ECS health checks to pass first
+        await asyncio.sleep(120)  # wait for ECS health checks + allow manual cache clear first
         TOP = ["AAPL", "MSFT", "NVDA", "TSLA", "SPY", "QQQ", "AMZN", "META"]
         for ticker in TOP:
             try:
