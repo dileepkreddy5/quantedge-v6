@@ -318,8 +318,11 @@ class PolygonFundamentalFeed:
                 rd_expense      = _safe(income, "research_and_development")
                 basic_shares    = _safe(income, "basic_average_shares")
 
-                result["revenue"]          = rev_curr
-                result["revenue_ttm"]      = rev_curr
+                result["revenue"]    = rev_curr
+                result["revenue_ttm"] = rev_curr
+                # Ensure eps_ttm is always set
+                if eps_basic or eps_diluted:
+                    result["eps_ttm"] = eps_basic or eps_diluted
                 result["gross_profit"]     = gross_profit
                 result["operating_income"] = operating_inc
                 result["net_income"]       = net_income
@@ -330,7 +333,8 @@ class PolygonFundamentalFeed:
                 result["ebitda"]           = operating_inc  # conservative
 
                 # Compute P/E and valuation ratios — all variables guarded
-                _price = result.get("price", 0) or 0
+                # Use close price from OHLCV if snapshot returned 0
+                _price = result.get("price", 0) or result.get("close", 0) or result.get("prev_close", 0) or 0
                 _eps   = eps_basic or eps_diluted
                 _mcap  = result.get("market_cap", 0) or 0
                 _long_term_debt = long_term_debt or 0
