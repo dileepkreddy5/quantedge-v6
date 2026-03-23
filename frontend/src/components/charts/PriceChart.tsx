@@ -9,7 +9,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   ComposedChart, LineChart, BarChart,
-  Line, Bar, Area, XAxis, YAxis,
+  Line, Bar as RechartBar, Area, XAxis, YAxis,
   CartesianGrid, Tooltip, ResponsiveContainer,
   ReferenceLine,
 } from 'recharts';
@@ -89,7 +89,7 @@ function macdCalc(closes: number[]) {
 }
 
 // ── OHLCV bar type ───────────────────────────────────────────
-interface Bar {
+interface OHLCVBar {
   label: string;
   o: number; h: number; l: number; c: number;
   v: number; vw: number;
@@ -109,7 +109,7 @@ const TF_LABELS: Record<string, string> = {
 // ── Custom tooltip ───────────────────────────────────────────
 const ChartTooltip = ({ active, payload }: any) => {
   if (!active || !payload?.length) return null;
-  const d = payload[0]?.payload as Bar;
+  const d = payload[0]?.payload as OHLCVBar;
   if (!d) return null;
   const isUp = d.c >= d.o;
   const chg  = d.c - d.o;
@@ -170,7 +170,7 @@ export function PriceChart({ ticker, data: analysisData }: PriceChartProps) {
       const macdV   = macdCalc(closes);
       const avgVol  = volumes.reduce((s, v) => s + v, 0) / volumes.length;
 
-      const built: Bar[] = closes.map((c, i) => ({
+      const built: OHLCVBar[] = closes.map((c, i) => ({
         label:      labels[i],
         o: opens[i], h: highs[i], l: lows[i], c,
         v: volumes[i], vw: vwaps[i],
@@ -385,7 +385,7 @@ export function PriceChart({ ticker, data: analysisData }: PriceChartProps) {
               <YAxis orientation="right" tick={{ fontFamily:MONO, fontSize:7, fill:'#333230' }}
                 tickLine={false} axisLine={false} width={52}
                 tickFormatter={v => `${(v/1e6).toFixed(0)}M`} tickCount={2} />
-              <Bar dataKey="v" fill="#c8a96e" opacity={0.35} radius={0}
+              <RechartBar dataKey="v" fill="#c8a96e" opacity={0.35} radius={0}
                 label={false}
                 // per-bar color via Cell would need Cell import — use shape fill workaround
                 shape={(props: any) => {
@@ -443,7 +443,7 @@ export function PriceChart({ ticker, data: analysisData }: PriceChartProps) {
                     tickLine={false} axisLine={false} width={52}
                     tickFormatter={v => v.toFixed(2)} tickCount={3} />
                   <ReferenceLine y={0} stroke="rgba(255,255,255,0.06)" />
-                  <Bar dataKey="macdHist"
+                  <RechartBar dataKey="macdHist"
                     shape={(props: any) => {
                       const { x, y, width, height, payload } = props;
                       const col = (payload?.macdHist ?? 0) >= 0
