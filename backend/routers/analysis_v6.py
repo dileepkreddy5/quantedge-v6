@@ -36,6 +36,7 @@ from ml.models.xgboost_lgbm import XGBoostPredictor, LightGBMPredictor, Ensemble
 from ml.models.regime_volatility import HMMRegimeClassifier, GJRGARCHModel, KalmanTrendFilter, MonteCarloEngine
 from ml.models.nlp_options import FinBERTSentiment, OptionsAnalytics
 from ml.features.feature_engineering import FeaturePipeline
+from ml.price_oracle.analyst_ratings import AnalystRatingsEngine
 
 from ml.labeling.triple_barrier import LabelingPipeline, DeflatedSharpeRatio
 from ml.risk.risk_engine import MasterRiskEngine, DynamicCovarianceEngine, CVaREngine, VolatilityTargetingEngine
@@ -93,6 +94,7 @@ class QuantEdgeAnalyzerV6:
         self.finbert = FinBERTSentiment()
         self.options_analytics = OptionsAnalytics()
 
+        self.analyst_engine = AnalystRatingsEngine()
         self.labeling = LabelingPipeline(
             profit_take=2.0, stop_loss=1.0, hold_days=21,
             cusum_h=1.0, time_decay=0.5
@@ -500,6 +502,13 @@ class QuantEdgeAnalyzerV6:
                 annual_vol=result.get("annual_vol", 0.25),
                 regime=current_regime,
             )
+
+            # ── ANALYST RATINGS ──────────────────────────────
+            try:
+                analyst_result = self.analyst_engine.fetch(ticker)
+                result["analyst_ratings"] = analyst_result
+            except Exception as e:
+                logger.warning(f"Analyst ratings error: {e}")
 
             # ── COMPOSITE SIGNAL ─────────────────────────────
             signal, score = self._compute_composite_signal(result)
@@ -1122,6 +1131,30 @@ async def analyze(
     background_tasks.add_task(_cache)
 
     return {"data": data, "cached": False}
+
+
+@router.delete("/cache/{ticker}")
+async def clear_cache(
+    ticker: str,
+    http_request: Request,
+    current_user: Optional[CognitoUser] = Depends(get_optional_user),
+):
+    """Clear Redis cache for a specific ticker — forces fresh analysis on next request."""
+    ticker = ticker.upper().strip()
+    redis = http_request.app.state.redis
+    keys_deleted = 0
+    for prefix in ["analysis:v6:", "chart:v1:", "polygon:v1:"]:
+        try:
+            # Delete analysis cache
+            deleted = await redis.delete(f"{prefix}{ticker}")
+            keys_deleted += deleted
+            # Delete polygon sub-caches
+            for suffix in [":ohlcv", ":fundamentals", ":news", ":options"]:
+                deleted = await redis.delete(f"polygon:v1:{ticker}{suffix}")
+                keys_deleted += deleted
+        except Exception:
+            pass
+    return {"ticker": ticker, "keys_deleted": keys_deleted, "status": "cache cleared"}
 
 
 @router.get("/history/{ticker}")

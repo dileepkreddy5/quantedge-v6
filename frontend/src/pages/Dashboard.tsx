@@ -10,6 +10,7 @@ import { useAuthStore, api } from '../auth/authStore';
 import toast from 'react-hot-toast';
 import {
   SignalPanel,
+  WallStreetPanel,
   MLModelsPanel,
   VolatilityPanel,
   RegimePanel,
@@ -34,6 +35,7 @@ const TABS = [
   { id: 'risk',        label: '🛡 RISK' },
   { id: 'fundamental', label: '📋 FUNDAMENTALS' },
   { id: 'watchlist',   label: '★ WATCHLIST' },
+  { id: 'wallstreet',  label: '🏦 WALL ST.' },
 ];
 
 const QUICK_TICKERS = ['AAPL', 'NVDA', 'TSLA', 'SPY', 'QQQ', 'MSFT', 'AMZN', 'META', 'GOOGL', 'BRK-B'];
@@ -354,6 +356,7 @@ export default function Dashboard() {
               {activeTab === 'risk'        && <RiskPanel data={data} />}
               {activeTab === 'fundamental' && <FundamentalsPanel data={data} />}
               {activeTab === 'watchlist'   && <Watchlist onAnalyze={runAnalysis} />}
+              {activeTab === 'wallstreet'  && <WallStreetPanel data={data} />}
             </div>
           </>
         )}
