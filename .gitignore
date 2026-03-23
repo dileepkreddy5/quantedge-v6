@@ -83,3 +83,6 @@ htmlcov/
 *.swo
 .DS_Store
 Thumbs.db
+quantedge_all_code.txt
+backend/main_v6.py.backup
+*.backup
