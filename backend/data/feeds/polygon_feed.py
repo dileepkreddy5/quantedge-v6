@@ -360,6 +360,11 @@ class PolygonFundamentalFeed:
                     if ni_prev and net_income and ni_prev != 0:
                         result["earnings_growth"] = round((net_income - ni_prev) / abs(ni_prev), 6)
 
+                # Initialize all balance sheet vars to None before extraction
+                # Prevents UnboundLocalError in derived ratios section below
+                total_assets = total_equity = total_liab = curr_assets = None
+                curr_liab = long_term_debt = cash = inventory = None
+
                 # Balance sheet — exact Polygon field names confirmed
                 balance = fin.get("balance_sheet", {})
                 total_assets   = _safe(balance, "assets")
