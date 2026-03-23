@@ -323,34 +323,30 @@ class PolygonFundamentalFeed:
                 result["shares_outstanding"] = basic_shares
                 result["ebitda"]           = operating_inc  # conservative
 
-                # Compute P/E immediately while we have price + eps in scope
+                # Compute P/E and valuation ratios — all variables guarded
                 _price = result.get("price", 0) or 0
                 _eps   = eps_basic or eps_diluted
+                _mcap  = result.get("market_cap", 0) or 0
+                _long_term_debt = long_term_debt or 0
+                _cash_val = cash or 0
+
                 if _price > 0 and _eps and _eps != 0:
                     result["pe_ratio"] = round(_price / _eps, 2)
-                # P/S = market_cap / revenue
-                _mcap = result.get("market_cap", 0) or 0
                 if _mcap > 0 and rev_curr and rev_curr != 0:
                     result["price_to_sales"] = round(_mcap / rev_curr, 2)
-                # P/B = price / book_per_share
                 _shares = basic_shares or 0
                 if _price > 0 and total_equity and _shares and _shares > 0:
                     book_ps = total_equity / _shares
                     if book_ps > 0:
                         result["price_to_book"] = round(_price / book_ps, 2)
                         result["pb_ratio"]       = result["price_to_book"]
-                # EV/EBITDA
-                _debt = long_term_debt or 0
-                _cash = cash or 0
                 if _mcap > 0 and operating_inc and operating_inc > 0:
-                    ev = _mcap + _debt - _cash
-                    result["ev_ebitda"] = round(ev / operating_inc, 2)
+                    ev = _mcap + _long_term_debt - _cash_val
+                    result["ev_ebitda"]  = round(ev / operating_inc, 2)
                     result["ev_revenue"] = round(ev / rev_curr, 2) if rev_curr else None
-                # FCF yield proxy (net_income / market_cap)
                 if net_income and _mcap > 0:
                     result["fcf_yield"] = round(net_income / _mcap, 6)
-                # ROIC proxy
-                invested_capital = (total_equity or 0) + (_debt or 0)
+                invested_capital = (total_equity or 0) + _long_term_debt
                 if operating_inc and invested_capital > 0:
                     result["roic"] = round(operating_inc * (1 - 0.21) / invested_capital, 6)
 
