@@ -311,7 +311,7 @@ export default function Dashboard() {
             </div>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
               {QUICK_TICKERS.map(t => (
-                <button key={t} onClick={() => { if (user) runAnalysis(t); else navigate(`/login?redirect=${t}`); }}
+                <button key={t} onClick={() => { if (isAuthenticated) runAnalysis(t); else navigate(`/login?redirect=${t}`); }}
                   style={{
                     background: '#2d1e18', border: '1px solid rgba(212,149,108,0.2)',
                     color: '#d4c4b0', fontFamily: "'Fira Code',monospace",
