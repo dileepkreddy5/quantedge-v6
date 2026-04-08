@@ -51,12 +51,29 @@ export default function Dashboard() {
   const [inputTicker, setInputTicker] = useState('');
 
   // Auto-run analysis if ?ticker=XXX in URL (from landing page)
+  
   useEffect(() => {
     const urlTicker = searchParams.get('ticker');
     if (urlTicker && urlTicker.trim()) {
       const sym = urlTicker.toUpperCase().trim();
       setInputTicker(sym);
-      const timer = setTimeout(() => runAnalysis(sym), 500);
+      const timer = setTimeout(() => {
+        setTicker(sym);
+        setData(null);
+        setLoading(true);
+        setElapsed(0);
+        setActiveTab('overview');
+        api.post('/api/v6/analyze', {
+          req: { ticker: sym, include_options: true, include_sentiment: true, mc_paths: 100000 }
+        }).then(res => {
+          setData(res.data.data);
+          toast.success(`Analysis complete: ${sym}`, { icon: '✅' });
+        }).catch(() => {
+          toast.error('Analysis failed');
+        }).finally(() => {
+          setLoading(false);
+        });
+      }, 500);
       return () => clearTimeout(timer);
     }
   }, []); // eslint-disable-line
@@ -125,7 +142,7 @@ export default function Dashboard() {
       clearInterval(timerRef.current);
       setLoading(false);
     }
-  }, [inputTicker]);
+  }, [inputTicker, navigate]);
 
   const handleLogout = async () => {
     await logout();
