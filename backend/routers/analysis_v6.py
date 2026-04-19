@@ -48,6 +48,39 @@ from ml.portfolio.portfolio_engine import (
     ModelGovernanceEngine,
 )
 
+
+
+def _sanitize_json(obj):
+    """
+    Recursively replace NaN, +inf, -inf with None for JSON compliance.
+    Pandas/NumPy calculations can produce these; stdlib json cannot serialize them.
+    """
+    import math
+    if isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return None
+        return obj
+    if isinstance(obj, dict):
+        return {k: _sanitize_json(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sanitize_json(v) for v in obj]
+    if isinstance(obj, tuple):
+        return tuple(_sanitize_json(v) for v in obj)
+    # numpy types
+    try:
+        import numpy as np
+        if isinstance(obj, (np.floating,)):
+            f = float(obj)
+            if math.isnan(f) or math.isinf(f):
+                return None
+            return f
+        if isinstance(obj, np.ndarray):
+            return [_sanitize_json(v) for v in obj.tolist()]
+    except ImportError:
+        pass
+    return obj
+
+
 router = APIRouter()
 
 
@@ -1094,7 +1127,7 @@ async def analyze(
     try:
         cached = await redis.get(cache_key)
         if cached:
-            return {"data": json.loads(cached), "cached": True}
+            return {"data": _sanitize_json(json.loads(cached)), "cached": True}
     except Exception:
         pass
 
@@ -1139,7 +1172,7 @@ async def analyze(
 
     background_tasks.add_task(_cache)
 
-    return {"data": data, "cached": False}
+    return {"data": _sanitize_json(data), "cached": False}
 
 
 @router.delete("/cache/{ticker}")
