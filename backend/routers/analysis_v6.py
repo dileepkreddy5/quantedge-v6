@@ -629,26 +629,79 @@ class QuantEdgeAnalyzerV6:
             if len(X_hist) < 100:
                 return self._statistical_predictions(feature_matrix, regime)
 
-            # ── 2. FORWARD RETURN LABELS ──────────────────────
-            # Label = log(close[t+21] / close[t]), clipped at ±30%
-            # Clipping removes tail outliers that would dominate the loss.
+            # ── 2. TRIPLE-BARRIER LABELS (Lopez de Prado, 2018, Ch.3) ────────
+            # Replaces naive fixed-horizon labels with path-dependent labels.
+            # For each event t0, we simulate holding with:
+            #   - Upper barrier (profit-take): entry + pt_mult * sigma_t
+            #   - Lower barrier (stop-loss):   entry - sl_mult * sigma_t
+            #   - Vertical barrier (time):     t0 + max_horizon (21 days)
+            # Label is the REALIZED log-return at whichever barrier is touched first.
+            # This matches how real trading works and removes the ±30% clip artifact.
             close_series = price_data["close"]
-            horizon = 21
+            max_horizon = 21
+            pt_mult = 2.0   # profit-take = 2 sigma
+            sl_mult = 2.0   # stop-loss   = 2 sigma (symmetric for regression target)
+
+            # Rolling volatility (20-day) as barrier width scalar
+            log_returns = np.log(close_series / close_series.shift(1))
+            sigma = log_returns.rolling(window=20, min_periods=5).std().bfill()
+
             y_list, valid_idx = [], []
+            n_total_bars = len(close_series)
             for i, date in enumerate(dates):
                 try:
                     pos = close_series.index.get_loc(date)
-                    if pos + horizon < len(close_series):
-                        fwd = np.log(
-                            close_series.iloc[pos + horizon] / close_series.iloc[pos]
-                        )
-                        y_list.append(float(np.clip(fwd, -0.30, 0.30)))
-                        valid_idx.append(i)
+                    if pos + max_horizon >= n_total_bars:
+                        continue
+
+                    entry_price = float(close_series.iloc[pos])
+                    entry_sigma = float(sigma.iloc[pos])
+                    if entry_sigma <= 0 or not np.isfinite(entry_sigma):
+                        continue
+
+                    # Barrier prices
+                    upper = entry_price * np.exp(pt_mult * entry_sigma)
+                    lower = entry_price * np.exp(-sl_mult * entry_sigma)
+
+                    # Walk forward to find first-touch barrier
+                    realized_return = None
+                    for j in range(1, max_horizon + 1):
+                        if pos + j >= n_total_bars:
+                            break
+                        p = float(close_series.iloc[pos + j])
+                        if p >= upper:
+                            # Profit-take hit (path-dependent realized return)
+                            realized_return = np.log(upper / entry_price)
+                            break
+                        if p <= lower:
+                            # Stop-loss hit
+                            realized_return = np.log(lower / entry_price)
+                            break
+
+                    # Vertical barrier: use actual return at t + max_horizon
+                    if realized_return is None:
+                        final_price = float(close_series.iloc[pos + max_horizon])
+                        realized_return = np.log(final_price / entry_price)
+
+                    y_list.append(float(realized_return))
+                    valid_idx.append(i)
                 except Exception:
                     continue
 
             if len(y_list) < 80:
+                logger.warning(f"Triple-barrier: only {len(y_list)} valid events, using statistical fallback")
                 return self._statistical_predictions(feature_matrix, regime)
+
+            # Log distribution of realized returns for transparency
+            y_arr_preview = np.array(y_list)
+            pct_upper = float((y_arr_preview > 0.01).mean())
+            pct_lower = float((y_arr_preview < -0.01).mean())
+            pct_middle = 1.0 - pct_upper - pct_lower
+            logger.info(
+                f"Triple-barrier labels for {ticker}: n={len(y_list)}, "
+                f"upper={pct_upper:.1%}, middle={pct_middle:.1%}, lower={pct_lower:.1%}, "
+                f"mean_ret={y_arr_preview.mean():+.4f}, std={y_arr_preview.std():.4f}"
+            )
 
             X = X_hist[valid_idx]
             y = np.array(y_list, dtype=np.float64)
