@@ -85,7 +85,7 @@ export default function Dashboard() {
       });
     }, 500);
     return () => clearTimeout(timer);
-  }, [searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [searchParams]); // eslint-disable-line
   const [activeTab, setActiveTab] = useState('overview');
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
