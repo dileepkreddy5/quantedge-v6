@@ -40,6 +40,7 @@ from ml.price_oracle.analyst_ratings import AnalystRatingsEngine
 
 from ml.labeling.triple_barrier import LabelingPipeline, DeflatedSharpeRatio
 from ml.labeling.meta_label import MetaLabeler, build_summary as build_meta_summary
+from ml.labeling.pbo import compute_pbo_from_ticker_history
 from ml.risk.risk_engine import MasterRiskEngine, DynamicCovarianceEngine, CVaREngine, VolatilityTargetingEngine
 from ml.portfolio.portfolio_engine import (
     HierarchicalRiskParity,
@@ -370,11 +371,25 @@ class QuantEdgeAnalyzerV6:
                     skewness=skew,
                     kurtosis=kurt,
                 )
+                # Probability of Backtest Overfitting (Bailey et al. 2014).
+                # Synthesizes 8 variant strategies on ticker's return series,
+                # runs CSCV to estimate overfit probability.
+                pbo_result = None
+                try:
+                    pbo_result = compute_pbo_from_ticker_history(
+                        ticker_returns=returns.values,
+                        n_strategies=8,
+                        n_slices=6,
+                    )
+                except Exception as pbo_err:
+                    logger.warning(f"PBO computation failed: {pbo_err}")
+
                 result["governance"] = {
                     "deflated_sharpe_ratio": float(dsr),
                     "is_genuine_alpha": self.dsr.is_genuine(dsr),
                     "sharpe_ratio_raw": float(sharpe),
                     "n_models_tested": 8,
+                    "pbo": pbo_result,
                     "labeling": {
                         "n_events": labeling_result.get("n_events", 0),
                         "label_distribution": labeling_result.get("label_distribution", {}),
@@ -708,16 +723,22 @@ class QuantEdgeAnalyzerV6:
             X = X_hist[valid_idx]
             y = np.array(y_list, dtype=np.float64)
 
-            # ── 3. TRAIN/VAL SPLIT WITH 60-DAY EMBARGO ────────
-            # Embargo: skip 60 days after the train split endpoint.
-            # Without this, autocorrelated features would let the model
-            # implicitly see future returns through overlapping windows.
+            # ── 3. TRAIN/VAL SPLIT WITH EMBARGO ────────
+            # 70/30 split leaves enough val samples for both model fit validation
+            # AND meta-labeling training. Embargo is sized from horizon (21) not
+            # a fixed 60 — which was too aggressive for short series and left
+            # meta-labeling with <10 val samples, silently skipping.
             # Reference: Lopez de Prado (2018), Advances in Financial ML, Ch.7
-            n_train = int(len(y) * 0.80)
-            n_embargo_end = min(n_train + 60, len(y) - 10)
+            n_train = int(len(y) * 0.70)
+            embargo_size = min(horizon + 5, 30)  # embargo = horizon + buffer, capped at 30
+            n_embargo_end = min(n_train + embargo_size, len(y) - 15)
             X_train, y_train = X[:n_train], y[:n_train]
-            X_val = X[n_embargo_end:] if len(X) - n_embargo_end >= 10 else None
+            X_val = X[n_embargo_end:] if len(X) - n_embargo_end >= 15 else None
             y_val = y[n_embargo_end:] if X_val is not None else None
+            logger.info(
+                f"Train/val split: n_train={n_train}, embargo={embargo_size}, "
+                f"n_val={len(X_val) if X_val is not None else 0}"
+            )
 
             # ── 4. TODAY'S FEATURE VECTOR ────────────────────
             # Must use the same feature_names list so the vector
@@ -792,7 +813,7 @@ class QuantEdgeAnalyzerV6:
             meta_conf_21d = 0.5
             meta_labeler = MetaLabeler(horizons=[5, 10, 21, 63, 252])
             try:
-                if X_val is not None and y_val is not None and len(X_val) >= 30:
+                if X_val is not None and y_val is not None and len(X_val) >= 15:
                     xgb_val_preds = xgb_model.predict(X_val) if 'xgb_model' in dir() else None
                     lgb_val_preds = lgb_model.predict(X_val) if 'lgb_model' in dir() else None
                     if xgb_val_preds is not None and lgb_val_preds is not None:

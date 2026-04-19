@@ -238,6 +238,123 @@ function FamaFrenchTable({ data }: { data: any }) {
 }
 
 // ── Main Overview V2 component ───────────────────────────────
+
+// ═══════════════════════════════════════════════════════════════════════════
+// HONESTY PANEL — Deflated Sharpe + PBO
+// ═══════════════════════════════════════════════════════════════════════════
+function HonestyPanel({ data }: { data: any }) {
+  const gov = data?.governance;
+  if (!gov) return null;
+
+  const dsr: number | null = typeof gov.deflated_sharpe_ratio === 'number'
+    ? gov.deflated_sharpe_ratio : null;
+  const sharpeRaw: number | null = typeof gov.sharpe_ratio_raw === 'number'
+    ? gov.sharpe_ratio_raw : null;
+  const isGenuine: boolean = gov.is_genuine_alpha === true;
+
+  const pbo = gov.pbo;
+  const pboValue: number | null = pbo && typeof pbo.pbo === 'number' ? pbo.pbo : null;
+  const pboInterp: string = pbo?.interpretation ?? '';
+  const pboIsOverfit: boolean = pbo?.is_overfit === true;
+
+  const COLORS = {
+    bg:        '#1a0f0a',
+    border:    '#3a2920',
+    text:      '#d4c4b0',
+    textDim:   '#9d8b7a',
+    amber:     '#daa520',
+    green:     '#22c55e',
+    red:       '#ef4444',
+    yellow:    '#f59e0b',
+  };
+
+  const dsrColor = dsr == null ? COLORS.textDim
+    : dsr >= 0.95 ? COLORS.green
+    : dsr >= 0.70 ? COLORS.amber
+    : dsr >= 0.50 ? COLORS.yellow
+    : COLORS.red;
+
+  const pboColor = pboValue == null ? COLORS.textDim
+    : pboValue < 0.10 ? COLORS.green
+    : pboValue < 0.30 ? COLORS.amber
+    : pboValue < 0.50 ? COLORS.yellow
+    : COLORS.red;
+
+  const dsrPct = dsr != null ? (dsr * 100).toFixed(1) + '%' : '—';
+  const pboPct = pboValue != null ? (pboValue * 100).toFixed(1) + '%' : '—';
+
+  return (
+    <div style={{
+      background: COLORS.bg,
+      border: `1px solid ${COLORS.border}`,
+      borderRadius: 4,
+      padding: 16,
+      marginTop: 12,
+    }}>
+      <div style={{
+        fontFamily: "'Fira Code', monospace", fontSize: 10, letterSpacing: 2,
+        color: COLORS.textDim, marginBottom: 12,
+      }}>
+        HONESTY — IS THIS SIGNAL REAL?
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+        {/* DSR */}
+        <div>
+          <div style={{ fontSize: 11, color: COLORS.textDim, marginBottom: 4 }}>
+            DEFLATED SHARPE RATIO
+          </div>
+          <div style={{ fontSize: 24, color: dsrColor, fontWeight: 600 }}>
+            {dsrPct}
+          </div>
+          <div style={{ fontSize: 11, color: COLORS.text, marginTop: 4, lineHeight: 1.5 }}>
+            {dsr == null ? 'Not available.' : isGenuine
+              ? 'Passes threshold for genuine alpha after selection-bias correction.'
+              : `Below 95% genuine-alpha threshold. Raw Sharpe ${sharpeRaw?.toFixed(2) ?? '—'} may be inflated by multiple-testing bias.`}
+          </div>
+          <div style={{ fontSize: 10, color: COLORS.textDim, marginTop: 6 }}>
+            Bailey & López de Prado (2014). Corrects Sharpe for N strategies tested.
+          </div>
+        </div>
+
+        {/* PBO */}
+        <div>
+          <div style={{ fontSize: 11, color: COLORS.textDim, marginBottom: 4 }}>
+            PROBABILITY OF BACKTEST OVERFITTING
+          </div>
+          <div style={{ fontSize: 24, color: pboColor, fontWeight: 600 }}>
+            {pboPct}
+          </div>
+          <div style={{ fontSize: 11, color: COLORS.text, marginTop: 4, lineHeight: 1.5 }}>
+            {pboValue == null ? (pboInterp || 'Not available.') : pboInterp}
+          </div>
+          <div style={{ fontSize: 10, color: COLORS.textDim, marginTop: 6 }}>
+            Bailey et al. (2014). CSCV across {pbo?.n_strategies ?? 0} variants × {pbo?.n_slices ?? 0} slices.
+          </div>
+        </div>
+      </div>
+
+      {(pboIsOverfit || (dsr != null && !isGenuine)) && (
+        <div style={{
+          marginTop: 12,
+          padding: '8px 12px',
+          background: '#2d1410',
+          border: `1px solid ${COLORS.red}`,
+          borderRadius: 3,
+          fontSize: 11,
+          color: COLORS.text,
+          lineHeight: 1.5,
+        }}>
+          <strong style={{ color: COLORS.red }}>⚠ Caution:</strong>{' '}
+          The honesty metrics suggest the apparent edge may not generalize out-of-sample.
+          Consider paper trading before deploying capital.
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 export default function OverviewV2({
   data, ticker,
 }: { data: any; ticker: string; onAnalyze?: (t: string) => void }) {
@@ -388,6 +505,9 @@ export default function OverviewV2({
 
       {/* ── FAMA-FRENCH ─────────────────────────────────────── */}
       <FamaFrenchTable data={data} />
+
+      {/* ── HONESTY (Deflated Sharpe + PBO) ─────────────────── */}
+      <HonestyPanel data={data} />
 
       {/* ── PRICE CHART + SCENARIOS ─────────────────────────── */}
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 12 }}>
