@@ -112,7 +112,15 @@ class XGBoostPredictor:
         top10 = sorted(fi_dict.items(), key=lambda x: x[1], reverse=True)[:10]
 
         train_pred = self.model.predict(X_scaled)
-        ic = np.corrcoef(y_train, train_pred)[0, 1]
+        # np.corrcoef returns NaN if either series has zero variance.
+        # Guard: if NaN/inf, treat as "no information" (IC=0) instead of
+        # letting NaN propagate through the pipeline and end up as null in UI.
+        try:
+            ic = np.corrcoef(y_train, train_pred)[0, 1]
+            if not np.isfinite(ic):
+                ic = 0.0
+        except Exception:
+            ic = 0.0
 
         return {
             "ic_train": float(ic),
@@ -160,8 +168,11 @@ class XGBoostPredictor:
                     {k: v for k, v in row_shap.items() if v < 0}.items(),
                     key=lambda x: x[1]
                 )[:5]
-                shap_dict["top_bullish_drivers"] = top_positive
-                shap_dict["top_bearish_drivers"] = top_negative
+                # Convert to dict form so callers can ** -unpack them.
+                # Previously these were list-of-tuples which silently produced
+                # empty dicts when merged downstream.
+                shap_dict["top_bullish_drivers"] = dict(top_positive)
+                shap_dict["top_bearish_drivers"] = dict(top_negative)
 
         return predictions, shap_dict
 
@@ -178,6 +189,8 @@ class XGBoostPredictor:
         from scipy.stats import spearmanr
         preds = self.predict(X)
         ic, _ = spearmanr(preds, y_actual)
+        if not np.isfinite(ic):
+            ic = 0.0
         return float(ic)
 
 
@@ -250,6 +263,8 @@ class LightGBMPredictor:
         train_pred = self.model.predict(X_scaled)
         from scipy.stats import spearmanr
         ic, _ = spearmanr(y_train, train_pred)
+        if not np.isfinite(ic):
+            ic = 0.0
 
         return {
             "ic_train": float(ic),
@@ -356,6 +371,8 @@ class WalkForwardValidator:
             preds = model.predict(X_test)
 
             ic, _ = spearmanr(preds, y_test)
+            if not np.isfinite(ic):
+                ic = 0.0
             rmse = np.sqrt(mean_squared_error(y_test, preds))
             hit_rate = np.mean(np.sign(preds) == np.sign(y_test))
 
@@ -460,6 +477,10 @@ class EnsembleModel:
         """
         from scipy.stats import spearmanr, pearsonr
         rank_ic, rank_p = spearmanr(predictions, realized_returns)
+
+        if not np.isfinite(rank_ic):
+
+            rank_ic = 0.0
         ic, pearson_p = pearsonr(predictions, realized_returns)
 
         # ICIR: IC / std(IC) measured across rolling windows

@@ -1027,8 +1027,15 @@ class QuantEdgeAnalyzerV6:
                 return round(base * np.sqrt(h / 21), 4)
 
             n_models = len(weighted)
-            mean_ic = (abs(xgb_ic) + abs(lgb_ic)) / max(n_models, 1)
+            # Defensive NaN guard: even though xgboost_lgbm.py now returns 0
+            # on NaN IC, keep this as belt-and-suspenders. A NaN in confidence
+            # propagates through _sanitize_json and shows as null in the UI.
+            _xi = float(xgb_ic) if np.isfinite(xgb_ic) else 0.0
+            _li = float(lgb_ic) if np.isfinite(lgb_ic) else 0.0
+            mean_ic = (abs(_xi) + abs(_li)) / max(n_models, 1)
             confidence = float(np.clip(mean_ic / 0.10, 0.0, 1.0))
+            if not np.isfinite(confidence):
+                confidence = 0.0
 
             return {
                 "lstm": lstm_preds if lstm_preds else {
