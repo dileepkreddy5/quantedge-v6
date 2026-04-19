@@ -639,6 +639,7 @@ class QuantEdgeAnalyzerV6:
             # This matches how real trading works and removes the ±30% clip artifact.
             close_series = price_data["close"]
             max_horizon = 21
+            horizon = max_horizon  # downstream XGBoost/LightGBM/LSTM reference 'horizon'
             pt_mult = 2.0   # profit-take = 2 sigma
             sl_mult = 2.0   # stop-loss   = 2 sigma (symmetric for regression target)
 
