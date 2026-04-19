@@ -584,6 +584,30 @@ class QuantEdgeAnalyzerV6:
             result["analysis_duration_seconds"] = round(time.time() - start_time, 1)
             result["version"] = "6.0"
 
+            # ── LAYER 9: V6 INSTITUTIONAL ENGINE (non-fatal enrichment) ──
+            # Enriches response with distributional modeling, Kelly bet sizing,
+            # fractional differentiation metrics, institutional risk metrics, HRP.
+            # Wrapped in try/except; if v6 engine fails, response is returned
+            # unchanged (bridge.enrich_analysis has its own internal error handling).
+            try:
+                from ml.v6.bridge import get_v6_bridge
+                bridge = get_v6_bridge()
+                if bridge.available:
+                    result = bridge.enrich_analysis(
+                        v5_result=result,
+                        prices=price_data["close"],
+                        returns=returns,
+                        ticker=ticker,
+                        regime=str(result.get("current_regime", "NORMAL")),
+                    )
+                    logger.info(f"V6 institutional enrichment applied for {ticker}")
+                else:
+                    result["v6_available"] = False
+            except Exception as e:
+                logger.warning(f"V6 institutional enrichment failed (non-fatal): {e}")
+                result["v6_available"] = False
+                result["v6_error"] = str(e)[:200]
+
         except HTTPException:
             raise
         except asyncio.TimeoutError:
