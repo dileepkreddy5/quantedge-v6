@@ -804,10 +804,22 @@ class QuantEdgeAnalyzerV6:
                     }
                     top = sorted(all_shap.items(), key=lambda kv: abs(kv[1]), reverse=True)[:8]
                     shap_drivers = [{"feature": k, "impact": round(v * 100, 4)} for k, v in top]
-                except Exception:
-                    # Fallback: raw feature importance (not SHAP, but better than nothing)
+                    if not shap_drivers:
+                        # SHAP succeeded but returned no drivers — fall through
+                        # to feature importance so the user sees *something*.
+                        logger.info(f"SHAP for {ticker}: empty drivers, using feature importance fallback")
+                        raise ValueError("empty_shap")
+                except Exception as e:
+                    # Fallback: raw feature importance from XGBoost gain
+                    # (not SHAP, but more honest than blank).
+                    logger.info(f"SHAP fallback for {ticker}: {type(e).__name__}={e}")
                     fi = xgb_fit.get("top10_features", [])
-                    shap_drivers = [{"feature": k, "impact": round(v * 100, 4)} for k, v in fi[:8]]
+                    # top10_features is list of (name, importance) tuples; keep only non-zero
+                    non_zero_fi = [(k, v) for k, v in fi if v and abs(v) > 1e-9]
+                    shap_drivers = [
+                        {"feature": k, "impact": round(float(v) * 100, 4)}
+                        for k, v in non_zero_fi[:8]
+                    ]
 
             except Exception as e:
                 logger.warning(f"XGBoost training failed: {e}")

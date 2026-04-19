@@ -448,8 +448,8 @@ resource "aws_secretsmanager_secret_version" "quantedge_secrets" {
     ANTHROPIC_API_KEY = var.anthropic_api_key
     POLYGON_API_KEY   = "REPLACE_AFTER_APPLY"
     DB_PASSWORD       = var.db_password
-    DB_HOST           = aws_db_instance.quantedge_postgres.address
-    DB_PORT           = tostring(aws_db_instance.quantedge_postgres.port)
+    DB_HOST           = aws_db_instance.quantedge.address
+    DB_PORT           = tostring(aws_db_instance.quantedge.port)
     DB_NAME           = "quantedge"
     DB_USER           = "quantedge"
   })
