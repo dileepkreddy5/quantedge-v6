@@ -1,4 +1,4 @@
-k# ========================
+# ========================
 # Environment / Secrets
 # ========================
 .env
@@ -86,3 +86,15 @@ Thumbs.db
 quantedge_all_code.txt
 backend/main_v6.py.backup
 *.backup
+
+# ========================
+# Terraform / AWS / Secrets (added 2026-04-19 after audit)
+# ========================
+*.tfvars
+*.plan
+.terraform.lock.hcl
+task-def*.json
+new-task-def*.json
+secrets.json
+.quantedge_*
+.qe_secrets_*

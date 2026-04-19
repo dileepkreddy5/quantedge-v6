@@ -7,7 +7,14 @@ import os
 config = context.config
 
 # Override sqlalchemy.url from environment
-db_url = os.environ.get("DATABASE_URL", "").replace("postgresql+asyncpg://", "postgresql://")
+# Support both DATABASE_URL and DB_* components (same logic as core.config.effective_database_url)
+_direct_url = os.environ.get("DATABASE_URL", "")
+if _direct_url:
+    db_url = _direct_url.replace("postgresql+asyncpg://", "postgresql://")
+else:
+    _h = os.environ.get("DB_HOST"); _p = os.environ.get("DB_PORT", "5432")
+    _n = os.environ.get("DB_NAME"); _u = os.environ.get("DB_USER"); _pw = os.environ.get("DB_PASSWORD")
+    db_url = f"postgresql://{_u}:{_pw}@{_h}:{_p}/{_n}" if all([_h, _n, _u, _pw]) else ""
 if db_url:
     config.set_main_option("sqlalchemy.url", db_url)
 

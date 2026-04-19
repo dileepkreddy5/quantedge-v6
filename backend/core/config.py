@@ -36,7 +36,28 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
 
     # ─── Database ─────────────────────────────────────────
-    DATABASE_URL: str = Field(..., env="DATABASE_URL")
+    # DATABASE_URL can be provided directly OR constructed from components
+    # (DB_HOST + DB_PORT + DB_NAME + DB_USER + DB_PASSWORD). Component approach
+    # is preferred — secrets never appear as a full URL in task definitions.
+    DATABASE_URL: Optional[str] = Field(default=None, env="DATABASE_URL")
+    DB_HOST: Optional[str] = Field(default=None, env="DB_HOST")
+    DB_PORT: str = Field(default="5432", env="DB_PORT")
+    DB_NAME: Optional[str] = Field(default=None, env="DB_NAME")
+    DB_USER: Optional[str] = Field(default=None, env="DB_USER")
+    DB_PASSWORD: Optional[str] = Field(default=None, env="DB_PASSWORD")
+
+    @property
+    def effective_database_url(self) -> Optional[str]:
+        """Return DATABASE_URL if set, otherwise construct from components.
+        Returns None if neither path yields a valid URL."""
+        if self.DATABASE_URL:
+            return self.DATABASE_URL
+        if all([self.DB_HOST, self.DB_NAME, self.DB_USER, self.DB_PASSWORD]):
+            return (
+                f"postgresql+asyncpg://{self.DB_USER}:{self.DB_PASSWORD}"
+                f"@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
+            )
+        return None
 
     # ─── Redis ────────────────────────────────────────────
     REDIS_URL: str = Field(..., env="REDIS_URL")

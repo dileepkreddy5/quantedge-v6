@@ -144,9 +144,16 @@ async def lifespan(app: FastAPI):
     # 2. PostgreSQL — optional, graceful fallback if RDS is stopped
     app.state.db = None
     try:
-        db_url = settings.DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
+        _db_url_raw = settings.effective_database_url
+        if not _db_url_raw:
+            logger.warning("No DATABASE_URL or DB_* components set — skipping DB")
+            raise RuntimeError("database configuration missing")
+        db_url = _db_url_raw.replace("postgresql+asyncpg://", "postgresql://")
+        # RDS PostgreSQL has rds.force_ssl=1 by default. asyncpg does NOT enable SSL
+        # unless we pass ssl= explicitly. Without this we get:
+        #   "no pg_hba.conf entry for host X, user quantedge, database quantedge, no encryption"
         app.state.db = await asyncpg.create_pool(
-            db_url, min_size=1, max_size=5, command_timeout=10,
+            db_url, min_size=1, max_size=5, command_timeout=10, ssl="require",
         )
         logger.info("✅ PostgreSQL pool connected")
         async with app.state.db.acquire() as conn:

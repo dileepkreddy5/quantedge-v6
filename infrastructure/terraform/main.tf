@@ -448,6 +448,10 @@ resource "aws_secretsmanager_secret_version" "quantedge_secrets" {
     ANTHROPIC_API_KEY = var.anthropic_api_key
     POLYGON_API_KEY   = "REPLACE_AFTER_APPLY"
     DB_PASSWORD       = var.db_password
+    DB_HOST           = aws_db_instance.quantedge_postgres.address
+    DB_PORT           = tostring(aws_db_instance.quantedge_postgres.port)
+    DB_NAME           = "quantedge"
+    DB_USER           = "quantedge"
   })
 
   # Prevent Terraform from overwriting POLYGON_API_KEY once set manually
@@ -611,8 +615,8 @@ resource "aws_ecs_task_definition" "quantedge_api" {
       environment = [
         # Redis is localhost — no ElastiCache needed
         { name = "REDIS_URL",             value = "redis://localhost:6379/0" },
-        # RDS connection — PostgreSQL 15 on db.t3.micro
-        { name = "DATABASE_URL", value = "postgresql://quantedge:${var.db_password}@quantedge-postgres.c09yes6ea4te.us-east-1.rds.amazonaws.com/quantedge" },
+        # DATABASE_URL is NOT set here — backend constructs it from DB_* secrets pulled
+        # from Secrets Manager. This keeps the password out of ECS task definitions entirely.
         # Application settings
         { name = "ENVIRONMENT",           value = "production" },
         { name = "MODEL_DIR",             value = "/app/models" },
@@ -628,7 +632,12 @@ resource "aws_ecs_task_definition" "quantedge_api" {
       secrets = [
         { name = "ANTHROPIC_API_KEY", valueFrom = "${aws_secretsmanager_secret.quantedge_secrets.arn}:ANTHROPIC_API_KEY::" },
         { name = "POLYGON_API_KEY",   valueFrom = "${aws_secretsmanager_secret.quantedge_secrets.arn}:POLYGON_API_KEY::" },
-        { name = "SECRET_KEY",        valueFrom = "${aws_secretsmanager_secret.quantedge_secrets.arn}:SECRET_KEY::" }
+        { name = "SECRET_KEY",        valueFrom = "${aws_secretsmanager_secret.quantedge_secrets.arn}:SECRET_KEY::" },
+        { name = "DB_HOST",           valueFrom = "${aws_secretsmanager_secret.quantedge_secrets.arn}:DB_HOST::" },
+        { name = "DB_PORT",           valueFrom = "${aws_secretsmanager_secret.quantedge_secrets.arn}:DB_PORT::" },
+        { name = "DB_NAME",           valueFrom = "${aws_secretsmanager_secret.quantedge_secrets.arn}:DB_NAME::" },
+        { name = "DB_USER",           valueFrom = "${aws_secretsmanager_secret.quantedge_secrets.arn}:DB_USER::" },
+        { name = "DB_PASSWORD",       valueFrom = "${aws_secretsmanager_secret.quantedge_secrets.arn}:DB_PASSWORD::" }
       ]
 
       logConfiguration = {
@@ -1169,11 +1178,8 @@ output "rds_endpoint" {
   value       = aws_db_instance.quantedge.endpoint
 }
 
-output "rds_database_url" {
-  description = "Complete DATABASE_URL for the app"
-  value       = "postgresql://quantedge:YOURPASSWORD@${aws_db_instance.quantedge.endpoint}/quantedge"
-  sensitive   = true
-}
+# Note: DATABASE_URL is no longer exposed as a Terraform output — the app
+# constructs it at runtime from DB_* secrets in Secrets Manager.
 
 output "cognito_user_pool_id" {
   description = "Cognito User Pool ID"
