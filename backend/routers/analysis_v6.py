@@ -39,6 +39,7 @@ from ml.features.feature_engineering import FeaturePipeline
 from ml.price_oracle.analyst_ratings import AnalystRatingsEngine
 
 from ml.labeling.triple_barrier import LabelingPipeline, DeflatedSharpeRatio
+from ml.labeling.meta_label import MetaLabeler, build_summary as build_meta_summary
 from ml.risk.risk_engine import MasterRiskEngine, DynamicCovarianceEngine, CVaREngine, VolatilityTargetingEngine
 from ml.portfolio.portfolio_engine import (
     HierarchicalRiskParity,
@@ -787,6 +788,33 @@ class QuantEdgeAnalyzerV6:
             except Exception as e:
                 logger.warning(f"LightGBM training failed: {e}")
 
+            # ── 6b. META-LABELING (21d XGB+LGB ensemble) ─────
+            meta_conf_21d = 0.5
+            meta_labeler = MetaLabeler(horizons=[5, 10, 21, 63, 252])
+            try:
+                if X_val is not None and y_val is not None and len(X_val) >= 30:
+                    xgb_val_preds = xgb_model.predict(X_val) if 'xgb_model' in dir() else None
+                    lgb_val_preds = lgb_model.predict(X_val) if 'lgb_model' in dir() else None
+                    if xgb_val_preds is not None and lgb_val_preds is not None:
+                        primary_val_21d = 0.5 * xgb_val_preds + 0.5 * lgb_val_preds
+                        meta_labeler.fit(
+                            X_val=X_val,
+                            primary_preds=primary_val_21d,
+                            y_val=y_val,
+                            horizon=21,
+                            feature_names=feature_names,
+                        )
+                        # Today's primary prediction (ensemble)
+                        today_xgb = float(xgb_model.predict(today_vec)[0])
+                        today_lgb = float(lgb_model.predict(today_vec)[0])
+                        primary_today_21d = 0.5 * today_xgb + 0.5 * today_lgb
+                        meta_conf_21d = meta_labeler.predict_confidence(
+                            today_vec.flatten(), primary_today_21d, horizon=21
+                        )
+                        logger.info(f"Meta-label 21d: primary={primary_today_21d:+.4f}, confidence={meta_conf_21d:.3f}")
+            except Exception as e:
+                logger.warning(f"Meta-labeling 21d failed: {e}")
+
             # ── 7. BiLSTM + TEMPORAL ATTENTION + MC DROPOUT ──
             # Architecture: Input(n_features) → BiLSTM(128) → Attention → BiLSTM(64)
             #               → MultiTaskHeads → [5d, 10d, 21d, 63d, 252d predictions]
@@ -850,6 +878,67 @@ class QuantEdgeAnalyzerV6:
             except Exception as e:
                 logger.warning(f"LSTM training/inference failed: {e}")
 
+            # ── 7b. META-LABELING (5/10/63/252 LSTM primaries) ──────
+            # Train per-horizon meta-classifier using LSTM's val-set predictions.
+            # We regenerate realized returns at each horizon from the price series.
+            meta_conf_by_horizon = {21: meta_conf_21d}
+            try:
+                if lstm_preds and 'trainer' in dir() and len(seqs_np) > n_seq_train + 10:
+                    # LSTM val sequences (held-out portion)
+                    X_seq_val = torch.FloatTensor(seqs_np[n_seq_train:]).to(trainer.device)
+                    trainer.model.eval()
+                    with torch.no_grad():
+                        val_out = trainer.model(X_seq_val)
+
+                    # Val-set flat feature vectors (last step of each sequence)
+                    # for meta-feature construction. Shape: (n_val, n_features)
+                    val_flat_features = seqs_np[n_seq_train:, -1, :]  # (n_val, n_features)
+
+                    for h_key, h_val in [("pred_5d", 5), ("pred_10d", 10), ("pred_63d", 63), ("pred_252d", 252)]:
+                        try:
+                            head_key = f"pred_{h_val}d"
+                            if head_key not in val_out:
+                                continue
+                            primary_val_h = val_out[head_key].squeeze().cpu().numpy()
+                            if primary_val_h.ndim == 0:
+                                primary_val_h = primary_val_h.reshape(1)
+
+                            # Realized h-day forward returns matching val sequences
+                            realized_h = []
+                            for i in range(len(primary_val_h)):
+                                base_idx = n_seq_train + i + SEQ_LEN
+                                tgt_idx = base_idx + h_val
+                                if tgt_idx < len(y):
+                                    realized_h.append(float(y[tgt_idx]))
+                                else:
+                                    realized_h.append(float(y[-1]) if len(y) else 0.0)
+                            realized_h = np.array(realized_h, dtype=np.float64)
+
+                            if len(realized_h) < 30:
+                                continue
+
+                            meta_labeler.fit(
+                                X_val=val_flat_features[:len(primary_val_h)],
+                                primary_preds=primary_val_h,
+                                y_val=realized_h,
+                                horizon=h_val,
+                                feature_names=feature_names,
+                            )
+
+                            # Today's LSTM prediction for this horizon (already in lstm_preds)
+                            today_lstm_pred = float(lstm_preds.get(head_key, 0.0)) / 100.0
+                            conf_h = meta_labeler.predict_confidence(
+                                today_vec.flatten(),
+                                today_lstm_pred,
+                                horizon=h_val,
+                            )
+                            meta_conf_by_horizon[h_val] = conf_h
+                        except Exception as eh:
+                            logger.warning(f"Meta-labeling {h_val}d failed: {eh}")
+                            continue
+            except Exception as e:
+                logger.warning(f"LSTM meta-labeling block failed: {e}")
+
             # ── 8. ENSEMBLE ───────────────────────────────────
             # Weights: XGB 40%, LGB 40%, LSTM 20%
             # LSTM weighted lower because it trains from scratch each request;
@@ -900,6 +989,18 @@ class QuantEdgeAnalyzerV6:
                     "pred_252d":          scale(ens_21d, 252),
                     "confidence":         round(confidence, 3),
                     "model_disagreement": round(abs(xgb_pred_21d - lgb_pred_21d), 4),
+                    **build_meta_summary(
+                        horizons=[5, 10, 21, 63, 252],
+                        primary_preds_by_horizon={
+                            5:   lstm_preds.get("pred_5d", scale(ens_21d, 5)) / 100.0,
+                            10:  lstm_preds.get("pred_10d", scale(ens_21d, 10)) / 100.0,
+                            21:  ens_21d / 100.0,
+                            63:  lstm_preds.get("pred_63d", scale(ens_21d, 63)) / 100.0,
+                            252: lstm_preds.get("pred_252d", scale(ens_21d, 252)) / 100.0,
+                        },
+                        confidences_by_horizon=meta_conf_by_horizon,
+                        meta_labeler=meta_labeler,
+                    ),
                 },
                 "shap_top_drivers": shap_drivers,
                 "rank_ic_estimate": round(xgb_ic, 4),

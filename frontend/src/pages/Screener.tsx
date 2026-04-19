@@ -62,21 +62,129 @@ const HORIZON_TABS: Array<{ id: HorizonKey; label: string; description: string }
 ];
 
 function scoreColor(v: number): string {
-  if (v >= 75) return '#48bb78';  // green
-  if (v >= 55) return '#4299e1';  // blue
-  if (v >= 45) return '#a0aec0';  // gray
-  if (v >= 30) return '#ed8936';  // orange
-  return '#f56565';                // red
+  if (v >= 75) return '#22c55e';  // green
+  if (v >= 55) return '#b8860b';  // blue
+  if (v >= 45) return '#9d8b7a';  // gray
+  if (v >= 30) return '#f59e0b';  // orange
+  return '#ef4444';                // red
 }
 
 function regimeColor(regime: string): string {
   switch (regime) {
-    case 'calm':     return '#48bb78';
-    case 'normal':   return '#4299e1';
-    case 'elevated': return '#ed8936';
-    case 'panic':    return '#f56565';
-    default:         return '#a0aec0';
+    case 'calm':     return '#22c55e';
+    case 'normal':   return '#b8860b';
+    case 'elevated': return '#f59e0b';
+    case 'panic':    return '#ef4444';
+    default:         return '#9d8b7a';
   }
+}
+
+function ExplainerPanel() {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <div style={{
+      background: '#1a0f0a',
+      border: '1px solid #3a2920',
+      borderRadius: 6,
+      marginBottom: 16,
+      overflow: 'hidden',
+    }}>
+      <button
+        onClick={() => setOpen(!open)}
+        style={{
+          width: '100%',
+          padding: '12px 18px',
+          background: 'transparent',
+          border: 'none',
+          color: '#daa520',
+          fontSize: 11,
+          fontFamily: "'Fira Code', monospace",
+          letterSpacing: 2,
+          textAlign: 'left',
+          cursor: 'pointer',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+        }}
+      >
+        <span>NEW HERE? WHAT IS THIS?</span>
+        <span style={{ fontSize: 10, color: '#9d8b7a' }}>{open ? '▼ HIDE' : '▶ EXPAND'}</span>
+      </button>
+      {open && (
+        <div style={{ padding: '0 24px 20px', color: '#d4c4b0', fontSize: 13, lineHeight: 1.7 }}>
+          <p style={{ marginTop: 0 }}>
+            This screener scans 500+ liquid US stocks daily and ranks them across three time horizons.
+            Each stock gets a <strong style={{ color: '#daa520' }}>composite score (0–100)</strong> built
+            from four independent factors. Higher is better.
+          </p>
+
+          <div style={{
+            fontFamily: "'Fira Code', monospace", fontSize: 10, letterSpacing: 2,
+            color: '#9d8b7a', margin: '20px 0 10px',
+          }}>
+            THE FOUR FACTORS
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
+            <div>
+              <div style={{ color: '#daa520', fontWeight: 600, fontSize: 12 }}>QUALITY</div>
+              <div style={{ fontSize: 12 }}>Business fundamentals — ROIC, margins, debt levels, Piotroski score. How good is the underlying company.</div>
+            </div>
+            <div>
+              <div style={{ color: '#daa520', fontWeight: 600, fontSize: 12 }}>MOMENTUM</div>
+              <div style={{ fontSize: 12 }}>Price strength over 3/6/12 months. Is the stock trending up vs peers.</div>
+            </div>
+            <div>
+              <div style={{ color: '#daa520', fontWeight: 600, fontSize: 12 }}>ACCUMULATION</div>
+              <div style={{ fontSize: 12 }}>Volume signals suggesting institutional buying. Are big players adding positions.</div>
+            </div>
+            <div>
+              <div style={{ color: '#daa520', fontWeight: 600, fontSize: 12 }}>TREND</div>
+              <div style={{ fontSize: 12 }}>Moving average alignment, long-term direction. Is the stock above its 50/200-day lines.</div>
+            </div>
+          </div>
+
+          <div style={{
+            fontFamily: "'Fira Code', monospace", fontSize: 10, letterSpacing: 2,
+            color: '#9d8b7a', margin: '20px 0 10px',
+          }}>
+            THE THREE HORIZONS
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div><strong style={{ color: '#daa520' }}>LONG TERM</strong> (2–5 years) — weights quality heavily. For patient investors prioritizing durable businesses.</div>
+            <div><strong style={{ color: '#daa520' }}>MEDIUM TERM</strong> (6–12 months) — balanced factor mix. Suitable for core allocation.</div>
+            <div><strong style={{ color: '#daa520' }}>SHORT TERM</strong> (1–3 months) — momentum-heavy. Captures trends; requires frequent rebalancing.</div>
+          </div>
+
+          <div style={{
+            fontFamily: "'Fira Code', monospace", fontSize: 10, letterSpacing: 2,
+            color: '#9d8b7a', margin: '20px 0 10px',
+          }}>
+            READING A ROW
+          </div>
+          <div style={{ fontSize: 12 }}>
+            Each row shows the composite score and the four factor sub-scores. Colors:{' '}
+            <span style={{ color: '#22c55e' }}>green ≥75 strong</span>,{' '}
+            <span style={{ color: '#daa520' }}>amber 55–75 constructive</span>,{' '}
+            <span style={{ color: '#9d8b7a' }}>cream 45–55 neutral</span>,{' '}
+            <span style={{ color: '#f59e0b' }}>yellow 30–45 cautious</span>,{' '}
+            <span style={{ color: '#ef4444' }}>red &lt;30 weak</span>.
+            Click any row to see the underlying metrics.
+          </div>
+
+          <div style={{
+            marginTop: 18, paddingTop: 14, borderTop: '1px solid #3a2920',
+            fontSize: 11, color: '#9d8b7a', lineHeight: 1.6,
+          }}>
+            <strong style={{ color: '#b8860b' }}>Honest caveat:</strong> Scores are universe-relative signals,
+            not buy/sell recommendations. Backtest validation shows only short-term
+            configuration retained edge out-of-sample (~55% Sharpe retention,
+            ~5–8% annualized alpha realistic forward expectation).
+            Consider paper trading 3–6 months before deploying capital.
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function FactorBar({ label, value }: { label: string; value: number }) {
@@ -85,14 +193,14 @@ function FactorBar({ label, value }: { label: string; value: number }) {
     <div style={{ marginBottom: 6 }}>
       <div style={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        fontSize: 11, color: '#a0aec0', marginBottom: 3,
+        fontSize: 11, color: '#9d8b7a', marginBottom: 3,
       }}>
         <span>{label}</span>
         <span style={{ fontFamily: 'JetBrains Mono, monospace', color: scoreColor(value) }}>
           {value.toFixed(1)}
         </span>
       </div>
-      <div style={{ height: 4, background: '#1a1a3e', borderRadius: 2 }}>
+      <div style={{ height: 4, background: '#3a2920', borderRadius: 2 }}>
         <div style={{
           width, height: '100%', borderRadius: 2,
           background: scoreColor(value), transition: 'width 0.3s ease',
@@ -106,7 +214,7 @@ function RegimeBanner({ regime }: { regime: RegimeState }) {
   const color = regimeColor(regime.regime);
   return (
     <div style={{
-      background: '#0f0f23',
+      background: '#1a0f0a',
       border: `1px solid ${color}`,
       borderRadius: 8,
       padding: '14px 20px',
@@ -117,7 +225,7 @@ function RegimeBanner({ regime }: { regime: RegimeState }) {
       gap: 20,
     }}>
       <div>
-        <div style={{ fontSize: 11, color: '#a0aec0', letterSpacing: 1.5, marginBottom: 4 }}>
+        <div style={{ fontSize: 11, color: '#9d8b7a', letterSpacing: 1.5, marginBottom: 4 }}>
           MARKET REGIME
         </div>
         <div style={{
@@ -125,13 +233,13 @@ function RegimeBanner({ regime }: { regime: RegimeState }) {
         }}>
           {regime.regime}
           <span style={{
-            fontSize: 14, color: '#a0aec0', marginLeft: 12, letterSpacing: 0, fontWeight: 400,
+            fontSize: 14, color: '#9d8b7a', marginLeft: 12, letterSpacing: 0, fontWeight: 400,
           }}>
             × {regime.multiplier}
           </span>
         </div>
       </div>
-      <div style={{ flex: 1, fontSize: 12, color: '#a0aec0', lineHeight: 1.5 }}>
+      <div style={{ flex: 1, fontSize: 12, color: '#9d8b7a', lineHeight: 1.5 }}>
         {regime.reasoning || 'No stress signals detected'}
       </div>
     </div>
@@ -147,32 +255,32 @@ function FactorDetails({ row }: { row: RankedRow }) {
   };
   return (
     <div style={{
-      background: '#0a0a1a', padding: 16, borderTop: '1px solid #1a1a3e',
-      fontSize: 12, color: '#cbd5e0',
+      background: '#0a0505', padding: 16, borderTop: '1px solid #3a2920',
+      fontSize: 12, color: '#d4c4b0',
     }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 20 }}>
         <div>
-          <div style={{ fontWeight: 600, color: '#667eea', marginBottom: 8 }}>MOMENTUM</div>
+          <div style={{ fontWeight: 600, color: '#daa520', marginBottom: 8 }}>MOMENTUM</div>
           <div>12-1mo: {format(m.mom_12_1, '%')}</div>
           <div>6mo: {format(m.mom_6m, '%')}</div>
           <div>3mo: {format(m.mom_3m, '%')}</div>
           <div>Sharpe 3m: {format(m.sharpe_3m)}</div>
         </div>
         <div>
-          <div style={{ fontWeight: 600, color: '#667eea', marginBottom: 8 }}>ACCUMULATION</div>
+          <div style={{ fontWeight: 600, color: '#daa520', marginBottom: 8 }}>ACCUMULATION</div>
           <div>Vol surge: {format(m.volume_surge, 'x')}</div>
           <div>OBV slope: {format(m.obv_slope_norm)}</div>
           <div>Amihud: {format(m.amihud)}</div>
         </div>
         <div>
-          <div style={{ fontWeight: 600, color: '#667eea', marginBottom: 8 }}>TREND</div>
+          <div style={{ fontWeight: 600, color: '#daa520', marginBottom: 8 }}>TREND</div>
           <div>% above MA50: {format(m.pct_above_ma50, '%')}</div>
           <div>% above MA200: {format(m.pct_above_ma200, '%')}</div>
           <div>MA alignment: {m.ma_alignment > 0 ? '↑ bullish' : m.ma_alignment < 0 ? '↓ bearish' : '— mixed'}</div>
           <div>Hurst: {format(m.hurst)}</div>
         </div>
         <div>
-          <div style={{ fontWeight: 600, color: '#667eea', marginBottom: 8 }}>QUALITY</div>
+          <div style={{ fontWeight: 600, color: '#daa520', marginBottom: 8 }}>QUALITY</div>
           <div>Piotroski: {m.quality_piotroski !== undefined ? `${m.quality_piotroski} / 9` : '—'}</div>
           <div>Altman Z: {format(m.quality_altman_z)}</div>
           <div>Data: {m.quality_data_q || '—'}</div>
@@ -232,8 +340,8 @@ export default function Screener({ embedded = false }: { embedded?: boolean } = 
   return (
     <div style={{
       minHeight: embedded ? 'auto' : '100vh',
-      background: embedded ? 'transparent' : '#0a0a1a',
-      color: '#e2e8f0',
+      background: embedded ? 'transparent' : '#0a0505',
+      color: '#d4c4b0',
       fontFamily: 'Inter, sans-serif',
       padding: embedded ? '0' : '20px 30px',
     }}>
@@ -245,25 +353,25 @@ export default function Screener({ embedded = false }: { embedded?: boolean } = 
         }}>
           <div>
             <div style={{
-              fontSize: 26, fontWeight: 700, letterSpacing: 3, color: '#667eea',
+              fontSize: 26, fontWeight: 700, letterSpacing: 3, color: '#daa520',
             }}>
               QUANTEDGE SCREENER
             </div>
-            <div style={{ fontSize: 12, color: '#a0aec0', marginTop: 4 }}>
+            <div style={{ fontSize: 12, color: '#9d8b7a', marginTop: 4 }}>
               Ranked universe across three horizons · Regime-adjusted · 4 orthogonal factors
             </div>
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
             <button
               onClick={() => navigate('/dashboard')}
-              style={btnStyle('#2d3748')}
+              style={btnStyle('#2d1e18')}
             >
               ← Dashboard
             </button>
             <button
               onClick={handleForceRescan}
               disabled={loading}
-              style={btnStyle('#667eea')}
+              style={btnStyle('#daa520')}
             >
               {loading ? '...' : '🔄 Rescan'}
             </button>
@@ -277,7 +385,7 @@ export default function Screener({ embedded = false }: { embedded?: boolean } = 
           <button
             onClick={handleForceRescan}
             disabled={loading}
-            style={{ ...btnStyle('#667eea'), fontSize: 11 }}
+            style={{ ...btnStyle('#daa520'), fontSize: 11 }}
           >
             {loading ? '...' : '🔄 Rescan'}
           </button>
@@ -288,12 +396,15 @@ export default function Screener({ embedded = false }: { embedded?: boolean } = 
       {error && (
         <div style={{
           padding: 12, marginBottom: 16,
-          background: '#2d1a1a', border: '1px solid #f56565', borderRadius: 6,
-          color: '#fed7d7',
+          background: '#2d1410', border: '1px solid #ef4444', borderRadius: 6,
+          color: '#f4e8d8',
         }}>
           ⚠ {error}
         </div>
       )}
+
+      {/* Beginner explainer */}
+      <ExplainerPanel />
 
       {/* Regime banner */}
       {scan?.regime && <RegimeBanner regime={scan.regime} />}
@@ -301,7 +412,7 @@ export default function Screener({ embedded = false }: { embedded?: boolean } = 
       {/* Meta info */}
       {scan && (
         <div style={{
-          display: 'flex', gap: 24, fontSize: 12, color: '#a0aec0',
+          display: 'flex', gap: 24, fontSize: 12, color: '#9d8b7a',
           marginBottom: 20, flexWrap: 'wrap',
         }}>
           <span>📊 Universe: {scan.universe_size}</span>
@@ -314,7 +425,7 @@ export default function Screener({ embedded = false }: { embedded?: boolean } = 
 
       {/* Horizon tabs */}
       <div style={{
-        display: 'flex', borderBottom: '1px solid #1a1a3e', marginBottom: 0,
+        display: 'flex', borderBottom: '1px solid #3a2920', marginBottom: 0,
       }}>
         {HORIZON_TABS.map((tab) => (
           <button
@@ -324,8 +435,8 @@ export default function Screener({ embedded = false }: { embedded?: boolean } = 
               padding: '12px 24px',
               background: 'transparent',
               border: 'none',
-              borderBottom: activeTab === tab.id ? '2px solid #667eea' : '2px solid transparent',
-              color: activeTab === tab.id ? '#667eea' : '#a0aec0',
+              borderBottom: activeTab === tab.id ? '2px solid #daa520' : '2px solid transparent',
+              color: activeTab === tab.id ? '#daa520' : '#9d8b7a',
               fontSize: 13,
               fontWeight: 600,
               letterSpacing: 1.5,
@@ -338,29 +449,29 @@ export default function Screener({ embedded = false }: { embedded?: boolean } = 
         ))}
       </div>
       <div style={{
-        fontSize: 11, color: '#718096', padding: '10px 0 18px 0', letterSpacing: 0.5,
+        fontSize: 11, color: '#4a3428', padding: '10px 0 18px 0', letterSpacing: 0.5,
       }}>
         {activeTabDesc}
       </div>
 
       {/* Rankings table */}
       {loading && !scan && (
-        <div style={{ textAlign: 'center', padding: 60, color: '#a0aec0' }}>
+        <div style={{ textAlign: 'center', padding: 60, color: '#9d8b7a' }}>
           Running scan... this takes 10-30 seconds on first load
         </div>
       )}
 
       {scan && (
         <div style={{
-          background: '#0f0f23', border: '1px solid #1a1a3e', borderRadius: 8,
+          background: '#1a0f0a', border: '1px solid #3a2920', borderRadius: 8,
           overflow: 'hidden',
         }}>
           {/* Header row */}
           <div style={{
             display: 'grid',
             gridTemplateColumns: '50px 100px 110px 80px 80px 80px 80px 40px',
-            padding: '10px 16px', fontSize: 11, color: '#a0aec0',
-            letterSpacing: 1.5, borderBottom: '1px solid #1a1a3e',
+            padding: '10px 16px', fontSize: 11, color: '#9d8b7a',
+            letterSpacing: 1.5, borderBottom: '1px solid #3a2920',
             fontWeight: 600,
           }}>
             <div>RANK</div>
@@ -385,20 +496,20 @@ export default function Screener({ embedded = false }: { embedded?: boolean } = 
                     padding: '10px 16px',
                     fontSize: 13,
                     fontFamily: 'JetBrains Mono, monospace',
-                    borderBottom: '1px solid #1a1a3e',
+                    borderBottom: '1px solid #3a2920',
                     cursor: 'pointer',
-                    background: isExpanded ? '#161630' : 'transparent',
+                    background: isExpanded ? '#241510' : 'transparent',
                     transition: 'background 0.15s',
                   }}
                   onMouseEnter={(e) => {
-                    if (!isExpanded) (e.currentTarget as HTMLDivElement).style.background = '#13132b';
+                    if (!isExpanded) (e.currentTarget as HTMLDivElement).style.background = '#1f130d';
                   }}
                   onMouseLeave={(e) => {
                     if (!isExpanded) (e.currentTarget as HTMLDivElement).style.background = 'transparent';
                   }}
                 >
-                  <div style={{ color: '#718096' }}>{r.rank}</div>
-                  <div style={{ color: '#e2e8f0', fontWeight: 600 }}>{r.ticker}</div>
+                  <div style={{ color: '#4a3428' }}>{r.rank}</div>
+                  <div style={{ color: '#d4c4b0', fontWeight: 600 }}>{r.ticker}</div>
                   <div style={{ textAlign: 'right', color: scoreColor(r.composite_score), fontWeight: 600 }}>
                     {r.composite_score.toFixed(1)}
                   </div>
@@ -414,13 +525,13 @@ export default function Screener({ embedded = false }: { embedded?: boolean } = 
                   <div style={{ textAlign: 'right', color: scoreColor(r.trend) }}>
                     {r.trend.toFixed(1)}
                   </div>
-                  <div style={{ textAlign: 'right', color: '#718096' }}>
+                  <div style={{ textAlign: 'right', color: '#4a3428' }}>
                     {isExpanded ? '▼' : '▶'}
                   </div>
                 </div>
                 {isExpanded && (
                   <>
-                    <div style={{ padding: '14px 16px', background: '#0a0a1a', borderBottom: '1px solid #1a1a3e' }}>
+                    <div style={{ padding: '14px 16px', background: '#0a0505', borderBottom: '1px solid #3a2920' }}>
                       <FactorBar label="Quality"      value={r.quality} />
                       <FactorBar label="Momentum"     value={r.momentum} />
                       <FactorBar label="Accumulation" value={r.accumulation} />
@@ -428,7 +539,7 @@ export default function Screener({ embedded = false }: { embedded?: boolean } = 
                       <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
                         <button
                           onClick={(e) => { e.stopPropagation(); navigate(`/dashboard?ticker=${r.ticker}`); }}
-                          style={{ ...btnStyle('#667eea'), fontSize: 11, padding: '6px 12px' }}
+                          style={{ ...btnStyle('#daa520'), fontSize: 11, padding: '6px 12px' }}
                         >
                           Full analysis →
                         </button>
@@ -441,7 +552,7 @@ export default function Screener({ embedded = false }: { embedded?: boolean } = 
             );
           })}
           {currentRankings.length === 0 && !loading && (
-            <div style={{ padding: 40, textAlign: 'center', color: '#a0aec0' }}>
+            <div style={{ padding: 40, textAlign: 'center', color: '#9d8b7a' }}>
               No rankings available. Try forcing a rescan.
             </div>
           )}
@@ -450,8 +561,8 @@ export default function Screener({ embedded = false }: { embedded?: boolean } = 
 
       {/* Footer */}
       <div style={{
-        marginTop: 30, padding: '16px 0', fontSize: 11, color: '#4a5568',
-        textAlign: 'center', borderTop: '1px solid #1a1a3e',
+        marginTop: 30, padding: '16px 0', fontSize: 11, color: '#4a3428',
+        textAlign: 'center', borderTop: '1px solid #3a2920',
       }}>
         Scores are universe-relative · All signals Polygon-sourced · Not investment advice
       </div>
