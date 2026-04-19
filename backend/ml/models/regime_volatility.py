@@ -86,6 +86,10 @@ class HMMRegimeClassifier:
           2. 5-day realized volatility (annualized)
           3. Log volume ratio (vs 20-day average)
           4. 10-day return sign (trend direction)
+
+        Also caches the scaler and raw mean/std for feature 0 (return) so that
+        _label_states can invert the scaling and get the state's actual mean
+        daily return in real units.
         """
         log_vol = returns.rolling(5).std() * np.sqrt(252)
         vol_ratio = np.log(volume / (volume.rolling(20).mean() + 1e-10))
@@ -98,10 +102,19 @@ class HMMRegimeClassifier:
             "trend": trend,
         }).dropna()
 
-        # Standardize features
+        # Standardize features — and cache the scaler so we can invert later
         from sklearn.preprocessing import StandardScaler
         scaler = StandardScaler()
-        return scaler.fit_transform(df.values), df.index
+        X_scaled = scaler.fit_transform(df.values)
+
+        # Cache on the instance so _label_states can use these
+        self._feature_scaler = scaler
+        self._raw_return_mean = float(scaler.mean_[0])
+        self._raw_return_std = float(scaler.scale_[0])
+        self._raw_vol_mean = float(scaler.mean_[1])
+        self._raw_vol_std = float(scaler.scale_[1])
+
+        return X_scaled, df.index
 
     def fit(self, returns: pd.Series, volume: Optional[pd.Series] = None) -> Dict:
         """
@@ -161,32 +174,75 @@ class HMMRegimeClassifier:
 
     def _label_states(self) -> Dict[int, str]:
         """
-        Auto-label HMM states by their characteristics.
-        State with highest mean return + lowest vol → BULL_LOW_VOL
-        State with lowest mean return + highest vol → BEAR_HIGH_VOL
+        Auto-label HMM states by their REAL ECONOMIC characteristics.
+
+        Two prior approaches were broken:
+          (1) Rank-based: forced exactly 1 state per label, so 5 bull states
+              got absurdly labeled one as MEAN_REVERT, one as BEAR, etc.
+          (2) Z-score-based: I tried this before realizing that StandardScaler
+              standardizes the ENTIRE dataset, so a state's z-score of +0.25
+              means "slightly above overall historical mean" — for a stock
+              that's been in a sustained bull, that's already very positive
+              absolute return.
+
+        This version (correct): invert the scaling, compute each state's
+        actual annualized return in real %, then threshold on real economics:
+          BULL:  mean_annualized_return >= +15%
+          BEAR:  mean_annualized_return <= -15%
+          else:  MEAN_REVERT
+
+        Volatility label: compare state's realized vol (annualized %) against
+        the 60th percentile across all states.
+
+        This matches how a human trader would describe a regime, and the
+        labels are now SEMANTICALLY MEANINGFUL rather than ordinal artifacts.
+
+        Reference: Hamilton (1989) — states should be characterized by their
+        generative distribution, not their rank within the model.
         """
-        means = self.model.means_
-        # Feature 0 = return, Feature 1 = vol
-        state_chars = []
-        for i in range(self.n_states):
-            ret = means[i, 0]     # Scaled mean return
-            vol = means[i, 1]     # Scaled mean vol
-            state_chars.append((i, ret, vol))
+        import numpy as np
 
-        # Sort by return desc, then vol asc
-        sorted_states = sorted(state_chars, key=lambda x: (x[1], -x[2]))
+        means = self.model.means_  # Scaled (standardized) means per state
+        n = self.n_states
 
-        regime_assignments = [
-            "BEAR_HIGH_VOL",   # Lowest return, highest vol
-            "BEAR_LOW_VOL",    # Low return, low vol
-            "MEAN_REVERT",     # Middle return
-            "BULL_HIGH_VOL",   # High return, high vol
-            "BULL_LOW_VOL",    # Highest return, lowest vol
-        ]
+        # Invert the StandardScaler on feature 0 (return) and feature 1 (vol)
+        # to recover raw daily return and raw realized vol (annualized).
+        mu_ret_raw = float(self._raw_return_mean)
+        sd_ret_raw = float(self._raw_return_std)
+        mu_vol_raw = float(self._raw_vol_mean)
+        sd_vol_raw = float(self._raw_vol_std)
 
-        mapping = {}
-        for regime, (state_id, _, _) in zip(regime_assignments, sorted_states):
-            mapping[state_id] = regime
+        state_stats = []
+        for i in range(n):
+            # Daily log return of state i in raw units
+            daily_ret = float(means[i, 0]) * sd_ret_raw + mu_ret_raw
+            ann_ret_pct = daily_ret * 252 * 100  # Annualized %
+
+            # Realized vol (already annualized in the feature builder)
+            vol_ann_pct = (float(means[i, 1]) * sd_vol_raw + mu_vol_raw) * 100
+            state_stats.append((i, ann_ret_pct, vol_ann_pct))
+
+        # Volatility percentile cutoff — 60th percentile across states
+        vols = sorted([v for _, _, v in state_stats])
+        vol_cutoff = vols[int(len(vols) * 0.6)] if len(vols) > 1 else vols[0]
+
+        # Real-world thresholds — slightly asymmetric (bears are usually more
+        # intense but shorter-lived, so BEAR threshold is less aggressive).
+        BULL_RET_PCT = 15.0   # +15% ann = clearly bullish
+        BEAR_RET_PCT = -15.0  # -15% ann = clearly bearish
+
+        mapping: Dict[int, str] = {}
+        for state_id, ann_ret, vol_ann in state_stats:
+            if ann_ret >= BULL_RET_PCT:
+                direction = "BULL"
+            elif ann_ret <= BEAR_RET_PCT:
+                direction = "BEAR"
+            else:
+                mapping[state_id] = "MEAN_REVERT"
+                continue
+
+            vol_suffix = "_HIGH_VOL" if vol_ann >= vol_cutoff else "_LOW_VOL"
+            mapping[state_id] = direction + vol_suffix
 
         return mapping
 
