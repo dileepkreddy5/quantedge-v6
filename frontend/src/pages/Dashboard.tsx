@@ -25,20 +25,23 @@ import {
   Watchlist,
 } from '../components/ui';
 import PriceChart from '../components/charts/PriceChart';
+import Screener from './Screener';
+import OverviewV2 from './overview_v2/OverviewV2';
 
 const TABS = [
   { id: 'overview',     label: '⬡ OVERVIEW' },
   { id: 'ml',          label: '🧠 ML MODELS' },
+  { id: 'screener',    label: '🔍 SCREENER' },
   { id: 'volatility',  label: '📊 VOLATILITY' },
   { id: 'regime',      label: '🌡 REGIME' },
   { id: 'sentiment',   label: '💬 SENTIMENT' },
   { id: 'montecarlo',  label: '🎲 MONTE CARLO' },
   { id: 'risk',        label: '🛡 RISK' },
   { id: 'fundamental', label: '📋 FUNDAMENTALS' },
-  { id: 'watchlist',   label: '★ WATCHLIST' },
   { id: 'wallstreet',  label: '🏦 WALL ST.' },
   { id: 'portfolio',   label: '⚖ PORTFOLIO' },
   { id: 'performance', label: '📈 PERFORMANCE' },
+  { id: 'watchlist',   label: '★ WATCHLIST' },
 ];
 
 const QUICK_TICKERS = ['AAPL', 'NVDA', 'TSLA', 'SPY', 'QQQ', 'MSFT', 'AMZN', 'META', 'GOOGL', 'BRK-B'];
@@ -371,8 +374,9 @@ export default function Dashboard() {
 
             {/* ── Tab content ── */}
             <div style={{ animation: 'fadeIn 0.3s ease' }}>
-              {activeTab === 'overview'    && <OverviewTab data={data} ticker={ticker} onAnalyze={runAnalysis} />}
+              {activeTab === 'overview'    && <OverviewV2 data={data} ticker={ticker} onAnalyze={runAnalysis} />}
               {activeTab === 'ml'          && <MLModelsPanel data={data} />}
+              {activeTab === 'screener'    && <Screener embedded />}
               {activeTab === 'volatility'  && <VolatilityPanel data={data} />}
               {activeTab === 'regime'      && <RegimePanel data={data} />}
               {activeTab === 'sentiment'   && <SentimentPanel data={data} />}

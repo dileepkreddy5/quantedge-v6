@@ -182,7 +182,7 @@ function FactorDetails({ row }: { row: RankedRow }) {
   );
 }
 
-export default function Screener() {
+export default function Screener({ embedded = false }: { embedded?: boolean } = {}) {
   const navigate = useNavigate();
   const [scan, setScan] = useState<ScanResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -231,43 +231,58 @@ export default function Screener() {
 
   return (
     <div style={{
-      minHeight: '100vh',
-      background: '#0a0a1a',
+      minHeight: embedded ? 'auto' : '100vh',
+      background: embedded ? 'transparent' : '#0a0a1a',
       color: '#e2e8f0',
       fontFamily: 'Inter, sans-serif',
-      padding: '20px 30px',
+      padding: embedded ? '0' : '20px 30px',
     }}>
       {/* Header */}
-      <div style={{
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        marginBottom: 24,
-      }}>
-        <div>
-          <div style={{
-            fontSize: 26, fontWeight: 700, letterSpacing: 3, color: '#667eea',
-          }}>
-            QUANTEDGE SCREENER
+      {!embedded && (
+        <div style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          marginBottom: 24,
+        }}>
+          <div>
+            <div style={{
+              fontSize: 26, fontWeight: 700, letterSpacing: 3, color: '#667eea',
+            }}>
+              QUANTEDGE SCREENER
+            </div>
+            <div style={{ fontSize: 12, color: '#a0aec0', marginTop: 4 }}>
+              Ranked universe across three horizons · Regime-adjusted · 4 orthogonal factors
+            </div>
           </div>
-          <div style={{ fontSize: 12, color: '#a0aec0', marginTop: 4 }}>
-            Ranked universe across three horizons · Regime-adjusted · 4 orthogonal factors
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button
+              onClick={() => navigate('/dashboard')}
+              style={btnStyle('#2d3748')}
+            >
+              ← Dashboard
+            </button>
+            <button
+              onClick={handleForceRescan}
+              disabled={loading}
+              style={btnStyle('#667eea')}
+            >
+              {loading ? '...' : '🔄 Rescan'}
+            </button>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
-          <button
-            onClick={() => navigate('/dashboard')}
-            style={btnStyle('#2d3748')}
-          >
-            ← Dashboard
-          </button>
+      )}
+      {embedded && (
+        <div style={{
+          display: 'flex', justifyContent: 'flex-end', marginBottom: 12,
+        }}>
           <button
             onClick={handleForceRescan}
             disabled={loading}
-            style={btnStyle('#667eea')}
+            style={{ ...btnStyle('#667eea'), fontSize: 11 }}
           >
             {loading ? '...' : '🔄 Rescan'}
           </button>
         </div>
-      </div>
+      )}
 
       {/* Error */}
       {error && (
