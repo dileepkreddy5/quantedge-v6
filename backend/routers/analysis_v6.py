@@ -40,6 +40,7 @@ from ml.price_oracle.analyst_ratings import AnalystRatingsEngine
 
 from ml.labeling.triple_barrier import LabelingPipeline, DeflatedSharpeRatio
 from ml.labeling.meta_label import MetaLabeler, build_summary as build_meta_summary
+from ml.labeling.walk_forward_oof import walk_forward_oof_ensemble
 from ml.labeling.pbo import compute_pbo_from_ticker_history
 from ml.risk.risk_engine import MasterRiskEngine, DynamicCovarianceEngine, CVaREngine, VolatilityTargetingEngine
 from ml.portfolio.portfolio_engine import (
@@ -833,32 +834,53 @@ class QuantEdgeAnalyzerV6:
             except Exception as e:
                 logger.warning(f"LightGBM training failed: {e}")
 
-            # ── 6b. META-LABELING (21d XGB+LGB ensemble) ─────
+            # ── 6b. META-LABELING (walk-forward OOF on XGB+LGB ensemble @ 21d) ─
+            # Trains the meta-classifier on out-of-fold primary predictions rather
+            # than a small tail slice. Each OOF prediction is made by a primary
+            # model that did NOT see that sample. This yields ~70+ meta samples
+            # instead of ~15, producing a real classifier (not the 0.5 fallback).
+            # Reference: Lopez de Prado (2018) Ch.7 on Cross-Validation in Finance.
             meta_conf_21d = 0.5
             meta_labeler = MetaLabeler(horizons=[5, 10, 21, 63, 252])
             try:
-                if X_val is not None and y_val is not None and len(X_val) >= 15:
-                    xgb_val_preds = xgb_model.predict(X_val) if 'xgb_model' in dir() else None
-                    lgb_val_preds = lgb_model.predict(X_val) if 'lgb_model' in dir() else None
-                    if xgb_val_preds is not None and lgb_val_preds is not None:
-                        primary_val_21d = 0.5 * xgb_val_preds + 0.5 * lgb_val_preds
+                if len(X) >= 60:
+                    oof_preds, oof_indices = walk_forward_oof_ensemble(
+                        X=X, y=y, feature_names=feature_names,
+                        model_builders={
+                            "xgb": lambda: XGBoostPredictor(target_horizon=horizon),
+                            "lgb": lambda: LightGBMPredictor(target_horizon=horizon),
+                        },
+                        weights={"xgb": 0.5, "lgb": 0.5},
+                        n_folds=5, embargo=5, min_train=40,
+                    )
+                    if len(oof_preds) >= 30:
+                        X_oof = X[oof_indices]
+                        y_oof = y[oof_indices]
                         meta_labeler.fit(
-                            X_val=X_val,
-                            primary_preds=primary_val_21d,
-                            y_val=y_val,
+                            X_val=X_oof,
+                            primary_preds=oof_preds,
+                            y_val=y_oof,
                             horizon=21,
                             feature_names=feature_names,
                         )
-                        # Today's primary prediction (ensemble)
-                        today_xgb = float(xgb_model.predict(today_vec)[0])
-                        today_lgb = float(lgb_model.predict(today_vec)[0])
-                        primary_today_21d = 0.5 * today_xgb + 0.5 * today_lgb
-                        meta_conf_21d = meta_labeler.predict_confidence(
-                            today_vec.flatten(), primary_today_21d, horizon=21
-                        )
-                        logger.info(f"Meta-label 21d: primary={primary_today_21d:+.4f}, confidence={meta_conf_21d:.3f}")
+                        # Today's primary prediction (ensemble from models trained on full data)
+                        if 'xgb_model' in dir() and 'lgb_model' in dir():
+                            today_xgb = float(xgb_model.predict(today_vec)[0])
+                            today_lgb = float(lgb_model.predict(today_vec)[0])
+                            primary_today_21d = 0.5 * today_xgb + 0.5 * today_lgb
+                            meta_conf_21d = meta_labeler.predict_confidence(
+                                today_vec.flatten(), primary_today_21d, horizon=21
+                            )
+                            logger.info(
+                                f"Meta-label 21d (OOF, n={len(oof_preds)}): "
+                                f"primary={primary_today_21d:+.4f}, confidence={meta_conf_21d:.3f}"
+                            )
+                    else:
+                        logger.info(f"Meta-label 21d: OOF produced only {len(oof_preds)} samples, fallback to 0.5")
+                else:
+                    logger.info(f"Meta-label 21d: only {len(X)} total samples, insufficient for OOF")
             except Exception as e:
-                logger.warning(f"Meta-labeling 21d failed: {e}")
+                logger.warning(f"Meta-labeling 21d OOF failed: {e}")
 
             # ── 7. BiLSTM + TEMPORAL ATTENTION + MC DROPOUT ──
             # Architecture: Input(n_features) → BiLSTM(128) → Attention → BiLSTM(64)

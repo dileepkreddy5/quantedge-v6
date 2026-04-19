@@ -70,7 +70,7 @@ class MetaLabeler:
           - insufficient samples (<30)
           - class imbalance too extreme (<5 positives or <5 negatives)
         """
-        if len(X_val) < 30 or len(primary_preds) != len(X_val) or len(y_val) != len(X_val):
+        if len(X_val) < 15 or len(primary_preds) != len(X_val) or len(y_val) != len(X_val):
             logger.warning(f"MetaLabeler[h={horizon}]: insufficient/mismatched val data, skipping")
             return None
 

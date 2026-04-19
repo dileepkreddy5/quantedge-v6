@@ -449,9 +449,64 @@ export default function Screener({ embedded = false }: { embedded?: boolean } = 
         ))}
       </div>
       <div style={{
-        fontSize: 11, color: '#4a3428', padding: '10px 0 18px 0', letterSpacing: 0.5,
+        fontSize: 11, color: '#4a3428', padding: '10px 0 6px 0', letterSpacing: 0.5,
       }}>
         {activeTabDesc}
+      </div>
+
+      {/* Always-visible beginner guidance */}
+      <div style={{
+        background: '#1f130d',
+        border: '1px solid #3a2920',
+        borderRadius: 6,
+        padding: '14px 18px',
+        marginBottom: 18,
+        fontSize: 12,
+        color: '#d4c4b0',
+        lineHeight: 1.7,
+      }}>
+        <div style={{
+          fontFamily: "'Fira Code', monospace", fontSize: 10, letterSpacing: 2,
+          color: '#daa520', marginBottom: 8,
+        }}>
+          HOW TO USE THIS PAGE
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+          <div>
+            <div style={{ color: '#daa520', fontSize: 11, fontWeight: 600, marginBottom: 4 }}>
+              1. PICK A HORIZON
+            </div>
+            <div style={{ fontSize: 11.5 }}>
+              Use the tabs above. Long Term for buy-and-hold, Medium Term for core allocation, Short Term for active trading.
+            </div>
+          </div>
+          <div>
+            <div style={{ color: '#daa520', fontSize: 11, fontWeight: 600, marginBottom: 4 }}>
+              2. READ COMPOSITE
+            </div>
+            <div style={{ fontSize: 11.5 }}>
+              Higher composite = stronger ranking across all four factors for that horizon.{' '}
+              <span style={{ color: '#22c55e' }}>Green &ge;75</span>,{' '}
+              <span style={{ color: '#daa520' }}>amber 55-75</span>,{' '}
+              <span style={{ color: '#ef4444' }}>red &lt;30</span>.
+            </div>
+          </div>
+          <div>
+            <div style={{ color: '#daa520', fontSize: 11, fontWeight: 600, marginBottom: 4 }}>
+              3. EXPAND A ROW
+            </div>
+            <div style={{ fontSize: 11.5 }}>
+              Click any row for factor breakdown. Click the ticker symbol for the full institutional analysis on the Overview tab.
+            </div>
+          </div>
+        </div>
+        <div style={{
+          marginTop: 10, paddingTop: 10, borderTop: '1px solid #3a2920',
+          fontSize: 11, color: '#9d8b7a',
+        }}>
+          <strong style={{ color: '#b8860b' }}>Not advice:</strong>{' '}
+          These are universe-relative rankings, not buy/sell signals. Validate with your own research before deploying capital. The NEW HERE panel above has fuller methodology detail.
+        </div>
       </div>
 
       {/* Rankings table */}

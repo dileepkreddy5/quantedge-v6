@@ -151,8 +151,8 @@ class DynamicCovarianceEngine:
             'volatilities': vols,
             'shrinkage_alpha': shrinkage,
             'condition_number': float(np.linalg.cond(cov)),
-            'avg_correlation': float(np.mean(corr[np.triu_indices_from(corr, k=1)])),
-            'max_correlation': float(np.max(np.abs(corr[np.triu_indices_from(corr, k=1)]))),
+            'avg_correlation': float(np.mean(corr[np.triu_indices_from(corr, k=1)])) if corr.shape[0] > 1 else 0.0,
+            'max_correlation': float(np.max(np.abs(corr[np.triu_indices_from(corr, k=1)]))) if corr.shape[0] > 1 else 0.0,
             'is_stressed': stressed,
         }
 
@@ -775,7 +775,7 @@ class MasterRiskEngine:
         # 2. CVaR multiple methods
         port_ret_series = returns.values @ w
         hist_cvar = self.cvar_engine.historical_cvar(port_ret_series)
-        mu = float(returns.values @ w @ np.ones(N) / N)
+        mu = float(np.mean(port_ret_series))  # mean of weighted portfolio return series
         sigma = float(np.sqrt(w @ cov_result['covariance'] @ w))
         skew = float(pd.Series(port_ret_series).skew())
         kurt = float(pd.Series(port_ret_series).kurtosis() + 3)
