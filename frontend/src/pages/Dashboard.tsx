@@ -53,33 +53,39 @@ export default function Dashboard() {
   const [ticker, setTicker] = useState('');
   const [inputTicker, setInputTicker] = useState('');
 
-  // Auto-run analysis if ?ticker=XXX in URL (from landing page)
-  
+  // Auto-run analysis if ?ticker=XXX in URL.
+  // Runs on initial mount AND on URL param change — so clicking "Full
+  // analysis" from the Screener tab (same-page nav to /dashboard?ticker=X)
+  // correctly re-triggers the analysis instead of being a no-op.
   useEffect(() => {
     const urlTicker = searchParams.get('ticker');
-    if (urlTicker && urlTicker.trim()) {
-      const sym = urlTicker.toUpperCase().trim();
-      setInputTicker(sym);
-      const timer = setTimeout(() => {
-        setTicker(sym);
-        setData(null);
-        setLoading(true);
-        setElapsed(0);
-        setActiveTab('overview');
-        api.post('/api/v6/analyze', {
-          req: { ticker: sym, include_options: true, include_sentiment: true, mc_paths: 100000 }
-        }).then(res => {
-          setData(res.data.data);
-          toast.success(`Analysis complete: ${sym}`, { icon: '✅' });
-        }).catch(() => {
-          toast.error('Analysis failed');
-        }).finally(() => {
-          setLoading(false);
-        });
-      }, 500);
-      return () => clearTimeout(timer);
-    }
-  }, []); // eslint-disable-line
+    if (!urlTicker || !urlTicker.trim()) return;
+    const sym = urlTicker.toUpperCase().trim();
+
+    // Skip if we're already analyzing this ticker (prevents duplicate fires
+    // on state-triggered re-renders).
+    if (sym === ticker) return;
+
+    setInputTicker(sym);
+    const timer = setTimeout(() => {
+      setTicker(sym);
+      setData(null);
+      setLoading(true);
+      setElapsed(0);
+      setActiveTab('overview');
+      api.post('/api/v6/analyze', {
+        req: { ticker: sym, include_options: true, include_sentiment: true, mc_paths: 100000 }
+      }).then(res => {
+        setData(res.data.data);
+        toast.success(`Analysis complete: ${sym}`, { icon: '✅' });
+      }).catch(() => {
+        toast.error('Analysis failed');
+      }).finally(() => {
+        setLoading(false);
+      });
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
   const [activeTab, setActiveTab] = useState('overview');
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
