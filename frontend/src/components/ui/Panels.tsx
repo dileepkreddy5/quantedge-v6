@@ -948,154 +948,142 @@ export function Watchlist({ onAnalyze }: { onAnalyze: (t: string) => void }) {
 // ══════════════════════════════════════════════════════════════
 export function WallStreetPanel({ data }: { data: any }) {
   const ar = data.analyst_ratings || {};
-  const ratings = ar.ratings || [];
   const consensus = ar.consensus || {};
   const earnings = ar.earnings || {};
-
-  const ratingColor = (label: string) => {
-    const l = label?.toLowerCase() || '';
-    if (l.includes('strong buy')) return '#00c896';
-    if (l.includes('buy') || l.includes('overweight') || l.includes('outperform')) return '#40dda0';
-    if (l.includes('hold') || l.includes('neutral') || l.includes('equal')) return '#e8b84b';
-    if (l.includes('sell') || l.includes('underweight') || l.includes('underperform')) return '#ff8090';
-    return '#9d8b7a';
-  };
+  const trend = ar.trend || [];
+  const surpriseHistory = earnings.surprise_history || [];
+  const source = ar.source || "unavailable";
 
   const daysToEarnings = earnings.days_to;
   const earningsUrgency = daysToEarnings != null && daysToEarnings <= 14
     ? '#e05252' : daysToEarnings != null && daysToEarnings <= 30
     ? '#d4943a' : '#4caf82';
 
+  // 5-bucket breakdown
+  const buckets = [
+    { label: "STRONG BUY",  count: consensus.strong_buy  || 0, color: "#00c896" },
+    { label: "BUY",         count: consensus.buy         || 0, color: "#40dda0" },
+    { label: "HOLD",        count: consensus.hold        || 0, color: "#e8b84b" },
+    { label: "SELL",        count: consensus.sell        || 0, color: "#ff8090" },
+    { label: "STRONG SELL", count: consensus.strong_sell || 0, color: "#ff6080" },
+  ];
+  const totalAnalysts = consensus.n_analysts || 0;
+
   return (
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-      {/* LEFT: Analyst Ratings Table */}
+      {/* LEFT: Analyst Consensus + History */}
       <Card style={{ gridColumn: "span 1" }}>
-        <SectionTitle>SELL-SIDE ANALYST RATINGS</SectionTitle>
+        <SectionTitle>SELL-SIDE ANALYST CONSENSUS</SectionTitle>
 
-        {/* Consensus summary */}
+        {/* Source badge */}
+        <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: source === 'finnhub' ? "#4caf82" : "#e05252", letterSpacing: 2, marginBottom: 12 }}>
+          SOURCE: {source === 'finnhub' ? '● LIVE · FINNHUB' : '○ UNAVAILABLE'}
+        </div>
+
+        {/* Consensus summary — 2-box (removed avg target since free tier doesn't have it) */}
         <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
           <div style={{ flex: 1, textAlign: "center", background: "#1a0f0a", borderRadius: 6, padding: "10px 8px", border: `1px solid ${consensus.color || "#555"}40` }}>
             <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 9, color: "#9d8b7a", letterSpacing: 2, marginBottom: 4 }}>CONSENSUS</div>
             <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 18, color: consensus.color || "#f59e0b", letterSpacing: 2 }}>{consensus.label || "—"}</div>
-          </div>
-          <div style={{ flex: 1, textAlign: "center", background: "#1a0f0a", borderRadius: 6, padding: "10px 8px" }}>
-            <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 9, color: "#9d8b7a", letterSpacing: 2, marginBottom: 4 }}>AVG TARGET</div>
-            <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 16, color: "#d4c4b0", fontWeight: 700 }}>{consensus.avg_target ? `$${consensus.avg_target}` : "—"}</div>
+            <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 9, color: "#4a3428", marginTop: 2 }}>score {consensus.score?.toFixed(2) ?? "—"}/5</div>
           </div>
           <div style={{ flex: 1, textAlign: "center", background: "#1a0f0a", borderRadius: 6, padding: "10px 8px" }}>
             <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 9, color: "#9d8b7a", letterSpacing: 2, marginBottom: 4 }}>ANALYSTS</div>
-            <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 16, color: "#d4c4b0", fontWeight: 700 }}>{consensus.n_analysts || 0}</div>
+            <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 24, color: "#d4c4b0", fontWeight: 700 }}>{totalAnalysts}</div>
+            <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: "#4a3428" }}>covering this name</div>
           </div>
         </div>
 
-        {/* Rating distribution */}
-        <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-          {[
-            { label: "BUY", count: consensus.buy_count, color: "#40dda0" },
-            { label: "HOLD", count: consensus.hold_count, color: "#e8b84b" },
-            { label: "SELL", count: consensus.sell_count, color: "#ff8090" },
-          ].map(({ label, count, color }) => {
-            const total = (consensus.buy_count || 0) + (consensus.hold_count || 0) + (consensus.sell_count || 0);
-            const pct = total > 0 ? Math.round((count || 0) / total * 100) : 0;
+        {/* 5-bucket breakdown */}
+        <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: "#daa520", letterSpacing: 2, marginBottom: 8 }}>RATING BREAKDOWN</div>
+        <div style={{ display: "grid", gap: 6, marginBottom: 16 }}>
+          {buckets.map(({ label, count, color }) => {
+            const pct = totalAnalysts > 0 ? (count / totalAnalysts) * 100 : 0;
             return (
-              <div key={label} style={{ flex: 1, textAlign: "center" }}>
-                <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 9, color, marginBottom: 3 }}>{label} {pct}%</div>
-                <div style={{ height: 4, background: "#1a0f0a", borderRadius: 2 }}>
-                  <div style={{ height: "100%", background: color, borderRadius: 2, width: `${pct}%`, transition: "width 1s ease" }} />
+              <div key={label} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 9, color, width: 78 }}>{label}</div>
+                <div style={{ flex: 1, height: 8, background: "#1a0f0a", borderRadius: 2, overflow: "hidden" }}>
+                  <div style={{ height: "100%", background: color, width: `${pct}%`, transition: "width 1s ease" }} />
                 </div>
-                <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 11, color, marginTop: 3, fontWeight: 700 }}>{count || 0}</div>
+                <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 10, color, fontWeight: 700, width: 28, textAlign: "right" }}>{count}</div>
+                <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 9, color: "#9d8b7a", width: 36, textAlign: "right" }}>{pct.toFixed(0)}%</div>
               </div>
             );
           })}
         </div>
 
-        {/* Price target range */}
-        {consensus.low_target && consensus.high_target && (
-          <div style={{ marginBottom: 14 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", fontFamily: "'Fira Code',monospace", fontSize: 9, color: "#9d8b7a", marginBottom: 4 }}>
-              <span>LOW ${consensus.low_target}</span>
-              <span style={{ color: "#daa520" }}>AVG ${consensus.avg_target}</span>
-              <span>HIGH ${consensus.high_target}</span>
+        {/* 6-month trend */}
+        {trend.length > 0 && (
+          <>
+            <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: "#daa520", letterSpacing: 2, marginBottom: 8 }}>CONSENSUS TREND (last {trend.length} months)</div>
+            <div style={{ background: "#1a0f0a", borderRadius: 6, padding: "10px 8px", marginBottom: 12 }}>
+              {trend.slice().reverse().map((t: any, i: number) => {
+                const n = (t.strong_buy + t.buy + t.hold + t.sell + t.strong_sell) || 1;
+                return (
+                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: i < trend.length - 1 ? 4 : 0 }}>
+                    <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: "#9d8b7a", width: 56 }}>{t.period?.slice(0,7)}</div>
+                    <div style={{ flex: 1, display: "flex", height: 6, borderRadius: 2, overflow: "hidden" }}>
+                      <div style={{ background: "#00c896", width: `${(t.strong_buy/n)*100}%` }} />
+                      <div style={{ background: "#40dda0", width: `${(t.buy/n)*100}%` }} />
+                      <div style={{ background: "#e8b84b", width: `${(t.hold/n)*100}%` }} />
+                      <div style={{ background: "#ff8090", width: `${(t.sell/n)*100}%` }} />
+                      <div style={{ background: "#ff6080", width: `${(t.strong_sell/n)*100}%` }} />
+                    </div>
+                    <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 9, color: "#d4c4b0", width: 24, textAlign: "right" }}>{n}</div>
+                  </div>
+                );
+              })}
             </div>
-            <div style={{ height: 4, background: "#1a0f0a", borderRadius: 2, position: "relative" }}>
-              <div style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, background: "linear-gradient(90deg, #ff8090, #e8b84b, #40dda0)", borderRadius: 2, opacity: 0.4 }} />
-              {consensus.avg_target && consensus.low_target && consensus.high_target && (
-                <div style={{
-                  position: "absolute",
-                  left: `${((consensus.avg_target - consensus.low_target) / (consensus.high_target - consensus.low_target)) * 100}%`,
-                  top: -3, width: 2, height: 10, background: "#daa520", transform: "translateX(-50%)"
-                }} />
-              )}
-            </div>
-          </div>
+          </>
         )}
 
-        {/* Individual ratings */}
-        <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: "#daa520", letterSpacing: 2, marginBottom: 8 }}>INDIVIDUAL RATINGS</div>
-        {ratings.slice(0, 6).map((r: any, i: number) => (
-          <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid rgba(212,149,108,0.06)" }}>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 10, color: "#d4c4b0", fontWeight: 700 }}>{r.firm}</div>
-              <div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 9, color: "#9d8b7a" }}>{r.analyst}</div>
-            </div>
-            <div style={{ textAlign: "center", minWidth: 80 }}>
-              <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 9, color: ratingColor(r.rating), fontWeight: 700 }}>{r.rating}</div>
-            </div>
-            <div style={{ textAlign: "right", minWidth: 60 }}>
-              <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 11, color: "#d4c4b0" }}>${r.target}</div>
-              {r.prev_target && r.prev_target !== r.target && (
-                <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: r.target > r.prev_target ? "#40dda0" : "#ff8090" }}>
-                  {r.target > r.prev_target ? "▲" : "▼"} ${r.prev_target}
-                </div>
-              )}
-            </div>
-            <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: "#4a3428", minWidth: 55, textAlign: "right" }}>{r.date?.slice(5)}</div>
-          </div>
-        ))}
-
         <div style={{ display: "flex", gap: 16, marginTop: 10, fontFamily: "'Fira Code',monospace", fontSize: 9, color: "#4a3428" }}>
-          <span style={{ color: "#40dda0" }}>▲ {consensus.upgrades_30d || 0} upgrades</span>
-          <span style={{ color: "#ff8090" }}>▼ {consensus.downgrades_30d || 0} downgrades</span>
-          <span>last 30 days</span>
+          <span style={{ color: "#40dda0" }}>▲ {consensus.upgrades_30d || 0} consensus up</span>
+          <span style={{ color: "#ff8090" }}>▼ {consensus.downgrades_30d || 0} consensus down</span>
+          <span>vs prev month</span>
+        </div>
+
+        <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: "#4a3428", marginTop: 12, lineHeight: 1.6 }}>
+          Individual analyst names and price targets require paid Finnhub plan.<br/>
+          Free tier provides consensus counts and historical trends — shown above.
         </div>
       </Card>
 
-      {/* RIGHT: Earnings Estimates */}
+      {/* RIGHT: Earnings + Surprise History */}
       <Card style={{ gridColumn: "span 1" }}>
-        <SectionTitle>EARNINGS ESTIMATES — NEXT QUARTER</SectionTitle>
+        <SectionTitle>EARNINGS — NEXT QUARTER (EST)</SectionTitle>
 
         {/* Earnings countdown */}
         {earnings.date ? (
           <div style={{ textAlign: "center", padding: "16px 0 20px", borderBottom: "1px solid rgba(212,149,108,0.08)", marginBottom: 16 }}>
-            <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 9, color: "#9d8b7a", letterSpacing: 2, marginBottom: 6 }}>EARNINGS DATE</div>
+            <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 9, color: "#9d8b7a", letterSpacing: 2, marginBottom: 6 }}>ESTIMATED EARNINGS DATE</div>
             <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 28, color: earningsUrgency, letterSpacing: 3, marginBottom: 4 }}>{earnings.date}</div>
             {daysToEarnings != null && (
               <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 11, color: earningsUrgency }}>
                 {daysToEarnings > 0 ? `${daysToEarnings} days away` : daysToEarnings === 0 ? "TODAY" : `${Math.abs(daysToEarnings)} days ago`}
               </div>
             )}
+            <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: "#4a3428", marginTop: 4 }}>
+              (last report + ~90d; exact date not in free tier)
+            </div>
           </div>
         ) : (
           <div style={{ textAlign: "center", padding: "16px 0", color: "#4a3428", fontFamily: "'Fira Code',monospace", fontSize: 10 }}>
-            No earnings date available
+            No earnings history available
           </div>
         )}
 
-        {/* EPS estimates */}
-        {earnings.eps_estimate != null && (
+        {/* Recent EPS with YoY growth */}
+        {earnings.eps_prev_year != null && (
           <>
-            <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: "#daa520", letterSpacing: 2, marginBottom: 10 }}>EPS ESTIMATE</div>
-            <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
+            <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: "#daa520", letterSpacing: 2, marginBottom: 10 }}>MOST RECENT QUARTER (ACTUAL)</div>
+            <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
               <div style={{ flex: 1, textAlign: "center", background: "#1a0f0a", borderRadius: 6, padding: "12px 8px" }}>
-                <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 9, color: "#9d8b7a", marginBottom: 4 }}>ESTIMATE</div>
-                <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 20, color: "#d4c4b0", fontWeight: 700 }}>${earnings.eps_estimate?.toFixed(2)}</div>
+                <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 9, color: "#9d8b7a", marginBottom: 4 }}>EPS (Q LATEST)</div>
+                <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 20, color: "#d4c4b0", fontWeight: 700 }}>${earnings.eps_prev_year?.toFixed(2)}</div>
               </div>
               <div style={{ flex: 1, textAlign: "center", background: "#1a0f0a", borderRadius: 6, padding: "12px 8px" }}>
-                <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 9, color: "#9d8b7a", marginBottom: 4 }}>PREV YEAR</div>
-                <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 20, color: "#9d8b7a", fontWeight: 700 }}>${earnings.eps_prev_year?.toFixed(2)}</div>
-              </div>
-              <div style={{ flex: 1, textAlign: "center", background: "#1a0f0a", borderRadius: 6, padding: "12px 8px" }}>
-                <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 9, color: "#9d8b7a", marginBottom: 4 }}>YOY GROWTH</div>
+                <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 9, color: "#9d8b7a", marginBottom: 4 }}>YoY GROWTH</div>
                 <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 20, fontWeight: 700, color: (earnings.eps_growth || 0) > 0 ? "#40dda0" : "#ff8090" }}>
                   {earnings.eps_growth != null ? `${earnings.eps_growth > 0 ? "+" : ""}${earnings.eps_growth}%` : "—"}
                 </div>
@@ -1104,46 +1092,38 @@ export function WallStreetPanel({ data }: { data: any }) {
           </>
         )}
 
-        {/* Revenue estimates */}
-        {earnings.rev_estimate != null && (
+        {/* Surprise history */}
+        {surpriseHistory.length > 0 && (
           <>
-            <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: "#daa520", letterSpacing: 2, marginBottom: 10 }}>REVENUE ESTIMATE</div>
-            <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
-              <div style={{ flex: 1, textAlign: "center", background: "#1a0f0a", borderRadius: 6, padding: "12px 8px" }}>
-                <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 9, color: "#9d8b7a", marginBottom: 4 }}>ESTIMATE</div>
-                <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 18, color: "#d4c4b0", fontWeight: 700 }}>${earnings.rev_estimate?.toFixed(1)}B</div>
+            <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: "#daa520", letterSpacing: 2, marginBottom: 10 }}>EARNINGS SURPRISE HISTORY</div>
+            <div style={{ background: "#1a0f0a", borderRadius: 6, padding: "10px 12px" }}>
+              <div style={{ display: "flex", fontFamily: "'Fira Code',monospace", fontSize: 8, color: "#9d8b7a", letterSpacing: 1, marginBottom: 6, paddingBottom: 4, borderBottom: "1px solid rgba(212,149,108,0.08)" }}>
+                <div style={{ flex: 1 }}>QUARTER</div>
+                <div style={{ width: 60, textAlign: "right" }}>ACTUAL</div>
+                <div style={{ width: 60, textAlign: "right" }}>EST</div>
+                <div style={{ width: 60, textAlign: "right" }}>SURPRISE</div>
               </div>
-              <div style={{ flex: 1, textAlign: "center", background: "#1a0f0a", borderRadius: 6, padding: "12px 8px" }}>
-                <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 9, color: "#9d8b7a", marginBottom: 4 }}>PREV YEAR</div>
-                <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 18, color: "#9d8b7a", fontWeight: 700 }}>${earnings.rev_prev_year?.toFixed(1)}B</div>
-              </div>
-              <div style={{ flex: 1, textAlign: "center", background: "#1a0f0a", borderRadius: 6, padding: "12px 8px" }}>
-                <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 9, color: "#9d8b7a", marginBottom: 4 }}>YOY GROWTH</div>
-                <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 18, fontWeight: 700, color: (earnings.rev_growth || 0) > 0 ? "#40dda0" : "#ff8090" }}>
-                  {earnings.rev_growth != null ? `${earnings.rev_growth > 0 ? "+" : ""}${earnings.rev_growth}%` : "—"}
-                </div>
-              </div>
+              {surpriseHistory.map((s: any, i: number) => {
+                const sp = s.surprise_percent;
+                const beat = sp != null && sp > 0;
+                return (
+                  <div key={i} style={{ display: "flex", fontFamily: "'Fira Code',monospace", fontSize: 10, padding: "4px 0", borderBottom: i < surpriseHistory.length - 1 ? "1px solid rgba(212,149,108,0.04)" : "none" }}>
+                    <div style={{ flex: 1, color: "#9d8b7a" }}>{s.period?.slice(0,7)}</div>
+                    <div style={{ width: 60, textAlign: "right", color: "#d4c4b0" }}>${s.actual?.toFixed(2) ?? "—"}</div>
+                    <div style={{ width: 60, textAlign: "right", color: "#9d8b7a" }}>${s.estimate?.toFixed(2) ?? "—"}</div>
+                    <div style={{ width: 60, textAlign: "right", color: beat ? "#40dda0" : "#ff8090", fontWeight: 700 }}>
+                      {sp != null ? `${sp > 0 ? "+" : ""}${sp.toFixed(1)}%` : "—"}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </>
         )}
 
-        {/* Options implied move */}
-        <div style={{ marginTop: 12, padding: "10px 12px", background: "#1a0f0a", borderRadius: 6, border: "1px solid rgba(212,149,108,0.1)" }}>
-          <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 9, color: "#9d8b7a", letterSpacing: 2, marginBottom: 6 }}>EARNINGS WHISPER</div>
-          <div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 11, color: "#9d8b7a", lineHeight: 1.6 }}>
-            Options market implies ±{data?.annual_vol ? (Math.sqrt(1/52) * (data.annual_vol * 100)).toFixed(1) : "5.0"}% move on earnings day.
-            {(earnings.eps_growth || 0) > 15
-              ? " Strong EPS growth expected — beat consensus to see positive reaction."
-              : (earnings.eps_growth || 0) < 0
-              ? " EPS expected to decline YoY — guidance will be key driver."
-              : " Inline quarter expected — beat/miss on margins likely to drive reaction."
-            }
-          </div>
-        </div>
-
-        <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: "#4a3428", marginTop: 12, lineHeight: 1.7 }}>
-          Source: Sell-side consensus · Individual ratings from top-tier firms<br/>
-          Jegadeesh et al. (2004): analyst changes carry more signal than levels
+        <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: "#4a3428", marginTop: 14, lineHeight: 1.6 }}>
+          Source: Finnhub free tier · Forward estimates + price targets require paid plan<br/>
+          Jegadeesh et al. (2004): consensus changes carry more signal than levels
         </div>
       </Card>
     </div>
