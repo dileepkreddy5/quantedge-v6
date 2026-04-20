@@ -1,291 +1,290 @@
 """
-QuantEdge v6.0 — Wall Street Analyst Ratings
-Fetches real analyst data from Polygon.io + computes consensus.
-No yfinance dependency.
+AnalystRatingsEngine backed by Finnhub free tier.
+
+Replaces hardcoded fake ratings with real data:
+  - Real consensus counts (buy/hold/sell/strongBuy/strongSell)
+  - Real historical recommendation trends
+  - Real earnings surprise data
+
+Finnhub free tier limits:
+  - 60 calls/minute (plenty of headroom with Redis caching)
+  - No access to: individual analyst names, price targets, upgrade/downgrade feed
+
+Graceful degradation: when a field is unavailable, returns None so the frontend
+renders "—" instead of fake placeholder data.
 """
-
-import asyncio
+import os
 import json
-from datetime import datetime, date, timedelta
-from typing import Dict, Any, List, Optional
-import aiohttp
-from loguru import logger
+import logging
+from datetime import date, datetime, timedelta
+from typing import Dict, Any, Optional, List, Tuple
 
-POLYGON_BASE = "https://api.polygon.io"
+import httpx
 
-RATING_MAP = {
-    "strong buy": 5, "conviction buy": 5, "top pick": 5,
-    "buy": 4, "outperform": 4, "overweight": 4, "accumulate": 4,
-    "add": 4, "positive": 4, "market outperform": 4,
-    "hold": 3, "neutral": 3, "equal-weight": 3, "equalweight": 3,
-    "market perform": 3, "sector perform": 3, "in-line": 3,
-    "peer perform": 3, "fair value": 3, "market weight": 3,
-    "sell": 2, "underperform": 2, "underweight": 2, "reduce": 2,
-    "negative": 2, "below average": 2,
-    "strong sell": 1, "conviction sell": 1,
-}
+logger = logging.getLogger(__name__)
+
+
+FINNHUB_BASE = "https://finnhub.io/api/v1"
+HTTP_TIMEOUT = 8.0
+DEFAULT_TTL_SECONDS = 24 * 60 * 60  # 24hr — analyst data moves slowly
+
 
 SCORE_TO_LABEL = {
-    5: ("STRONG BUY",  "#00c896"),
-    4: ("BUY",         "#40dda0"),
-    3: ("HOLD",        "#e8b84b"),
-    2: ("SELL",        "#ff8090"),
-    1: ("STRONG SELL", "#ff4060"),
-}
-
-# Top sell-side firms — filter for these in display
-TOP_FIRMS = {
-    "Goldman Sachs", "Morgan Stanley", "JPMorgan", "JP Morgan",
-    "Citigroup", "Citi", "Bank of America", "BofA",
-    "UBS", "Deutsche Bank", "Barclays", "Wells Fargo",
-    "Jefferies", "Bernstein", "Evercore", "Piper Sandler",
-    "RBC Capital", "RBC", "HSBC", "Mizuho", "Truist",
-    "Needham", "Cowen", "TD Cowen", "Raymond James",
-}
-
-# Hardcoded realistic analyst data per major ticker
-# In production: replace with live Polygon /vX/reference/analysts endpoint
-# or Seeking Alpha / Refinitiv API
-ANALYST_DATA = {
-    "AAPL": {
-        "ratings": [
-            {"firm": "Goldman Sachs",  "analyst": "Michael Ng",      "rating": "BUY",         "target": 240, "prev_target": 230, "date": "2026-03-14"},
-            {"firm": "Morgan Stanley", "analyst": "Erik Woodring",    "rating": "OVERWEIGHT",  "target": 235, "prev_target": 250, "date": "2026-03-10"},
-            {"firm": "JPMorgan",       "analyst": "Samik Chatterjee", "rating": "OVERWEIGHT",  "target": 245, "prev_target": 260, "date": "2026-03-05"},
-            {"firm": "Bernstein",      "analyst": "Toni Sacconaghi",  "rating": "HOLD",        "target": 195, "prev_target": 195, "date": "2026-02-28"},
-            {"firm": "UBS",            "analyst": "David Vogt",       "rating": "BUY",         "target": 250, "prev_target": 240, "date": "2026-02-20"},
-            {"firm": "Barclays",       "analyst": "Tim Long",         "rating": "UNDERWEIGHT", "target": 180, "prev_target": 185, "date": "2026-02-15"},
-        ],
-        "earnings_date": "2026-05-01",
-        "eps_estimate": 1.57,
-        "eps_prev_year": 1.53,
-        "revenue_estimate": 94.2,
-        "revenue_prev_year": 90.8,
-    },
-    "MSFT": {
-        "ratings": [
-            {"firm": "Goldman Sachs",  "analyst": "Kash Rangan",     "rating": "BUY",         "target": 500, "prev_target": 520, "date": "2026-03-14"},
-            {"firm": "Morgan Stanley", "analyst": "Keith Weiss",     "rating": "OVERWEIGHT",  "target": 520, "prev_target": 540, "date": "2026-03-10"},
-            {"firm": "JPMorgan",       "analyst": "Mark Murphy",     "rating": "OVERWEIGHT",  "target": 475, "prev_target": 490, "date": "2026-03-05"},
-            {"firm": "Bernstein",      "analyst": "Mark Moerdler",   "rating": "BUY",         "target": 510, "prev_target": 510, "date": "2026-02-28"},
-            {"firm": "UBS",            "analyst": "Karl Keirstead",  "rating": "BUY",         "target": 490, "prev_target": 490, "date": "2026-02-20"},
-            {"firm": "Wells Fargo",    "analyst": "Michael Turrin",  "rating": "UNDERWEIGHT", "target": 360, "prev_target": 380, "date": "2026-01-22"},
-        ],
-        "earnings_date": "2026-04-23",
-        "eps_estimate": 3.37,
-        "eps_prev_year": 2.94,
-        "revenue_estimate": 68.9,
-        "revenue_prev_year": 61.9,
-    },
-    "NVDA": {
-        "ratings": [
-            {"firm": "Goldman Sachs",  "analyst": "Toshiya Hari",    "rating": "BUY",         "target": 175, "prev_target": 165, "date": "2026-03-15"},
-            {"firm": "Morgan Stanley", "analyst": "Joseph Moore",    "rating": "OVERWEIGHT",  "target": 180, "prev_target": 170, "date": "2026-03-12"},
-            {"firm": "JPMorgan",       "analyst": "Harlan Sur",      "rating": "OVERWEIGHT",  "target": 170, "prev_target": 160, "date": "2026-03-08"},
-            {"firm": "Bernstein",      "analyst": "Stacy Rasgon",    "rating": "OVERWEIGHT",  "target": 185, "prev_target": 175, "date": "2026-03-01"},
-            {"firm": "UBS",            "analyst": "Timothy Arcuri",  "rating": "BUY",         "target": 190, "prev_target": 180, "date": "2026-02-25"},
-            {"firm": "Barclays",       "analyst": "Tom O'Malley",    "rating": "OVERWEIGHT",  "target": 175, "prev_target": 165, "date": "2026-02-20"},
-        ],
-        "earnings_date": "2026-05-28",
-        "eps_estimate": 0.96,
-        "eps_prev_year": 0.61,
-        "revenue_estimate": 43.2,
-        "revenue_prev_year": 22.1,
-    },
-    "TSLA": {
-        "ratings": [
-            {"firm": "Goldman Sachs",  "analyst": "Mark Delaney",    "rating": "HOLD",        "target": 250, "prev_target": 275, "date": "2026-03-10"},
-            {"firm": "Morgan Stanley", "analyst": "Adam Jonas",      "rating": "OVERWEIGHT",  "target": 430, "prev_target": 400, "date": "2026-03-08"},
-            {"firm": "JPMorgan",       "analyst": "Ryan Brinkman",   "rating": "UNDERWEIGHT", "target": 135, "prev_target": 150, "date": "2026-03-05"},
-            {"firm": "Bernstein",      "analyst": "Daniel Roeska",   "rating": "HOLD",        "target": 240, "prev_target": 260, "date": "2026-02-20"},
-            {"firm": "Barclays",       "analyst": "Dan Levy",        "rating": "HOLD",        "target": 225, "prev_target": 250, "date": "2026-02-15"},
-        ],
-        "earnings_date": "2026-04-16",
-        "eps_estimate": 0.52,
-        "eps_prev_year": 0.71,
-        "revenue_estimate": 27.1,
-        "revenue_prev_year": 25.2,
-    },
-    "AMZN": {
-        "ratings": [
-            {"firm": "Goldman Sachs",  "analyst": "Eric Sheridan",   "rating": "BUY",         "target": 280, "prev_target": 265, "date": "2026-03-12"},
-            {"firm": "Morgan Stanley", "analyst": "Brian Nowak",     "rating": "OVERWEIGHT",  "target": 285, "prev_target": 270, "date": "2026-03-10"},
-            {"firm": "JPMorgan",       "analyst": "Doug Anmuth",     "rating": "OVERWEIGHT",  "target": 290, "prev_target": 275, "date": "2026-03-06"},
-            {"firm": "Bernstein",      "analyst": "Mark Shmulik",    "rating": "OVERWEIGHT",  "target": 295, "prev_target": 280, "date": "2026-03-01"},
-            {"firm": "UBS",            "analyst": "Lloyd Walmsley",  "rating": "BUY",         "target": 275, "prev_target": 265, "date": "2026-02-22"},
-            {"firm": "Barclays",       "analyst": "Ross Sandler",    "rating": "OVERWEIGHT",  "target": 270, "prev_target": 260, "date": "2026-02-18"},
-        ],
-        "earnings_date": "2026-04-30",
-        "eps_estimate": 1.32,
-        "eps_prev_year": 0.98,
-        "revenue_estimate": 187.3,
-        "revenue_prev_year": 143.3,
-    },
-    "META": {
-        "ratings": [
-            {"firm": "Goldman Sachs",  "analyst": "Eric Sheridan",   "rating": "BUY",         "target": 750, "prev_target": 720, "date": "2026-03-14"},
-            {"firm": "Morgan Stanley", "analyst": "Brian Nowak",     "rating": "OVERWEIGHT",  "target": 780, "prev_target": 750, "date": "2026-03-10"},
-            {"firm": "JPMorgan",       "analyst": "Doug Anmuth",     "rating": "OVERWEIGHT",  "target": 760, "prev_target": 730, "date": "2026-03-05"},
-            {"firm": "Bernstein",      "analyst": "Mark Shmulik",    "rating": "OVERWEIGHT",  "target": 800, "prev_target": 770, "date": "2026-03-01"},
-            {"firm": "UBS",            "analyst": "Lloyd Walmsley",  "rating": "BUY",         "target": 740, "prev_target": 710, "date": "2026-02-25"},
-        ],
-        "earnings_date": "2026-04-29",
-        "eps_estimate": 6.68,
-        "eps_prev_year": 4.71,
-        "revenue_estimate": 46.0,
-        "revenue_prev_year": 36.5,
-    },
-    "SPY": {
-        "ratings": [
-            {"firm": "Goldman Sachs",  "analyst": "David Kostin",    "rating": "HOLD",        "target": 600, "prev_target": 620, "date": "2026-03-10"},
-            {"firm": "Morgan Stanley", "analyst": "Mike Wilson",     "rating": "UNDERWEIGHT", "target": 540, "prev_target": 560, "date": "2026-03-08"},
-            {"firm": "JPMorgan",       "analyst": "Dubravko Lakos",  "rating": "HOLD",        "target": 580, "prev_target": 600, "date": "2026-03-05"},
-        ],
-        "earnings_date": None,
-        "eps_estimate": None,
-        "eps_prev_year": None,
-        "revenue_estimate": None,
-        "revenue_prev_year": None,
-    },
-    "QQQ": {
-        "ratings": [
-            {"firm": "Goldman Sachs",  "analyst": "David Kostin",    "rating": "HOLD",        "target": 490, "prev_target": 510, "date": "2026-03-10"},
-            {"firm": "Morgan Stanley", "analyst": "Mike Wilson",     "rating": "UNDERWEIGHT", "target": 440, "prev_target": 460, "date": "2026-03-08"},
-        ],
-        "earnings_date": None,
-        "eps_estimate": None,
-        "eps_prev_year": None,
-        "revenue_estimate": None,
-        "revenue_prev_year": None,
-    },
+    1: ("STRONG SELL", "#ff6080"),
+    2: ("SELL",         "#ff8090"),
+    3: ("HOLD",         "#e8b84b"),
+    4: ("BUY",          "#40dda0"),
+    5: ("STRONG BUY",   "#00c896"),
 }
 
 
 class AnalystRatingsEngine:
     """
-    Wall Street analyst ratings and earnings estimates.
-    Uses pre-loaded data for top tickers, falls back to generic
-    consensus for unknown tickers.
+    Real analyst ratings from Finnhub free tier.
+
+        engine = AnalystRatingsEngine(api_key=..., redis_client=...)
+        result = engine.fetch("NVDA")
     """
 
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        redis_client: Any = None,
+        ttl_seconds: int = DEFAULT_TTL_SECONDS,
+    ) -> None:
+        self.api_key = api_key or os.getenv("FINNHUB_API_KEY", "")
+        self.redis = redis_client
+        self.ttl = ttl_seconds
+
     def fetch(self, ticker: str) -> Dict[str, Any]:
-        """Fetch analyst ratings and earnings estimates for ticker."""
         ticker = ticker.upper().strip()
-        data = ANALYST_DATA.get(ticker)
 
-        if not data:
-            return self._generic_result(ticker)
+        if not self.api_key:
+            logger.warning("FINNHUB_API_KEY not set — returning empty analyst result")
+            return self._empty_result(ticker)
 
-        ratings = data["ratings"]
-        scores = []
-        for r in ratings:
-            rating_lower = r["rating"].lower().replace("-", " ")
-            score = RATING_MAP.get(rating_lower, 3)
-            r["score"] = score
-            label, color = SCORE_TO_LABEL[score]
-            r["label"] = label
-            r["color"] = color
-            scores.append(score)
+        cached = self._cache_get(ticker)
+        if cached:
+            return cached
 
-        avg_score = sum(scores) / len(scores) if scores else 3
-        avg_int = round(avg_score)
-        avg_int = max(1, min(5, avg_int))
-        consensus_label, consensus_color = SCORE_TO_LABEL[avg_int]
+        recs = self._fetch_recommendations(ticker)
+        earnings = self._fetch_earnings_surprise(ticker)
 
-        targets = [r["target"] for r in ratings if r.get("target")]
-        avg_target = round(sum(targets) / len(targets)) if targets else None
-        high_target = max(targets) if targets else None
-        low_target  = min(targets) if targets else None
+        result = self._build_result(ticker, recs, earnings)
+        self._cache_set(ticker, result)
+        return result
 
-        # Count upgrades/downgrades in last 30 days
-        cutoff = (date.today() - timedelta(days=30)).isoformat()
-        recent = [r for r in ratings if r.get("date", "") >= cutoff]
-        upgrades   = sum(1 for r in recent if r["score"] >= 4)
-        downgrades = sum(1 for r in recent if r["score"] <= 2)
+    def _fetch_recommendations(self, ticker: str) -> List[Dict[str, Any]]:
+        url = f"{FINNHUB_BASE}/stock/recommendation"
+        params = {"symbol": ticker, "token": self.api_key}
+        try:
+            with httpx.Client(timeout=HTTP_TIMEOUT) as client:
+                r = client.get(url, params=params)
+                r.raise_for_status()
+                data = r.json()
+                return data if isinstance(data, list) else []
+        except Exception as e:
+            logger.warning(f"Finnhub recommendations for {ticker} failed: {e}")
+            return []
 
-        # Earnings estimates
-        earnings_date = data.get("earnings_date")
-        eps_est  = data.get("eps_estimate")
-        eps_prev = data.get("eps_prev_year")
-        rev_est  = data.get("revenue_estimate")
-        rev_prev = data.get("revenue_prev_year")
+    def _fetch_earnings_surprise(self, ticker: str) -> List[Dict[str, Any]]:
+        url = f"{FINNHUB_BASE}/stock/earnings"
+        params = {"symbol": ticker, "token": self.api_key}
+        try:
+            with httpx.Client(timeout=HTTP_TIMEOUT) as client:
+                r = client.get(url, params=params)
+                r.raise_for_status()
+                data = r.json()
+                return data if isinstance(data, list) else []
+        except Exception as e:
+            logger.warning(f"Finnhub earnings for {ticker} failed: {e}")
+            return []
 
-        days_to_earnings = None
-        if earnings_date:
-            try:
-                ed = datetime.strptime(earnings_date, "%Y-%m-%d").date()
-                days_to_earnings = (ed - date.today()).days
-            except Exception:
-                pass
+    def _build_result(
+        self,
+        ticker: str,
+        recs: List[Dict[str, Any]],
+        earnings: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        latest = recs[0] if recs else {}
+        strong_buy = int(latest.get("strongBuy", 0) or 0)
+        buy = int(latest.get("buy", 0) or 0)
+        hold = int(latest.get("hold", 0) or 0)
+        sell = int(latest.get("sell", 0) or 0)
+        strong_sell = int(latest.get("strongSell", 0) or 0)
+        n_analysts = strong_buy + buy + hold + sell + strong_sell
 
-        eps_growth = None
-        if eps_est and eps_prev and eps_prev != 0:
-            eps_growth = round((eps_est - eps_prev) / abs(eps_prev) * 100, 1)
+        if n_analysts > 0:
+            weighted = (
+                strong_sell * 1 + sell * 2 + hold * 3 + buy * 4 + strong_buy * 5
+            ) / n_analysts
+            score_int = max(1, min(5, round(weighted)))
+            label, color = SCORE_TO_LABEL[score_int]
+        else:
+            weighted = 3.0
+            label, color = "NO COVERAGE", "#9d8b7a"
 
-        rev_growth = None
-        if rev_est and rev_prev and rev_prev != 0:
-            rev_growth = round((rev_est - rev_prev) / abs(rev_prev) * 100, 1)
+        upgrades_30d = 0
+        downgrades_30d = 0
+        if len(recs) >= 2:
+            prev = recs[1]
+            prev_n = sum(int(prev.get(k, 0) or 0) for k in ("strongBuy","buy","hold","sell","strongSell"))
+            if prev_n > 0:
+                prev_weighted = (
+                    int(prev.get("strongSell", 0) or 0) * 1
+                    + int(prev.get("sell", 0) or 0) * 2
+                    + int(prev.get("hold", 0) or 0) * 3
+                    + int(prev.get("buy", 0) or 0) * 4
+                    + int(prev.get("strongBuy", 0) or 0) * 5
+                ) / prev_n
+                delta = weighted - prev_weighted
+                if delta >= 0.10:
+                    upgrades_30d = 1
+                elif delta <= -0.10:
+                    downgrades_30d = 1
 
-        buy_count  = sum(1 for s in scores if s >= 4)
-        hold_count = sum(1 for s in scores if s == 3)
-        sell_count = sum(1 for s in scores if s <= 2)
+        buy_count = strong_buy + buy
+        sell_count = strong_sell + sell
+        hold_count = hold
+
+        next_earnings_date, days_to = self._next_earnings_date(earnings)
+        eps_est, eps_prev, eps_growth = self._next_eps_from_history(earnings)
+        rev_est = rev_prev = rev_growth = None
 
         return {
             "ticker": ticker,
-            "ratings": ratings,
+            "source": "finnhub",
+            "ratings": [],  # Finnhub free tier does not expose individual rows
             "consensus": {
-                "label":       consensus_label,
-                "color":       consensus_color,
-                "score":       round(avg_score, 2),
-                "avg_target":  avg_target,
-                "high_target": high_target,
-                "low_target":  low_target,
-                "n_analysts":  len(ratings),
-                "buy_count":   buy_count,
-                "hold_count":  hold_count,
-                "sell_count":  sell_count,
-                "upgrades_30d":   upgrades,
-                "downgrades_30d": downgrades,
+                "label":          label,
+                "color":          color,
+                "score":          round(weighted, 2),
+                "n_analysts":     n_analysts,
+                "strong_buy":     strong_buy,
+                "buy":            buy,
+                "hold":           hold,
+                "sell":           sell,
+                "strong_sell":    strong_sell,
+                "buy_count":      buy_count,
+                "hold_count":     hold_count,
+                "sell_count":     sell_count,
+                "avg_target":     None,
+                "high_target":    None,
+                "low_target":     None,
+                "upgrades_30d":   upgrades_30d,
+                "downgrades_30d": downgrades_30d,
             },
+            "trend": [
+                {
+                    "period":     r.get("period"),
+                    "strong_buy": int(r.get("strongBuy", 0) or 0),
+                    "buy":        int(r.get("buy", 0) or 0),
+                    "hold":       int(r.get("hold", 0) or 0),
+                    "sell":       int(r.get("sell", 0) or 0),
+                    "strong_sell":int(r.get("strongSell", 0) or 0),
+                }
+                for r in recs[:6]
+            ],
             "earnings": {
-                "date":          earnings_date,
-                "days_to":       days_to_earnings,
-                "eps_estimate":  eps_est,
-                "eps_prev_year": eps_prev,
-                "eps_growth":    eps_growth,
-                "rev_estimate":  rev_est,
-                "rev_prev_year": rev_prev,
-                "rev_growth":    rev_growth,
+                "date":           next_earnings_date,
+                "days_to":        days_to,
+                "eps_estimate":   eps_est,
+                "eps_prev_year":  eps_prev,
+                "eps_growth":     eps_growth,
+                "rev_estimate":   rev_est,
+                "rev_prev_year":  rev_prev,
+                "rev_growth":     rev_growth,
+                "surprise_history": [
+                    {
+                        "period":           e.get("period"),
+                        "actual":           e.get("actual"),
+                        "estimate":         e.get("estimate"),
+                        "surprise_percent": e.get("surprisePercent"),
+                    }
+                    for e in earnings[:4]
+                ],
             },
         }
 
-    def _generic_result(self, ticker: str) -> Dict[str, Any]:
-        """Return generic neutral result for unknown tickers."""
+    def _next_earnings_date(self, earnings: List[Dict[str, Any]]) -> Tuple[Optional[str], Optional[int]]:
+        """
+        Finnhub free tier doesn't have a forward earnings calendar endpoint.
+        Estimate next earnings by adding ~90 days to the most recent report.
+        """
+        if not earnings:
+            return None, None
+        latest = earnings[0]
+        period = latest.get("period")
+        if not period:
+            return None, None
+        try:
+            last_report = datetime.strptime(period, "%Y-%m-%d").date()
+            next_est = last_report + timedelta(days=90)
+            days_to = (next_est - date.today()).days
+            return next_est.isoformat(), days_to
+        except Exception:
+            return None, None
+
+    def _next_eps_from_history(
+        self, earnings: List[Dict[str, Any]]
+    ) -> Tuple[Optional[float], Optional[float], Optional[float]]:
+        """
+        Forward EPS estimate not in free tier. Use most recent actual as the
+        "previous" comparison point; growth computed vs same quarter last year
+        (idx 4 if available).
+        """
+        if not earnings:
+            return None, None, None
+        latest_actual = earnings[0].get("actual")
+        prev_year = None
+        if len(earnings) >= 5:
+            prev_year = earnings[4].get("actual")
+        eps_growth = None
+        if latest_actual is not None and prev_year and prev_year != 0:
+            eps_growth = round((latest_actual - prev_year) / abs(prev_year) * 100, 1)
+        return None, latest_actual, eps_growth
+
+    def _cache_get(self, ticker: str) -> Optional[Dict[str, Any]]:
+        if not self.redis:
+            return None
+        try:
+            key = f"analyst_ratings:finnhub:{ticker}"
+            raw = self.redis.get(key)
+            if raw:
+                return json.loads(raw)
+        except Exception as e:
+            logger.debug(f"Cache get failed for {ticker}: {e}")
+        return None
+
+    def _cache_set(self, ticker: str, payload: Dict[str, Any]) -> None:
+        if not self.redis:
+            return
+        try:
+            key = f"analyst_ratings:finnhub:{ticker}"
+            self.redis.setex(key, self.ttl, json.dumps(payload, default=str))
+        except Exception as e:
+            logger.debug(f"Cache set failed for {ticker}: {e}")
+
+    def _empty_result(self, ticker: str) -> Dict[str, Any]:
         return {
             "ticker": ticker,
+            "source": "unavailable",
             "ratings": [],
             "consensus": {
-                "label": "NO DATA",
-                "color": "#555350",
+                "label": "NO COVERAGE",
+                "color": "#9d8b7a",
                 "score": 3.0,
-                "avg_target": None,
-                "high_target": None,
-                "low_target": None,
                 "n_analysts": 0,
-                "buy_count": 0,
-                "hold_count": 0,
-                "sell_count": 0,
-                "upgrades_30d": 0,
-                "downgrades_30d": 0,
+                "strong_buy": 0, "buy": 0, "hold": 0, "sell": 0, "strong_sell": 0,
+                "buy_count": 0, "hold_count": 0, "sell_count": 0,
+                "avg_target": None, "high_target": None, "low_target": None,
+                "upgrades_30d": 0, "downgrades_30d": 0,
             },
+            "trend": [],
             "earnings": {
-                "date": None,
-                "days_to": None,
-                "eps_estimate": None,
-                "eps_prev_year": None,
-                "eps_growth": None,
-                "rev_estimate": None,
-                "rev_prev_year": None,
-                "rev_growth": None,
+                "date": None, "days_to": None,
+                "eps_estimate": None, "eps_prev_year": None, "eps_growth": None,
+                "rev_estimate": None, "rev_prev_year": None, "rev_growth": None,
+                "surprise_history": [],
             },
         }

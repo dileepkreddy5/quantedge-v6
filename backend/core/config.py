@@ -70,6 +70,7 @@ class Settings(BaseSettings):
     # ─── Data APIs (all optional — graceful fallback) ─────
     ALPHA_VANTAGE_KEY: Optional[str] = Field(default=None, env="ALPHA_VANTAGE_KEY")
     POLYGON_API_KEY: Optional[str] = Field(default=None, env="POLYGON_API_KEY")
+    FINNHUB_API_KEY: Optional[str] = Field(default=None, env="FINNHUB_API_KEY")
     FRED_API_KEY: Optional[str] = Field(default=None, env="FRED_API_KEY")
     NEWSAPI_KEY: Optional[str] = Field(default=None, env="NEWSAPI_KEY")
     REDDIT_CLIENT_ID: Optional[str] = Field(default=None, env="REDDIT_CLIENT_ID")

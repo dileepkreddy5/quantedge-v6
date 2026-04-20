@@ -632,6 +632,7 @@ resource "aws_ecs_task_definition" "quantedge_api" {
       secrets = [
         { name = "ANTHROPIC_API_KEY", valueFrom = "${aws_secretsmanager_secret.quantedge_secrets.arn}:ANTHROPIC_API_KEY::" },
         { name = "POLYGON_API_KEY",   valueFrom = "${aws_secretsmanager_secret.quantedge_secrets.arn}:POLYGON_API_KEY::" },
+        { name = "FINNHUB_API_KEY",   valueFrom = "${aws_secretsmanager_secret.quantedge_secrets.arn}:FINNHUB_API_KEY::" },
         { name = "SECRET_KEY",        valueFrom = "${aws_secretsmanager_secret.quantedge_secrets.arn}:SECRET_KEY::" },
         { name = "DB_HOST",           valueFrom = "${aws_secretsmanager_secret.quantedge_secrets.arn}:DB_HOST::" },
         { name = "DB_PORT",           valueFrom = "${aws_secretsmanager_secret.quantedge_secrets.arn}:DB_PORT::" },
