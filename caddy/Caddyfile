@@ -1,0 +1,29 @@
+# QuantEdge v6.0 — Caddy reverse proxy (automatic HTTPS)
+# Routes the same path patterns CloudFront used:
+#   /api/* /auth/* /health /ws/* /docs -> backend (FastAPI :8000)
+#   everything else                    -> frontend (nginx :80)
+#
+# LOCAL (laptop): comment out the domain block, uncomment the :80 block.
+
+quant.dileepkapu.com {
+    encode gzip
+    @backend path /api/* /auth/* /health /ws/* /docs /openapi.json
+    handle @backend {
+        reverse_proxy backend:8000
+    }
+    handle {
+        reverse_proxy frontend:80
+    }
+}
+
+# ── LOCAL USE: uncomment for http://localhost, comment out the block above ──
+# :80 {
+#     encode gzip
+#     @backend path /api/* /auth/* /health /ws/* /docs /openapi.json
+#     handle @backend {
+#         reverse_proxy backend:8000
+#     }
+#     handle {
+#         reverse_proxy frontend:80
+#     }
+# }

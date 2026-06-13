@@ -1,54 +1,35 @@
 ###############################################################################
-#  QuantEdge v6.0 — docker-compose.yml (Personal Use)
-#
-#  Matches production ECS architecture exactly:
-#    - Redis runs as a sidecar alongside the backend (same network)
-#    - REDIS_URL = redis://localhost:6379/0 (matches ECS task definition)
-#    - PostgreSQL runs separately (matches RDS in production)
-#
-#  Start for local dev:
-#    docker-compose up -d
-#    export $(cat .env | xargs)
-#    uvicorn main_v6:app --reload --port 8000
+#  QuantEdge v6.0 — Full Stack (one command: docker compose up -d)
+#  Replaces: CloudFront->caddy, ECS->backend, RDS->postgres,
+#            Redis sidecar->redis, S3->frontend, Cognito->local JWT auth.
+#  Same file runs on laptop AND VPS — only .env + DNS differ.
 ###############################################################################
-
-version: "3.9"
 
 services:
 
-  # PostgreSQL — matches RDS db.t3.micro, PostgreSQL 15 in production
   postgres:
     image: postgres:15-alpine
     container_name: quantedge-db
     environment:
-      POSTGRES_DB:       quantedge
-      POSTGRES_USER:     quantedge
-      POSTGRES_PASSWORD: quantedge
-    ports:
-      - "5432:5432"
+      POSTGRES_DB:       ${POSTGRES_DB:-quantedge}
+      POSTGRES_USER:     ${POSTGRES_USER:-quantedge}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./db/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U quantedge -d quantedge"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-quantedge} -d ${POSTGRES_DB:-quantedge}"]
       interval: 10s
       timeout: 5s
       retries: 5
     restart: unless-stopped
 
-  # Redis — matches the sidecar container in production ECS task
-  # REDIS_URL = redis://localhost:6379/0 (same as production)
   redis:
     image: redis:7-alpine
     container_name: quantedge-redis
-    ports:
-      - "6379:6379"
     command: >
-      redis-server
-      --maxmemory 96mb
-      --maxmemory-policy allkeys-lru
-      --save ""
-      --appendonly no
+      redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+      --save "" --appendonly no
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -56,5 +37,58 @@ services:
       retries: 5
     restart: unless-stopped
 
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: quantedge-api
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-quantedge}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-quantedge}
+      REDIS_URL:    redis://redis:6379/0
+      DB_SSL_MODE:  disable
+      MODEL_DIR:    /app/models
+    volumes:
+      - model_data:/app/models
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis:    { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 180s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        REACT_APP_API_URL: ${REACT_APP_API_URL:-quant.dileepkapu.com}
+    container_name: quantedge-frontend
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: quantedge-caddy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+      - frontend
+    restart: unless-stopped
+
 volumes:
   postgres_data:
+  model_data:
+  caddy_data:
+  caddy_config:

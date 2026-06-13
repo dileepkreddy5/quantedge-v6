@@ -45,6 +45,8 @@ class Settings(BaseSettings):
     DB_NAME: Optional[str] = Field(default=None, env="DB_NAME")
     DB_USER: Optional[str] = Field(default=None, env="DB_USER")
     DB_PASSWORD: Optional[str] = Field(default=None, env="DB_PASSWORD")
+    # SSL mode for the asyncpg pool: "require" for RDS, "disable" for local/VPS.
+    DB_SSL_MODE: str = Field(default="disable", env="DB_SSL_MODE")
 
     @property
     def effective_database_url(self) -> Optional[str]:
@@ -80,6 +82,11 @@ class Settings(BaseSettings):
     # ─── Owner (single-user platform) ─────────────────────
     OWNER_USERNAME: str = Field(default="dileep", env="OWNER_USERNAME")
     OWNER_EMAIL: str = Field(default="dileep@dileepkapu.com", env="OWNER_EMAIL")
+    # ─── Local auth (replaces Cognito) ────────────────────
+    # Preferred: set OWNER_PASSWORD_HASH (bcrypt) in .env.
+    # Convenience: set OWNER_PASSWORD (plaintext) and it is hashed at boot.
+    OWNER_PASSWORD: Optional[str] = Field(default=None, env="OWNER_PASSWORD")
+    OWNER_PASSWORD_HASH: Optional[str] = Field(default=None, env="OWNER_PASSWORD_HASH")
 
     # ─── SageMaker (optional — used by v5 analysis.py) ────
     SAGEMAKER_LSTM_ENDPOINT: Optional[str] = Field(default=None, env="SAGEMAKER_LSTM_ENDPOINT")

@@ -98,3 +98,8 @@ new-task-def*.json
 secrets.json
 .quantedge_*
 .qe_secrets_*
+quantedge.zip
+docker-compose.override.yml
+
+# local edit backups
+*.bak

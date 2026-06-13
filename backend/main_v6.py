@@ -152,8 +152,12 @@ async def lifespan(app: FastAPI):
         # RDS PostgreSQL has rds.force_ssl=1 by default. asyncpg does NOT enable SSL
         # unless we pass ssl= explicitly. Without this we get:
         #   "no pg_hba.conf entry for host X, user quantedge, database quantedge, no encryption"
+        # SSL: RDS enforces it (rds.force_ssl=1); local/VPS Postgres does not.
+        # Controlled by DB_SSL_MODE env: "require" (RDS) or "disable" (local/VPS).
+        _ssl_mode = getattr(settings, "DB_SSL_MODE", "disable")
+        _ssl = "require" if _ssl_mode == "require" else None
         app.state.db = await asyncpg.create_pool(
-            db_url, min_size=1, max_size=5, command_timeout=10, ssl="require",
+            db_url, min_size=1, max_size=5, command_timeout=10, ssl=_ssl,
         )
         logger.info("✅ PostgreSQL pool connected")
         async with app.state.db.acquire() as conn:
