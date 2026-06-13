@@ -6,7 +6,7 @@ ENV REACT_APP_API_URL=$REACT_APP_API_URL
 ENV NODE_ENV=production
 ENV DISABLE_ESLINT_PLUGIN=true
 COPY package*.json ./
-RUN npm install --legacy-peer-deps
+RUN npm install --legacy-peer-deps && npm install --save-dev typescript@4.9.5
 COPY . .
 RUN npm run build
 
