@@ -11,6 +11,7 @@ The scheduled job that powers the Ascent Radar board:
 
 from __future__ import annotations
 
+import asyncio
 import time
 from datetime import datetime, timezone
 from typing import Dict, List
@@ -26,6 +27,7 @@ from services.ascent_store import AscentStore
 
 
 ASCENT_UNIVERSE_SIZE = 500
+MIN_MARKET_CAP = 2_000_000_000  # mid-cap floor: drop small/micro/nano (too volatile)
 ASCENT_TOP_N = 25
 
 
@@ -42,6 +44,31 @@ async def _enrich_52w_high(ticker: str, metrics: Dict, session: aiohttp.ClientSe
             metrics["dist_from_52w_high"] = max(0.0, (high_52w - cur) / high_52w)
     except Exception:
         return
+
+
+# Lightweight per-ticker details: name, sector, market_cap (one cheap call).
+_POLYGON_BASE = "https://api.polygon.io"
+
+async def _fetch_details(ticker: str, session: aiohttp.ClientSession, api_key: str) -> Dict:
+    out = {"name": "", "sector": "", "market_cap": None}
+    try:
+        url = f"{_POLYGON_BASE}/v3/reference/tickers/{ticker.upper()}?apiKey={api_key}"
+        async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+            if resp.status != 200:
+                return out
+            data = await resp.json()
+        res = data.get("results", {})
+        out["name"] = res.get("name", "") or ""
+        out["sector"] = res.get("sic_description", "") or ""
+        mc = res.get("market_cap")
+        if not mc:
+            shares = res.get("weighted_shares_outstanding") or res.get("share_class_shares_outstanding")
+            # market_cap may be absent on Starter; leave None if no shares
+            mc = None
+        out["market_cap"] = mc
+    except Exception:
+        pass
+    return out
 
 
 class AscentScanJob:
@@ -64,18 +91,33 @@ class AscentScanJob:
         raw = scan.get("raw_scores", {})
 
         scores: List[AscentScore] = []
+        sem = asyncio.Semaphore(12)  # bound concurrency for the detail+price calls
         async with aiohttp.ClientSession() as session:
-            for tk, payload in raw.items():
-                metrics = dict(payload.get("metrics", {}))
-                await _enrich_52w_high(tk, metrics, session, self.api_key)
-                e = meta.get(tk)
-                scores.append(compute_ascent(
-                    ticker=tk,
-                    name=getattr(e, "name", "") if e else "",
-                    sector=getattr(e, "sector", "") if e else "",
-                    market_cap=getattr(e, "market_cap", None) if e else None,
-                    metrics=metrics,
-                ))
+
+            async def _process(tk, payload):
+                async with sem:
+                    metrics = dict(payload.get("metrics", {}))
+                    await _enrich_52w_high(tk, metrics, session, self.api_key)
+                    e = meta.get(tk)
+                    details = await _fetch_details(tk, session, self.api_key)
+                    _name = details["name"] or (getattr(e, "name", "") if e else "")
+                    _sector = details["sector"] or (getattr(e, "sector", "") if e else "")
+                    _mcap = details["market_cap"] if details["market_cap"] is not None else (getattr(e, "market_cap", None) if e else None)
+                    return compute_ascent(
+                        ticker=tk, name=_name, sector=_sector,
+                        market_cap=_mcap, metrics=metrics,
+                    )
+
+            tasks = [_process(tk, payload) for tk, payload in raw.items()]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            scores = [r for r in results if isinstance(r, AscentScore)]
+
+        # Mid-cap floor: keep mid / large / mega only. Names with unknown cap are
+        # dropped here too (can't confirm they clear the floor) — keeps the board
+        # focused on the tradeable, climbable universe.
+        before = len(scores)
+        scores = [s for s in scores if s.market_cap is not None and s.market_cap >= MIN_MARKET_CAP]
+        logger.info(f"Mid-cap floor: {len(scores)}/{before} tickers >= ${MIN_MARKET_CAP/1e9:.0f}B")
 
         ranked = rank_ascent(scores, top_n=top_n)
         scan_time = datetime.now(timezone.utc)
