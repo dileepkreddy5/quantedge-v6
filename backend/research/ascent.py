@@ -69,13 +69,14 @@ def _sustained_strength(m: Dict[str, float]) -> tuple[float, List[str]]:
     mom_1m   = m.get("mom_1m", 0.0)
     sharpe_3m = m.get("sharpe_3m", 0.0)
 
-    def ret_to_score(r, scale):
-        return _clip(50 + (r / scale) * 50)
+    # NOTE: momentum metrics arrive as PERCENT (e.g. 24.7 = +24.7%), not fractions.
+    def ret_to_score(r_pct, scale_pct):
+        return _clip(50 + (r_pct / scale_pct) * 50)
 
-    s_12 = ret_to_score(mom_12_1, 1.00)
-    s_6  = ret_to_score(mom_6m, 0.60)
-    s_3  = ret_to_score(mom_3m, 0.40)
-    s_1  = ret_to_score(mom_1m, 0.20)
+    s_12 = ret_to_score(mom_12_1, 100.0)
+    s_6  = ret_to_score(mom_6m, 60.0)
+    s_3  = ret_to_score(mom_3m, 40.0)
+    s_1  = ret_to_score(mom_1m, 20.0)
 
     all_positive = all(x > 0 for x in (mom_12_1, mom_6m, mom_3m, mom_1m))
     consistency = 1.0
@@ -87,7 +88,7 @@ def _sustained_strength(m: Dict[str, float]) -> tuple[float, List[str]]:
     base = (0.35 * s_12 + 0.25 * s_6 + 0.20 * s_3 + 0.10 * s_1 + 0.10 * sharpe_bonus)
     score = _clip(base * consistency)
 
-    if mom_3m > 0.30:
+    if mom_3m > 30.0:
         flags.append(f"+{mom_3m*100:.0f}% over 3 months")
     if sharpe_3m > 1.5:
         flags.append("High risk-adjusted momentum")
@@ -96,21 +97,19 @@ def _sustained_strength(m: Dict[str, float]) -> tuple[float, List[str]]:
 
 def _persistent_volume(m: Dict[str, float]) -> tuple[float, List[str]]:
     flags = []
-    vol_surge = m.get("volume_surge_ratio", 1.0)
-    obv_slope = m.get("obv_slope", 0.0)
-    pv_div    = m.get("price_vol_divergence", 0.0)
-    ad_slope  = m.get("ad_line_slope", 0.0)
+    vol_surge = m.get("volume_surge", 1.0)
+    obv_slope = m.get("obv_slope_norm", 0.0)
+    pct_ma200 = m.get("pct_above_ma200", 0.0)
 
     surge_score = _clip(50 + (vol_surge - 1.0) * 100)
-    obv_score = _clip(50 + np.sign(obv_slope) * min(abs(obv_slope) * 1000, 40))
-    ad_score  = _clip(50 + np.sign(ad_slope) * min(abs(ad_slope) * 50, 40))
-    div_score = _clip(50 + pv_div * 30)
-    score = _clip(0.45 * surge_score + 0.25 * obv_score + 0.15 * ad_score + 0.15 * div_score)
+    obv_score = _clip(50 + np.sign(obv_slope) * min(abs(obv_slope) * 200, 45))
+    trend_score = _clip(50 + pct_ma200 * 50)
+    score = _clip(0.50 * surge_score + 0.30 * obv_score + 0.20 * trend_score)
 
     if vol_surge > 1.4:
         flags.append(f"Volume {vol_surge:.1f}x its 90-day norm")
-    if obv_slope > 0 and pv_div > 0:
-        flags.append("Accumulation: volume leading price")
+    if obv_slope > 0.05:
+        flags.append("Accumulation: OBV rising")
     return score, flags
 
 
