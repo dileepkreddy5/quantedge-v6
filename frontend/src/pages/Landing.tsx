@@ -55,7 +55,7 @@ export default function Landing() {
       }} />
 
       {/* ── Nav ── */}
-      <nav style={{
+      <nav className="qe-header-pad" style={{
         position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100,
         background: 'rgba(26,15,10,0.95)', backdropFilter: 'blur(20px)',
         borderBottom: '1px solid rgba(212,149,108,0.12)',
@@ -71,11 +71,11 @@ export default function Landing() {
             fontSize: 8, color: '#8a7560', letterSpacing: 2, marginLeft: 10, paddingTop: 2,
           }}>v6.0</div>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 24, alignItems: 'center' }}>
-            <a href="https://dileepkapu.com" target="_blank" rel="noopener noreferrer"
+            <a className="qe-hide-mobile" href="https://dileepkapu.com" target="_blank" rel="noopener noreferrer"
               style={{ color: '#9d8b7a', fontSize: 12, fontWeight: 600, textDecoration: 'none', letterSpacing: 1 }}>
               dileepkapu.com
             </a>
-            <button onClick={() => navigate('/ascent')} style={{
+            <button className="qe-hide-mobile" onClick={() => navigate('/ascent')} style={{
               background: 'none', border: 'none', color: '#daa520',
               fontFamily: "'Fira Code', monospace", fontSize: 10, letterSpacing: 2,
               padding: '7px 4px', cursor: 'pointer', fontWeight: 700,

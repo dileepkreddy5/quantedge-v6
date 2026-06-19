@@ -272,7 +272,7 @@ code, pre, .mono { font-family: var(--font-mono); }
 @media (max-width: 1024px) {
   .qe-grid-3 { grid-template-columns: 1fr 1fr; }
 }
-@media (max-width: 640px) {
+@media (max-width: 768px) {
   .qe-grid-3 { grid-template-columns: 1fr; }
   /* cards that span 3 columns should span whatever exists on small screens */
   .qe-grid-3 > * { grid-column: auto !important; }
@@ -291,4 +291,10 @@ code, pre, .mono { font-family: var(--font-mono); }
 /* Header: stack and tighten on small screens */
 @media (max-width: 640px) {
   .qe-scorebar { width: 100% !important; max-width: 240px; }
+}
+
+/* Hide non-essential nav items on phones */
+@media (max-width: 640px) {
+  .qe-hide-mobile { display: none !important; }
+  .qe-header-pad { padding-left: 1.1rem !important; padding-right: 1.1rem !important; }
 }
