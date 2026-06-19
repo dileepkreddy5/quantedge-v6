@@ -257,8 +257,10 @@ export default function Dashboard() {
               </div>
             )}
             <button onClick={() => navigate('/')}
-              style={{ background: 'none', border: 'none', color: '#4a3428', fontFamily: "'Fira Code',monospace", fontSize: 9, padding: '5px 6px', cursor: 'pointer', letterSpacing: 1 }}>
-              ← HOME
+              onMouseEnter={(e) => { const b = e.currentTarget; b.style.background = 'rgba(218,165,32,0.12)'; b.style.borderColor = '#daa520'; b.style.color = '#daa520'; const a = b.querySelector('span'); if (a) a.style.transform = 'translateX(-3px)'; }}
+              onMouseLeave={(e) => { const b = e.currentTarget; b.style.background = 'rgba(218,165,32,0.04)'; b.style.borderColor = 'rgba(218,165,32,0.35)'; b.style.color = '#c9a227'; const a = b.querySelector('span'); if (a) a.style.transform = 'translateX(0)'; }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'rgba(218,165,32,0.04)', border: '1px solid rgba(218,165,32,0.35)', color: '#c9a227', fontFamily: "'Fira Code',monospace", fontWeight: 600, fontSize: 9, padding: '5px 11px', borderRadius: 4, cursor: 'pointer', letterSpacing: 1, transition: 'all 0.18s ease' }}>
+              <span style={{ display: 'inline-block', transition: 'transform 0.18s ease' }}>←</span> HOME
             </button>
             {isAuthenticated ? (
               <button onClick={handleLogout}
