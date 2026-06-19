@@ -89,7 +89,7 @@ def _sustained_strength(m: Dict[str, float]) -> tuple[float, List[str]]:
     score = _clip(base * consistency)
 
     if mom_3m > 30.0:
-        flags.append(f"+{mom_3m*100:.0f}% over 3 months")
+        flags.append(f"+{mom_3m:.0f}% over 3 months")
     if sharpe_3m > 1.5:
         flags.append("High risk-adjusted momentum")
     return score, flags
