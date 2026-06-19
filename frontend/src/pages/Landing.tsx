@@ -6,6 +6,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import AscentTeaser from './AscentTeaser';
 
 const GRAIN = `url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='3' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`;
 
@@ -74,6 +75,11 @@ export default function Landing() {
               style={{ color: '#9d8b7a', fontSize: 12, fontWeight: 600, textDecoration: 'none', letterSpacing: 1 }}>
               dileepkapu.com
             </a>
+            <button onClick={() => navigate('/ascent')} style={{
+              background: 'none', border: 'none', color: '#daa520',
+              fontFamily: "'Fira Code', monospace", fontSize: 10, letterSpacing: 2,
+              padding: '7px 4px', cursor: 'pointer', fontWeight: 700,
+            }}>★ ASCENT RADAR</button>
             <button onClick={() => navigate('/login')} style={{
               background: 'none', border: '1px solid rgba(212,149,108,0.3)',
               color: '#d4c4b0', fontFamily: "'Fira Code', monospace",
@@ -188,6 +194,11 @@ export default function Landing() {
           <span>✓ OPTIONS GEX</span>
           <span>✓ REAL-TIME STREAM</span>
         </div>
+      </section>
+
+      {/* Ascent Radar teaser */}
+      <section style={{ position: 'relative', zIndex: 1, padding: '0 4rem' }}>
+        <AscentTeaser />
       </section>
 
       {/* ── Models grid ── */}

@@ -40,6 +40,7 @@ from routers.quality_router import router as quality_router
 from routers.screener_router import router as screener_router
 from routers.portfolio_sizer_router import router as portfolio_sizer_router
 from routers.news_momentum_router import router as news_momentum_router
+from routers.ascent_router import router as ascent_router
 from ml.price_oracle.router import router as oracle_router
 from services.signal_tracker import SignalTracker, OutcomeFillerJob
 
@@ -208,6 +209,25 @@ async def lifespan(app: FastAPI):
     app.state.signal_tracker = SignalTracker(db_pool=app.state.db) if app.state.db else None
     logger.info("✅ SignalTracker initialized")
 
+    # 6b. Ascent Radar — store + scan job (needs DB)
+    app.state.ascent_store = None
+    app.state.ascent_job = None
+    if app.state.db:
+        try:
+            from services.ascent_store import AscentStore
+            from services.ascent_scan_job import AscentScanJob
+            from core.config import settings as _settings
+            import os as _os
+            _ascent_store = AscentStore(db_pool=app.state.db)
+            await _ascent_store.ensure_tables()
+            _polygon_key = getattr(_settings, "POLYGON_API_KEY", None) or _os.getenv("POLYGON_API_KEY", "")
+            app.state.ascent_store = _ascent_store
+            app.state.ascent_job = AscentScanJob(store=_ascent_store, api_key=_polygon_key)
+            logger.info("✅ Ascent Radar store + job initialized")
+        except Exception as e:
+            logger.error(f"Ascent Radar init error: {e}")
+    logger.info("✅ SignalTracker initialized")
+
     # 7. APScheduler — OutcomeFillerJob daily at 18:00 ET
     app.state.scheduler = None
     try:
@@ -228,6 +248,25 @@ async def lifespan(app: FastAPI):
             name="Daily outcome filler 18:00 ET",
             replace_existing=True,
         )
+
+        # Ascent Radar scans: hourly during market hours + definitive end-of-day
+        if app.state.ascent_job:
+            et = pytz.timezone("US/Eastern")
+            scheduler.add_job(
+                app.state.ascent_job.run,
+                trigger=CronTrigger(day_of_week="mon-fri", hour="10-15", minute=5, timezone=et),
+                id="ascent_hourly",
+                name="Ascent Radar hourly (market hours)",
+                replace_existing=True, max_instances=1, coalesce=True,
+            )
+            scheduler.add_job(
+                app.state.ascent_job.run,
+                trigger=CronTrigger(day_of_week="mon-fri", hour=16, minute=30, timezone=et),
+                id="ascent_eod",
+                name="Ascent Radar end-of-day",
+                replace_existing=True, max_instances=1, coalesce=True,
+            )
+            logger.info("✅ Ascent Radar scans scheduled (hourly 10:05-15:05 ET + 16:30 ET EOD)")
         scheduler.start()
         app.state.scheduler = scheduler
         logger.info("✅ APScheduler started — OutcomeFillerJob at 18:00 ET daily")
@@ -367,6 +406,7 @@ app.include_router(v6_router,            prefix="/api/v6",             tags=["An
 app.include_router(performance_router,   prefix="/api/v6/performance", tags=["Performance"])
 app.include_router(quality_router,       prefix="/api/v6",             tags=["Quality"])
 app.include_router(screener_router,      prefix="/api/v6",             tags=["Screener"])
+app.include_router(ascent_router,        prefix="/api/v6",             tags=["Ascent Radar"])
 app.include_router(portfolio_sizer_router, prefix="/api/v6",           tags=["PortfolioSizer"])
 app.include_router(news_momentum_router, prefix="/api/v6",             tags=["NewsMomentum"])
 app.include_router(oracle_router,        prefix="/api/v1/oracle",      tags=["Price Oracle"])

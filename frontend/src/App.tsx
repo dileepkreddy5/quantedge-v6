@@ -8,6 +8,7 @@ import { Toaster } from 'react-hot-toast';
 import Landing from './pages/Landing';
 import Dashboard from './pages/Dashboard';
 import Screener from './pages/Screener';
+import AscentRadar from './pages/AscentRadar';
 import Login from './pages/Login';
 
 export default function App() {
@@ -31,6 +32,7 @@ export default function App() {
         <Route path="/"          element={<Landing />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/screener"  element={<Screener />} />
+        <Route path="/ascent"    element={<AscentRadar />} />
         <Route path="/login"     element={<Login />} />
         {/* Catch-all → landing */}
         <Route path="*"          element={<Navigate to="/" replace />} />
