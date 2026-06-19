@@ -110,7 +110,12 @@ export function MLModelsPanel({ data }: { data: any }) {
     <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12 }}>
       {/* Ensemble */}
       <Card style={{ gridColumn:'span 3' }}>
-        <SectionTitle>ENSEMBLE MODEL — RETURN FORECASTS</SectionTitle>
+        <SectionTitle>ENSEMBLE MODEL — DRIFT ESTIMATES &amp; UNCERTAINTY</SectionTitle>
+        <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:11, color:'#9d8b7a', lineHeight:1.5, marginBottom:12, padding:'8px 10px', background:'#1a0f0a', borderRadius:6, borderLeft:'2px solid #daa520' }}>
+          These are <b style={{color:'#d4c4b0'}}>model-implied drift estimates</b>, not price predictions. Short-horizon
+          equity returns have inherently low predictability — small magnitudes with wide bands are the honest output.
+          The <b style={{color:'#d4c4b0'}}>return distribution</b> below (P10–P90) is the more useful read.
+        </div>
         <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
           {[{l:'1W',k:'pred_5d'},{l:'2W',k:'pred_10d'},{l:'1M',k:'pred_21d'},{l:'3M',k:'pred_63d'},{l:'1Y',k:'pred_252d'}].map(h => {
             const v = ensemble[h.k];
@@ -121,7 +126,7 @@ export function MLModelsPanel({ data }: { data: any }) {
                 <div style={{ fontFamily:"'Fira Code',monospace", fontSize:20, fontWeight:800, color:c }}>
                   {v != null ? `${v>0?'+':''}${v.toFixed(1)}%` : '—'}
                 </div>
-                <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:9, color:'#4a3428', marginTop:4 }}>forecast</div>
+                <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:9, color:'#4a3428', marginTop:4 }}>drift est.</div>
               </div>
             );
           })}
