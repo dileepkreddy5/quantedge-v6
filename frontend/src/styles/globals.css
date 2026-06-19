@@ -12,7 +12,7 @@
   --espresso:       #1a0f0a;
   --dark-choc:      #2d1e18;
   --milk-choc:      #3a2920;
-  --cocoa:          #4a3428;
+  --cocoa:          #8a7560;
   --cream:          #f4e8d8;
   --caramel:        #d4956c;
   --gold:           #daa520;
@@ -261,4 +261,34 @@ code, pre, .mono { font-family: var(--font-mono); }
   animation: pulse 1.5s ease-in-out infinite;
   box-shadow: 0 0 8px rgba(34,197,94,0.6);
   flex-shrink: 0;
+}
+
+/* Responsive panel grids: 3 col desktop, 2 col tablet, 1 col phone */
+.qe-grid-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+}
+@media (max-width: 1024px) {
+  .qe-grid-3 { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 640px) {
+  .qe-grid-3 { grid-template-columns: 1fr; }
+  /* cards that span 3 columns should span whatever exists on small screens */
+  .qe-grid-3 > * { grid-column: auto !important; }
+}
+
+/* Horizontal tab scroll — hide scrollbar but keep scrollable on mobile */
+.qe-tabscroll {
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;        /* Firefox */
+}
+.qe-tabscroll::-webkit-scrollbar { display: none; }  /* WebKit */
+
+/* Header: stack and tighten on small screens */
+@media (max-width: 640px) {
+  .qe-scorebar { width: 100% !important; max-width: 240px; }
 }

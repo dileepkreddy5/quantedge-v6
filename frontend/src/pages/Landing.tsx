@@ -68,7 +68,7 @@ export default function Landing() {
           }}>QUANTEDGE</div>
           <div style={{
             fontFamily: "'Fira Code', monospace",
-            fontSize: 8, color: '#4a3428', letterSpacing: 2, marginLeft: 10, paddingTop: 2,
+            fontSize: 8, color: '#8a7560', letterSpacing: 2, marginLeft: 10, paddingTop: 2,
           }}>v6.0</div>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 24, alignItems: 'center' }}>
             <a href="https://dileepkapu.com" target="_blank" rel="noopener noreferrer"
@@ -164,7 +164,7 @@ export default function Landing() {
 
         {/* Quick tickers */}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
-          <span style={{ fontFamily: "'Fira Code', monospace", fontSize: 9, color: '#4a3428', letterSpacing: 2, marginRight: 4, alignSelf: 'center' }}>QUICK ANALYZE:</span>
+          <span style={{ fontFamily: "'Fira Code', monospace", fontSize: 9, color: '#8a7560', letterSpacing: 2, marginRight: 4, alignSelf: 'center' }}>QUICK ANALYZE:</span>
           {TICKERS.map(t => (
             <button key={t} onClick={() => go(t)}
               onMouseOver={e => { (e.target as any).style.borderColor='#daa520'; (e.target as any).style.color='#daa520'; }}
@@ -184,7 +184,7 @@ export default function Landing() {
         <div style={{
           marginTop: 20,
           fontFamily: "'Fira Code', monospace", fontSize: 9,
-          color: '#4a3428', letterSpacing: 2,
+          color: '#8a7560', letterSpacing: 2,
           display: 'flex', gap: 24, flexWrap: 'wrap',
         }}>
           <span>✓ NO LOGIN TO USE</span>
@@ -320,7 +320,7 @@ export default function Landing() {
         <div style={{ maxWidth: 1400, margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
           <div>
             <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 18, letterSpacing: 4, color: '#daa520', marginBottom: 4 }}>QUANTEDGE</div>
-            <div style={{ fontFamily: "'Fira Code', monospace", fontSize: 9, color: '#4a3428', letterSpacing: 2 }}>
+            <div style={{ fontFamily: "'Fira Code', monospace", fontSize: 9, color: '#8a7560', letterSpacing: 2 }}>
               Built by{' '}
               <a href="https://dileepkapu.com" target="_blank" rel="noopener noreferrer"
                 style={{ color: '#9d8b7a', textDecoration: 'none' }}>
@@ -328,7 +328,7 @@ export default function Landing() {
               </a>
             </div>
           </div>
-          <div style={{ fontFamily: "'Fira Code', monospace", fontSize: 9, color: '#4a3428', letterSpacing: 1, textAlign: 'right' }}>
+          <div style={{ fontFamily: "'Fira Code', monospace", fontSize: 9, color: '#8a7560', letterSpacing: 1, textAlign: 'right' }}>
             © 2026 · Not financial advice · For research only
           </div>
         </div>

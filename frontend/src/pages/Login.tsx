@@ -314,7 +314,7 @@ export default function Login() {
           borderTop: '1px solid rgba(212,149,108,0.08)',
           textAlign: 'center',
           fontFamily: "'Fira Code', monospace",
-          fontSize: 9, color: '#4a3428', letterSpacing: 1,
+          fontSize: 9, color: '#8a7560', letterSpacing: 1,
         }}>
           QUANTEDGE v6.0 · DILEEP KUMAR REDDY KAPU
           <br />8 ML MODELS · 200+ SIGNALS · PRIVATE ACCESS
@@ -325,7 +325,7 @@ export default function Login() {
         @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;600;800&family=Fira+Code:wght@400;600&display=swap');
         @keyframes fadeIn { from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:none;} }
         @keyframes spin { to{transform:rotate(360deg);} }
-        input::placeholder { color: #4a3428; }
+        input::placeholder { color: #8a7560; }
         input:focus { border-color: #daa520 !important; box-shadow: 0 0 0 3px rgba(218,165,32,0.1); }
       `}</style>
     </div>

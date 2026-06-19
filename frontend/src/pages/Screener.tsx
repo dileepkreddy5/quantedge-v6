@@ -449,7 +449,7 @@ export default function Screener({ embedded = false }: { embedded?: boolean } = 
         ))}
       </div>
       <div style={{
-        fontSize: 11, color: '#4a3428', padding: '10px 0 6px 0', letterSpacing: 0.5,
+        fontSize: 11, color: '#8a7560', padding: '10px 0 6px 0', letterSpacing: 0.5,
       }}>
         {activeTabDesc}
       </div>
@@ -563,7 +563,7 @@ export default function Screener({ embedded = false }: { embedded?: boolean } = 
                     if (!isExpanded) (e.currentTarget as HTMLDivElement).style.background = 'transparent';
                   }}
                 >
-                  <div style={{ color: '#4a3428' }}>{r.rank}</div>
+                  <div style={{ color: '#8a7560' }}>{r.rank}</div>
                   <div style={{ color: '#d4c4b0', fontWeight: 600 }}>{r.ticker}</div>
                   <div style={{ textAlign: 'right', color: scoreColor(r.composite_score), fontWeight: 600 }}>
                     {r.composite_score.toFixed(1)}
@@ -580,7 +580,7 @@ export default function Screener({ embedded = false }: { embedded?: boolean } = 
                   <div style={{ textAlign: 'right', color: scoreColor(r.trend) }}>
                     {r.trend.toFixed(1)}
                   </div>
-                  <div style={{ textAlign: 'right', color: '#4a3428' }}>
+                  <div style={{ textAlign: 'right', color: '#8a7560' }}>
                     {isExpanded ? '▼' : '▶'}
                   </div>
                 </div>
@@ -616,7 +616,7 @@ export default function Screener({ embedded = false }: { embedded?: boolean } = 
 
       {/* Footer */}
       <div style={{
-        marginTop: 30, padding: '16px 0', fontSize: 11, color: '#4a3428',
+        marginTop: 30, padding: '16px 0', fontSize: 11, color: '#8a7560',
         textAlign: 'center', borderTop: '1px solid #3a2920',
       }}>
         Scores are universe-relative · All signals Polygon-sourced · Not investment advice

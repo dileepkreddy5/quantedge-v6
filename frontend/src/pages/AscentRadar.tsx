@@ -11,7 +11,7 @@ import toast from 'react-hot-toast';
 
 const C = {
   bg: '#0a0505', panel: '#1a0f0a', panel2: '#1f130d', border: '#3a2920',
-  border2: '#4a3428', gold: '#daa520', goldDim: '#b8860b', text: '#d4c4b0',
+  border2: '#8a7560', gold: '#daa520', goldDim: '#b8860b', text: '#d4c4b0',
   textDim: '#9d8b7a', green: '#22c55e', orange: '#f59e0b', red: '#ef4444',
 };
 

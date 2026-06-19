@@ -180,7 +180,7 @@ export default function Dashboard() {
             }}>QUANTEDGE</div>
             <div style={{
               fontFamily: "'Fira Code', monospace",
-              fontSize: 8, color: '#4a3428', letterSpacing: 2, paddingTop: 2,
+              fontSize: 8, color: '#8a7560', letterSpacing: 2, paddingTop: 2,
             }}>v6.0</div>
             {data && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 4 }}>
@@ -221,7 +221,7 @@ export default function Dashboard() {
             >
               {loading ? (
                 <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ width: 10, height: 10, border: '2px solid #4a3428', borderTopColor: '#daa520', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />
+                  <span style={{ width: 10, height: 10, border: '2px solid #8a7560', borderTopColor: '#daa520', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />
                   {elapsed}s
                 </span>
               ) : 'ANALYZE →'}
@@ -291,14 +291,14 @@ export default function Dashboard() {
             {loadingMsg}
           </div>
           {/* Progress bar */}
-          <div style={{ width: 360, height: 3, background: '#2d1e18', borderRadius: 2, overflow: 'hidden', marginBottom: 20 }}>
+          <div className="qe-scorebar" style={{ width: 360, height: 3, background: '#2d1e18', borderRadius: 2, overflow: 'hidden', marginBottom: 20 }}>
             <div style={{
               height: '100%', background: 'linear-gradient(90deg,#daa520,#22c55e)',
               borderRadius: 2, width: `${Math.min((elapsed / 45) * 100, 95)}%`,
               transition: 'width 1s ease',
             }} />
           </div>
-          <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 10, color: '#4a3428' }}>
+          <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 10, color: '#8a7560' }}>
             {elapsed}s elapsed · 8 ML models · 200+ features
           </div>
         </div>
@@ -312,7 +312,7 @@ export default function Dashboard() {
             <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 56, color: '#2d1e18', letterSpacing: 6, marginBottom: 12 }}>
               QUANTEDGE
             </div>
-            <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 11, color: '#4a3428', letterSpacing: 3, marginBottom: 40 }}>
+            <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 11, color: '#8a7560', letterSpacing: 3, marginBottom: 40 }}>
               INSTITUTIONAL · QUANTITATIVE · ANALYTICS · v6.0
             </div>
             <div style={{ fontFamily: "'Outfit',sans-serif", color: '#9d8b7a', fontSize: 14, marginBottom: 40 }}>
@@ -363,7 +363,7 @@ export default function Dashboard() {
             <TickerHeader data={data} ticker={ticker} />
 
             {/* ── Tabs ── */}
-            <div style={{ display: 'flex', gap: 2, borderBottom: '1px solid rgba(212,149,108,0.12)', marginBottom: 20, overflowX: 'auto' }}>
+            <div className="qe-tabscroll" style={{ borderBottom: '1px solid rgba(212,149,108,0.12)', marginBottom: 20 }}>
               {TABS.map(tab => (
                 <button key={tab.id} onClick={() => setActiveTab(tab.id)}
                   style={{
@@ -405,7 +405,7 @@ export default function Dashboard() {
         @keyframes pulse { 0%,100%{opacity:1;}50%{opacity:0.3;} }
         @keyframes spin { to{transform:rotate(360deg);} }
         * { scrollbar-width: thin; scrollbar-color: #3a2920 #1a0f0a; }
-        input::placeholder { color: #4a3428; }
+        input::placeholder { color: #8a7560; }
         input:focus { border-color: rgba(218,165,32,0.5) !important; outline: none; }
       `}</style>
     </div>
@@ -432,7 +432,7 @@ function TickerHeader({ data, ticker }: { data: any; ticker: string }) {
           <span style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 28, letterSpacing: 4, color: '#daa520' }}>{ticker}</span>
           <span style={{ fontFamily: "'Outfit',sans-serif", fontSize: 13, color: '#9d8b7a' }}>{data.name || ''}</span>
         </div>
-        <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 9, color: '#4a3428', letterSpacing: 2 }}>
+        <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 9, color: '#8a7560', letterSpacing: 2 }}>
           {data.exchange || ''} · {data.sector || ''} · {data.industry || ''}
         </div>
       </div>
@@ -484,14 +484,14 @@ function TickerHeader({ data, ticker }: { data: any; ticker: string }) {
           { label: '1Y PRED', value: pct((data.predicted_return_1y || 0) / 100) },
         ].map(s => (
           <div key={s.label} style={{ textAlign: 'center' }}>
-            <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: '#4a3428', letterSpacing: 2, marginBottom: 2 }}>{s.label}</div>
+            <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: '#8a7560', letterSpacing: 2, marginBottom: 2 }}>{s.label}</div>
             <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 12, color: '#d4c4b0', fontWeight: 600 }}>{s.value}</div>
           </div>
         ))}
       </div>
 
       {/* Data quality */}
-      <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 9, color: '#4a3428', letterSpacing: 1 }}>
+      <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 9, color: '#8a7560', letterSpacing: 1 }}>
         DATA {data.data_quality?.score || 0}% · {data.analysis_duration_seconds || 0}s
       </div>
     </div>
@@ -549,7 +549,7 @@ function MLSummary({ data }: { data: any }) {
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         {horizons.map(h => {
           const val = preds[h.key] ?? null;
-          const color = val === null ? '#4a3428' : val > 0 ? '#22c55e' : '#ef4444';
+          const color = val === null ? '#8a7560' : val > 0 ? '#22c55e' : '#ef4444';
           return (
             <div key={h.key} style={{ flex: 1, minWidth: 64, background: '#1a0f0a', borderRadius: 6, padding: '10px 8px', textAlign: 'center', border: `1px solid ${color}30` }}>
               <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: '#9d8b7a', letterSpacing: 2, marginBottom: 4 }}>{h.label}</div>
@@ -560,7 +560,7 @@ function MLSummary({ data }: { data: any }) {
           );
         })}
       </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 12, fontFamily: "'Fira Code',monospace", fontSize: 9, color: '#4a3428' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 12, fontFamily: "'Fira Code',monospace", fontSize: 9, color: '#8a7560' }}>
         <span>CONFIDENCE: {pct1(preds.confidence)}</span>
         <span>DISAGREEMENT: {preds.model_disagreement?.toFixed(1) ?? '—'}%</span>
       </div>
@@ -633,7 +633,7 @@ function SentimentSummary({ data }: { data: any }) {
             <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 13, color: (item.value ?? 0) > 0 ? '#22c55e' : '#ef4444', fontWeight: 700 }}>
               {item.value != null ? (item.value > 0 ? '+' : '') + item.value.toFixed(2) : '—'}
             </div>
-            <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 7, color: '#4a3428' }}>{item.sub || ''}</div>
+            <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 7, color: '#8a7560' }}>{item.sub || ''}</div>
           </div>
         ))}
       </div>

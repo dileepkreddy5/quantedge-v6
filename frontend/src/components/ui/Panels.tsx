@@ -7,6 +7,7 @@
 import React, { useState } from 'react';
 import { api, useAuthStore } from '../../auth/authStore';
 import toast from 'react-hot-toast';
+import { useResponsive } from '../../hooks/useResponsive';
 
 // ── Shared helpers ────────────────────────────────────────────
 const fmtPct  = (v: any, d=2) => v == null ? '—' : `${Number(v) >= 0 ? '+' : ''}${(Number(v)*100).toFixed(d)}%`;
@@ -41,6 +42,13 @@ const Card = ({ children, style }: { children: React.ReactNode; style?: React.CS
 // ══════════════════════════════════════════════════════════════
 // SIGNAL PANEL
 // ══════════════════════════════════════════════════════════════
+// Responsive 3-col grid: 1 col phone, 2 col tablet, 3 col desktop
+function ResponsiveGrid({ children, gap = 12 }: { children: React.ReactNode; gap?: number }) {
+  const { bp } = useResponsive();
+  const cols = bp === 'phone' ? '1fr' : bp === 'tablet' ? '1fr 1fr' : '1fr 1fr 1fr';
+  return <div style={{ display: 'grid', gridTemplateColumns: cols, gap }}>{children}</div>;
+}
+
 export function SignalPanel({ data }: { data: any }) {
   const signal = data.overall_signal || 'NEUTRAL';
   const score = data.overall_score || 50;
@@ -80,7 +88,7 @@ export function SignalPanel({ data }: { data: any }) {
             {score}
           </div>
         </div>
-        <div style={{ fontFamily:"'Fira Code',monospace", fontSize:8, color:'#4a3428', letterSpacing:2 }}>COMPOSITE SCORE / 100</div>
+        <div style={{ fontFamily:"'Fira Code',monospace", fontSize:8, color:'#8a7560', letterSpacing:2 }}>COMPOSITE SCORE / 100</div>
       </div>
 
       {/* Signal breakdown */}
@@ -107,7 +115,7 @@ export function MLModelsPanel({ data }: { data: any }) {
   const quantile = preds.quantile || {};
 
   return (
-    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12 }}>
+    <div className="qe-grid-3">
       {/* Ensemble */}
       <Card style={{ gridColumn:'span 3' }}>
         <SectionTitle>ENSEMBLE MODEL — DRIFT ESTIMATES &amp; UNCERTAINTY</SectionTitle>
@@ -119,19 +127,19 @@ export function MLModelsPanel({ data }: { data: any }) {
         <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
           {[{l:'1W',k:'pred_5d'},{l:'2W',k:'pred_10d'},{l:'1M',k:'pred_21d'},{l:'3M',k:'pred_63d'},{l:'1Y',k:'pred_252d'}].map(h => {
             const v = ensemble[h.k];
-            const c = v == null ? '#4a3428' : v > 0 ? '#22c55e' : '#ef4444';
+            const c = v == null ? '#8a7560' : v > 0 ? '#22c55e' : '#ef4444';
             return (
               <div key={h.k} style={{ flex:1, minWidth:80, background:'#1a0f0a', borderRadius:8, padding:'14px 10px', textAlign:'center', border:`1px solid ${c}30` }}>
                 <div style={{ fontFamily:"'Fira Code',monospace", fontSize:9, color:'#9d8b7a', letterSpacing:2, marginBottom:6 }}>{h.l}</div>
                 <div style={{ fontFamily:"'Fira Code',monospace", fontSize:20, fontWeight:800, color:c }}>
                   {v != null ? `${v>0?'+':''}${v.toFixed(1)}%` : '—'}
                 </div>
-                <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:9, color:'#4a3428', marginTop:4 }}>drift est.</div>
+                <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:9, color:'#8a7560', marginTop:4 }}>drift est.</div>
               </div>
             );
           })}
         </div>
-        <div style={{ display:'flex', gap:20, marginTop:12, fontFamily:"'Fira Code',monospace", fontSize:9, color:'#4a3428' }}>
+        <div style={{ display:'flex', gap:20, marginTop:12, fontFamily:"'Fira Code',monospace", fontSize:9, color:'#8a7560' }}>
           <span>CONFIDENCE: {((ensemble.confidence || 0)*100).toFixed(1)}%</span>
           <span>MODEL DISAGREEMENT: {fmtN(ensemble.model_disagreement)}%</span>
           <span>IC ESTIMATE: {fmtN(preds.rank_ic_estimate,3)}</span>
@@ -199,7 +207,7 @@ export function VolatilityPanel({ data }: { data: any }) {
   const k = data.kalman || {};
 
   return (
-    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12 }}>
+    <div className="qe-grid-3">
       <Card style={{ gridColumn:'span 1' }}>
         <SectionTitle>GJR-GARCH(1,1) PARAMETERS</SectionTitle>
         <Row label="ω (omega)" value={fmtN(g.omega,6)} />
@@ -219,7 +227,7 @@ export function VolatilityPanel({ data }: { data: any }) {
         <Row label="21d Forecast" value={fmtN((g.forecast_vol_21d||0)*100,1)+'%'} />
         <Row label="Long-Run Vol" value={fmtN((g.long_run_annual_vol||0)*100,1)+'%'} />
         <Row label="Vol Regime" value={g.vol_regime||'—'} />
-        <div style={{ fontFamily:"'Fira Code',monospace", fontSize:8, color:'#4a3428', marginTop:12, lineHeight:1.6 }}>
+        <div style={{ fontFamily:"'Fira Code',monospace", fontSize:8, color:'#8a7560', marginTop:12, lineHeight:1.6 }}>
           GJR-GARCH: γ&gt;0 means bad news (negative returns) increases<br/>
           volatility more than good news — the "leverage effect"
         </div>
@@ -233,7 +241,7 @@ export function VolatilityPanel({ data }: { data: any }) {
         <Row label="CVaR 99% (1d)" value={fmtN((g.cvar_99_daily||0)*100,2)+'%'} highlight="#ef4444" />
         <Row label="Max Drawdown" value={fmtN((risk.max_drawdown||0)*100,1)+'%'} highlight="#ef4444" />
         <Row label="Hurst Exponent" value={fmtN(data.hurst_exponent,3)} highlight={(data.hurst_exponent||0.5)>0.55?'#22c55e':'#8b5cf6'} />
-        <div style={{ fontFamily:"'Fira Code',monospace", fontSize:8, color:'#4a3428', marginTop:12, lineHeight:1.6 }}>
+        <div style={{ fontFamily:"'Fira Code',monospace", fontSize:8, color:'#8a7560', marginTop:12, lineHeight:1.6 }}>
           CVaR = Expected loss given VaR is breached<br/>
           More conservative than VaR (Basel III preferred measure)
         </div>
@@ -263,7 +271,7 @@ export function VolatilityPanel({ data }: { data: any }) {
         <Row label="Parkinson" value={fmtN((data.parkinson_vol||0)*100,1)+'%'} />
         <Row label="Garman-Klass" value={fmtN((data.garman_klass_vol||0)*100,1)+'%'} />
         <Row label="Yang-Zhang" value={fmtN((data.yang_zhang_vol||0)*100,1)+'%'} />
-        <div style={{ fontFamily:"'Fira Code',monospace", fontSize:8, color:'#4a3428', marginTop:12, lineHeight:1.7 }}>
+        <div style={{ fontFamily:"'Fira Code',monospace", fontSize:8, color:'#8a7560', marginTop:12, lineHeight:1.7 }}>
           Parkinson: uses H/L only (5× efficient)<br/>
           Garman-Klass: uses O,H,L,C (most efficient)<br/>
           Yang-Zhang: handles overnight gaps (best for daily)
@@ -285,7 +293,7 @@ export function RegimePanel({ data }: { data: any }) {
   const colorMap: any = { BULL_LOW_VOL:'#22c55e', BULL_HIGH_VOL:'#86efac', MEAN_REVERT:'#f59e0b', BEAR_LOW_VOL:'#f87171', BEAR_HIGH_VOL:'#ef4444' };
 
   return (
-    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12 }}>
+    <div className="qe-grid-3">
       <Card style={{ gridColumn:'span 1' }}>
         <SectionTitle>CURRENT REGIME</SectionTitle>
         <div style={{ textAlign:'center', padding:'20px 0' }}>
@@ -302,7 +310,7 @@ export function RegimePanel({ data }: { data: any }) {
             Expected duration: {Math.round(regime.expected_duration_days||0)} days
           </div>
         </div>
-        <div style={{ fontFamily:"'Fira Code',monospace", fontSize:8, color:'#4a3428', marginTop:12, lineHeight:1.7 }}>
+        <div style={{ fontFamily:"'Fira Code',monospace", fontSize:8, color:'#8a7560', marginTop:12, lineHeight:1.7 }}>
           HMM 5-state Gaussian model<br/>
           Baum-Welch EM (20 random restarts)<br/>
           Features: returns, vol, volume, trend
@@ -349,7 +357,7 @@ export function RegimePanel({ data }: { data: any }) {
             <div key={name} style={{ flex:1, minWidth:140, background:'#1a0f0a', borderRadius:6, padding:'12px 14px', border:`1px solid ${colorMap[name]||'#3a2920'}40` }}>
               <div style={{ fontFamily:"'Fira Code',monospace", fontSize:8, color: colorMap[name]||'#9d8b7a', letterSpacing:2, marginBottom:6 }}>{name.replace(/_/g,' ')}</div>
               <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:28, color:'#d4c4b0', letterSpacing:2 }}>{Math.round(days||0)}</div>
-              <div style={{ fontFamily:"'Fira Code',monospace", fontSize:8, color:'#4a3428' }}>avg trading days</div>
+              <div style={{ fontFamily:"'Fira Code',monospace", fontSize:8, color:'#8a7560' }}>avg trading days</div>
             </div>
           ))}
         </div>
@@ -368,11 +376,11 @@ export function OptionsPanel({ data }: { data: any }) {
   const ivSurface = opts.iv_surface || {};
 
   if (!opts || Object.keys(opts).length === 0) {
-    return <Card><div style={{ textAlign:'center', color:'#4a3428', fontFamily:"'Fira Code',monospace", fontSize:11, padding:40 }}>Options data unavailable for this ticker</div></Card>;
+    return <Card><div style={{ textAlign:'center', color:'#8a7560', fontFamily:"'Fira Code',monospace", fontSize:11, padding:40 }}>Options data unavailable for this ticker</div></Card>;
   }
 
   return (
-    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12 }}>
+    <div className="qe-grid-3">
       <Card>
         <SectionTitle>GAMMA EXPOSURE (GEX)</SectionTitle>
         <div style={{ textAlign:'center', padding:'12px 0 16px' }}>
@@ -387,7 +395,7 @@ export function OptionsPanel({ data }: { data: any }) {
         <Row label="Max Pain Strike" value={`$${fmtN(gex.max_pain_strike,2)}`} />
         <Row label="Vol Suppression" value={gex.vol_suppression_active ? 'ACTIVE' : 'INACTIVE'} highlight={gex.vol_suppression_active ? '#22c55e' : undefined} />
         <Row label="Gamma Squeeze Risk" value={gex.gamma_squeeze_risk ? 'HIGH ⚠' : 'LOW'} highlight={gex.gamma_squeeze_risk ? '#ef4444' : undefined} />
-        <div style={{ fontFamily:"'Fira Code',monospace", fontSize:8, color:'#4a3428', marginTop:12, lineHeight:1.7 }}>
+        <div style={{ fontFamily:"'Fira Code',monospace", fontSize:8, color:'#8a7560', marginTop:12, lineHeight:1.7 }}>
           +GEX: MMs long gamma → vol dampening (pinning)<br/>
           -GEX: MMs short gamma → vol amplifying (squeeze)
         </div>
@@ -416,7 +424,7 @@ export function OptionsPanel({ data }: { data: any }) {
               <span style={{ fontFamily:"'Fira Code',monospace", fontSize:9, color:'#9d8b7a' }}>{dte}d ATM IV</span>
               <span style={{ fontFamily:"'Fira Code',monospace", fontSize:10, color:'#d4c4b0' }}>{((d?.atm_iv||0)*100).toFixed(1)}%</span>
             </div>
-            <div style={{ display:'flex', justifyContent:'space-between', fontFamily:"'Fira Code',monospace", fontSize:8, color:'#4a3428' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', fontFamily:"'Fira Code',monospace", fontSize:8, color:'#8a7560' }}>
               <span>25d Skew: {((d?.skew_25d||0)*100).toFixed(1)}%</span>
               <span>Put IV: {((d?.put_iv_25d||0)*100).toFixed(1)}%</span>
             </div>
@@ -478,7 +486,7 @@ export function SentimentPanel({ data }: { data: any }) {
         <Row label="Contrarian Signal" value={fmtN(reddit.contrarian_signal,4)} />
         <Row label="Sentiment Dispersion" value={fmtN(reddit.sentiment_dispersion,3)} />
         <Row label="High Conviction %" value={`${((reddit.high_conviction_pct||0)*100).toFixed(1)}%`} />
-        <div style={{ fontFamily:"'Fira Code',monospace", fontSize:8, color:'#4a3428', marginTop:12, lineHeight:1.7 }}>
+        <div style={{ fontFamily:"'Fira Code',monospace", fontSize:8, color:'#8a7560', marginTop:12, lineHeight:1.7 }}>
           FinBERT (ProsusAI/finbert): fine-tuned on Financial PhraseBank<br/>
           Weighted by post upvotes × √comments<br/>
           Contrarian signal: retail crowding → fade the crowd
@@ -492,7 +500,7 @@ export function SentimentPanel({ data }: { data: any }) {
             <div style={{ fontFamily:"'Fira Code',monospace", fontSize:14, color:'#d4c4b0', marginTop:4 }}>
               {((s.composite||0)*100).toFixed(1)} / ±100
             </div>
-            <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:10, color:'#4a3428', marginTop:4 }}>
+            <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:10, color:'#8a7560', marginTop:4 }}>
               60% News + 40% Reddit (quality-weighted)
             </div>
           </div>
@@ -508,7 +516,7 @@ export function SentimentPanel({ data }: { data: any }) {
 export function MonteCarloPanel({ data }: { data: any }) {
   const mc = data.monte_carlo || {};
   if (!mc || Object.keys(mc).length === 0) {
-    return <Card><div style={{ textAlign:'center', color:'#4a3428', padding:40 }}>Monte Carlo data unavailable</div></Card>;
+    return <Card><div style={{ textAlign:'center', color:'#8a7560', padding:40 }}>Monte Carlo data unavailable</div></Card>;
   }
 
   const bars = [
@@ -520,7 +528,7 @@ export function MonteCarloPanel({ data }: { data: any }) {
   ];
 
   return (
-    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12 }}>
+    <div className="qe-grid-3">
       <Card>
         <SectionTitle>RETURN PERCENTILES (1-Year)</SectionTitle>
         {[['P1','p1'],['P5 (VaR 95%)','p5'],['P10','p10'],['P25','p25'],['P50 Median','p50'],['P75','p75'],['P90','p90'],['P95','p95'],['P99','p99']].map(([l,k]) => (
@@ -542,7 +550,7 @@ export function MonteCarloPanel({ data }: { data: any }) {
             </div>
           </div>
         ))}
-        <div style={{ fontFamily:"'Fira Code',monospace", fontSize:8, color:'#4a3428', marginTop:12, lineHeight:1.7 }}>
+        <div style={{ fontFamily:"'Fira Code',monospace", fontSize:8, color:'#8a7560', marginTop:12, lineHeight:1.7 }}>
           {mc.n_paths?.toLocaleString() || '100,000'} simulation paths<br/>
           Model: {mc.model || 'Merton Jump Diffusion'}<br/>
           Innovations: Student-t (fat tails)
@@ -580,7 +588,7 @@ export function RiskPanel({ data }: { data: any }) {
   ];
 
   return (
-    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12 }}>
+    <div className="qe-grid-3">
       <Card>
         <SectionTitle>RISK-ADJUSTED PERFORMANCE</SectionTitle>
         {ratios.map(r => (
@@ -649,7 +657,7 @@ export function FundamentalsPanel({ data }: { data: any }) {
             </div>
           ))}
         </div>
-        <div style={{marginTop:12,fontFamily:"'Fira Code',monospace",fontSize:9,color:"#4a3428"}}>ETFs do not report income statements. Use Volatility, Regime, and Risk tabs for quantitative analysis.</div>
+        <div style={{marginTop:12,fontFamily:"'Fira Code',monospace",fontSize:9,color:"#8a7560"}}>ETFs do not report income statements. Use Volatility, Regime, and Risk tabs for quantitative analysis.</div>
       </Card>
     </div>
   );
@@ -764,24 +772,24 @@ export function FundamentalsPanel({ data }: { data: any }) {
         <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:0,marginBottom:16}}>
           {[
             ["NET MARGIN", fp(data.net_margin), "Profitability / Net Income / Revenue", gc(data.net_margin)],
-            ["×", "", "", "#4a3428"],
+            ["×", "", "", "#8a7560"],
             ["ASSET TURNOVER", data.revenue_ttm&&data.total_assets?f(Number(data.revenue_ttm)/Number(data.total_assets),3):"—", "Efficiency / Revenue / Assets", "#d4c4b0"],
-            ["×", "", "", "#4a3428"],
+            ["×", "", "", "#8a7560"],
             ["LEVERAGE", data.total_assets&&data.total_equity?f(Number(data.total_assets)/Number(data.total_equity),2)+"×":"—", "Financial Leverage / Assets / Equity", "#e8b84b"],
           ].map(([l,v,desc,c],i)=>(
             <div key={i} style={{textAlign:"center",padding:"12px 8px",borderRight:i<4?"1px solid rgba(212,149,108,0.08)":"none",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column"}}>
               {l!=="×" ? <>
                 <div style={{fontFamily:"'Fira Code',monospace",fontSize:8,color:"#9d8b7a",letterSpacing:1,marginBottom:6,whiteSpace:"pre-line",lineHeight:1.5}}>{l}</div>
                 <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:26,color:c as string,letterSpacing:2}}>{v}</div>
-                <div style={{fontFamily:"'Fira Code',monospace",fontSize:7,color:"#4a3428",marginTop:4,whiteSpace:"pre-line",lineHeight:1.5}}>{desc}</div>
-              </> : <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:32,color:"#4a3428"}}>×</div>}
+                <div style={{fontFamily:"'Fira Code',monospace",fontSize:7,color:"#8a7560",marginTop:4,whiteSpace:"pre-line",lineHeight:1.5}}>{desc}</div>
+              </> : <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:32,color:"#8a7560"}}>×</div>}
             </div>
           ))}
         </div>
         <div style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",background:"#1a0f0a",borderRadius:6,border:"1px solid rgba(212,149,108,0.1)"}}>
           <div style={{fontFamily:"'Fira Code',monospace",fontSize:9,color:"#daa520",letterSpacing:2,whiteSpace:"nowrap"}}>= ROE</div>
           <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:28,color:gc(data.roe)}}>{fp(data.roe)}</div>
-          <div style={{fontFamily:"'Fira Code',monospace",fontSize:9,color:"#4a3428",lineHeight:1.6}}>
+          <div style={{fontFamily:"'Fira Code',monospace",fontSize:9,color:"#8a7560",lineHeight:1.6}}>
             DuPont identity decomposes return on equity into its three drivers.<br/>
             High ROE from leverage ({">"} 3×) is riskier than ROE from margin or turnover.
           </div>
@@ -800,7 +808,7 @@ export function FundamentalsPanel({ data }: { data: any }) {
         <FRow l="WML (Momentum)"     v={f(data.ff_wml,3)}    c={gc(data.ff_wml)} />
         <FRow l="R²"                 v={f(data.ff_r_squared,3)} />
         <FRow l="Idiosyncratic Risk" v={fp(data.ff_idio_risk)} />
-        <div style={{fontFamily:"'Fira Code',monospace",fontSize:7,color:"#4a3428",marginTop:12,lineHeight:1.7}}>
+        <div style={{fontFamily:"'Fira Code',monospace",fontSize:7,color:"#8a7560",marginTop:12,lineHeight:1.7}}>
           Fama & French (1993, 2015) · Carhart (1997)<br/>
           Kenneth French Data Library · 60M rolling OLS<br/>
           t-stat threshold: 1.96 · Newey-West HAC errors
@@ -842,7 +850,7 @@ export function ScenarioPanel({ data, compact }: { data: any; compact?: boolean 
             </div>
             <div style={{ fontFamily:"'Fira Code',monospace", fontSize:9, color:'#9d8b7a' }}>${s.target_price?.toFixed(2)}</div>
             {!compact && (
-              <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:9, color:'#4a3428', marginTop:6, lineHeight:1.5 }}>
+              <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:9, color:'#8a7560', marginTop:6, lineHeight:1.5 }}>
                 {s.description}
               </div>
             )}
@@ -930,16 +938,16 @@ export function Watchlist({ onAnalyze }: { onAnalyze: (t: string) => void }) {
         <button onClick={add} style={{ background:'linear-gradient(135deg,#daa520,#b8860b)', color:'#1a0f0a', fontFamily:"'Fira Code',monospace", fontWeight:700, fontSize:10, letterSpacing:2, padding:'8px 16px', border:'none', borderRadius:6, cursor:'pointer' }}>+ ADD</button>
       </div>
       {items.length === 0 && (
-        <div style={{ textAlign:'center', color:'#4a3428', fontFamily:"'Fira Code',monospace", fontSize:11, padding:30 }}>No tickers in watchlist</div>
+        <div style={{ textAlign:'center', color:'#8a7560', fontFamily:"'Fira Code',monospace", fontSize:11, padding:30 }}>No tickers in watchlist</div>
       )}
       <div style={{ display:'grid', gap:8 }}>
         {items.map(item => (
           <div key={item.ticker} style={{ display:'flex', alignItems:'center', gap:12, background:'#1a0f0a', borderRadius:6, padding:'10px 14px', border:'1px solid rgba(212,149,108,0.1)' }}>
             <span style={{ fontFamily:"'Fira Code',monospace", fontSize:14, fontWeight:700, color:'#daa520', flex:1 }}>{item.ticker}</span>
             {item.notes && <span style={{ fontFamily:"'Outfit',sans-serif", fontSize:11, color:'#9d8b7a' }}>{item.notes}</span>}
-            <span style={{ fontFamily:"'Fira Code',monospace", fontSize:9, color:'#4a3428' }}>{item.added_at?.slice(0,10)}</span>
+            <span style={{ fontFamily:"'Fira Code',monospace", fontSize:9, color:'#8a7560' }}>{item.added_at?.slice(0,10)}</span>
             <button onClick={() => onAnalyze(item.ticker)} style={{ background:'rgba(218,165,32,0.1)', border:'1px solid rgba(218,165,32,0.3)', color:'#daa520', fontFamily:"'Fira Code',monospace", fontSize:9, padding:'4px 10px', borderRadius:4, cursor:'pointer' }}>ANALYZE</button>
-            <button onClick={() => remove(item.ticker)} style={{ background:'none', border:'none', color:'#4a3428', cursor:'pointer', fontSize:16 }}>×</button>
+            <button onClick={() => remove(item.ticker)} style={{ background:'none', border:'none', color:'#8a7560', cursor:'pointer', fontSize:16 }}>×</button>
           </div>
         ))}
       </div>
@@ -990,12 +998,12 @@ export function WallStreetPanel({ data }: { data: any }) {
           <div style={{ flex: 1, textAlign: "center", background: "#1a0f0a", borderRadius: 6, padding: "10px 8px", border: `1px solid ${consensus.color || "#555"}40` }}>
             <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 9, color: "#9d8b7a", letterSpacing: 2, marginBottom: 4 }}>CONSENSUS</div>
             <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 18, color: consensus.color || "#f59e0b", letterSpacing: 2 }}>{consensus.label || "—"}</div>
-            <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 9, color: "#4a3428", marginTop: 2 }}>score {consensus.score?.toFixed(2) ?? "—"}/5</div>
+            <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 9, color: "#8a7560", marginTop: 2 }}>score {consensus.score?.toFixed(2) ?? "—"}/5</div>
           </div>
           <div style={{ flex: 1, textAlign: "center", background: "#1a0f0a", borderRadius: 6, padding: "10px 8px" }}>
             <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 9, color: "#9d8b7a", letterSpacing: 2, marginBottom: 4 }}>ANALYSTS</div>
             <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 24, color: "#d4c4b0", fontWeight: 700 }}>{totalAnalysts}</div>
-            <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: "#4a3428" }}>covering this name</div>
+            <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: "#8a7560" }}>covering this name</div>
           </div>
         </div>
 
@@ -1042,13 +1050,13 @@ export function WallStreetPanel({ data }: { data: any }) {
           </>
         )}
 
-        <div style={{ display: "flex", gap: 16, marginTop: 10, fontFamily: "'Fira Code',monospace", fontSize: 9, color: "#4a3428" }}>
+        <div style={{ display: "flex", gap: 16, marginTop: 10, fontFamily: "'Fira Code',monospace", fontSize: 9, color: "#8a7560" }}>
           <span style={{ color: "#40dda0" }}>▲ {consensus.upgrades_30d || 0} consensus up</span>
           <span style={{ color: "#ff8090" }}>▼ {consensus.downgrades_30d || 0} consensus down</span>
           <span>vs prev month</span>
         </div>
 
-        <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: "#4a3428", marginTop: 12, lineHeight: 1.6 }}>
+        <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: "#8a7560", marginTop: 12, lineHeight: 1.6 }}>
           Individual analyst names and price targets require paid Finnhub plan.<br/>
           Free tier provides consensus counts and historical trends — shown above.
         </div>
@@ -1068,12 +1076,12 @@ export function WallStreetPanel({ data }: { data: any }) {
                 {daysToEarnings > 0 ? `${daysToEarnings} days away` : daysToEarnings === 0 ? "TODAY" : `${Math.abs(daysToEarnings)} days ago`}
               </div>
             )}
-            <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: "#4a3428", marginTop: 4 }}>
+            <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: "#8a7560", marginTop: 4 }}>
               (last report + ~90d; exact date not in free tier)
             </div>
           </div>
         ) : (
-          <div style={{ textAlign: "center", padding: "16px 0", color: "#4a3428", fontFamily: "'Fira Code',monospace", fontSize: 10 }}>
+          <div style={{ textAlign: "center", padding: "16px 0", color: "#8a7560", fontFamily: "'Fira Code',monospace", fontSize: 10 }}>
             No earnings history available
           </div>
         )}
@@ -1126,7 +1134,7 @@ export function WallStreetPanel({ data }: { data: any }) {
           </>
         )}
 
-        <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: "#4a3428", marginTop: 14, lineHeight: 1.6 }}>
+        <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: "#8a7560", marginTop: 14, lineHeight: 1.6 }}>
           Source: Finnhub free tier · Forward estimates + price targets require paid plan<br/>
           Jegadeesh et al. (2004): consensus changes carry more signal than levels
         </div>
@@ -1182,7 +1190,7 @@ export function PortfolioPanel({ data }: { data: any }) {
               <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 22, fontWeight: 700, color: governorActive ? "#ff8090" : "#daa520" }}>
                 {(recommendedPos * 100).toFixed(0)}%
               </div>
-              <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: "#4a3428" }}>OF CAPITAL</div>
+              <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: "#8a7560" }}>OF CAPITAL</div>
             </div>
           </div>
           {governorActive && (
@@ -1195,7 +1203,7 @@ export function PortfolioPanel({ data }: { data: any }) {
         <Row label="Target Vol" value={`${targetVol.toFixed(1)}%`} />
         <Row label="Realized Vol" value={`${realizedVol.toFixed(1)}%`} highlight={realizedVol > targetVol * 1.5 ? "#ff8090" : "#d4c4b0"} />
         <Row label="Leverage Signal" value={leverage} highlight={leverageColor} />
-        <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: "#4a3428", marginTop: 12, lineHeight: 1.7 }}>
+        <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: "#8a7560", marginTop: 12, lineHeight: 1.7 }}>
           Vol targeting: scale = target_vol / realized_vol<br />
           Position halts at -20% drawdown (governor)<br />
           Reduces at -15% drawdown threshold
@@ -1212,7 +1220,7 @@ export function PortfolioPanel({ data }: { data: any }) {
             <Row label="CVaR (Cornish-Fisher)" value={fmtN((risk.cvar?.cornish_fisher || 0) * 100, 2) + "%"} highlight="#ff8090" />
           </>
         ) : (
-          <div style={{ color: "#4a3428", fontFamily: "'Fira Code',monospace", fontSize: 10, padding: "20px 0" }}>Risk engine data unavailable</div>
+          <div style={{ color: "#8a7560", fontFamily: "'Fira Code',monospace", fontSize: 10, padding: "20px 0" }}>Risk engine data unavailable</div>
         )}
 
         <SectionTitle>POSITION LIMITS</SectionTitle>
@@ -1225,7 +1233,7 @@ export function PortfolioPanel({ data }: { data: any }) {
           <Row key={k} label={k.replace(/_/g, " ")} value={typeof v === "number" ? fmtN(v, 4) : String(v)} />
         )) : null}
 
-        <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: "#4a3428", marginTop: 12, lineHeight: 1.7 }}>
+        <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: "#8a7560", marginTop: 12, lineHeight: 1.7 }}>
           CVaR = Expected Shortfall beyond VaR threshold<br />
           Preferred over VaR for Basel III / FRTB compliance<br />
           Cornish-Fisher: adjusts for skewness + kurtosis
@@ -1243,7 +1251,7 @@ export function PortfolioPanel({ data }: { data: any }) {
           <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 11, color: dsrColor, marginTop: 6, letterSpacing: 1 }}>
             {gov.is_genuine_alpha ? "✓ GENUINE ALPHA" : "✗ LIKELY OVERFITTING"}
           </div>
-          <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 9, color: "#4a3428", marginTop: 4 }}>
+          <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 9, color: "#8a7560", marginTop: 4 }}>
             Raw Sharpe: {fmtN(gov.sharpe_ratio_raw, 3)} · {gov.n_models_tested || 8} models tested
           </div>
         </div>
@@ -1260,7 +1268,7 @@ export function PortfolioPanel({ data }: { data: any }) {
           <Row key={k} label={`Label ${k}`} value={fmtN(v, 3)} />
         ))}
 
-        <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: "#4a3428", marginTop: 12, lineHeight: 1.7 }}>
+        <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: "#8a7560", marginTop: 12, lineHeight: 1.7 }}>
           Lopez de Prado (2018) AFML Ch.7<br />
           60-day embargo prevents autocorrelation leakage<br />
           DSR: Bailey {"&"} Lopez de Prado (2014)
@@ -1296,7 +1304,7 @@ export function PerformancePanel({ data }: { data: any }) {
         <Row label="Deflated Sharpe" value={fmtN(gov.deflated_sharpe_ratio, 4)} highlight={(gov.deflated_sharpe_ratio || 0) > 0 ? "#40dda0" : "#ff8090"} />
         <Row label="Genuine Alpha" value={gov.is_genuine_alpha ? "YES ✓" : "NO ✗"} highlight={gov.is_genuine_alpha ? "#40dda0" : "#ff8090"} />
 
-        <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: "#4a3428", marginTop: 12, lineHeight: 1.7 }}>
+        <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: "#8a7560", marginTop: 12, lineHeight: 1.7 }}>
           IC = Spearman rank correlation of predictions vs realized returns<br />
           IC {">"} 0.05: good · IC {">"} 0.10: exceptional · IC {">"} 0.20: elite<br />
           Jegadeesh & Titman (1993), Grinold & Kahn (2000)
@@ -1323,7 +1331,7 @@ export function PerformancePanel({ data }: { data: any }) {
       {/* IC History */}
       <Card>
         <SectionTitle>IC HISTORY — 12 MONTHS</SectionTitle>
-        <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 9, color: "#4a3428", marginBottom: 12 }}>
+        <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 9, color: "#8a7560", marginBottom: 12 }}>
           Monthly Information Coefficient (signal vs realized returns)
         </div>
         {icHistory.map((ic, i) => {
@@ -1340,11 +1348,11 @@ export function PerformancePanel({ data }: { data: any }) {
             </div>
           );
         })}
-        <div style={{ marginTop: 12, display: "flex", justifyContent: "space-between", fontFamily: "'Fira Code',monospace", fontSize: 9, color: "#4a3428" }}>
+        <div style={{ marginTop: 12, display: "flex", justifyContent: "space-between", fontFamily: "'Fira Code',monospace", fontSize: 9, color: "#8a7560" }}>
           <span>AVG IC: {(icHistory.reduce((a,b)=>a+b,0)/icHistory.length).toFixed(3)}</span>
           <span>ICIR: {((icHistory.reduce((a,b)=>a+b,0)/icHistory.length) / (Math.sqrt(icHistory.reduce((a,b)=>a+Math.pow(b-(icHistory.reduce((a,b)=>a+b,0)/icHistory.length),2),0)/icHistory.length))).toFixed(2)}</span>
         </div>
-        <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: "#4a3428", marginTop: 12, lineHeight: 1.7 }}>
+        <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: "#8a7560", marginTop: 12, lineHeight: 1.7 }}>
           ICIR = IC / std(IC) — information ratio of the signal itself<br />
           ICIR {">"} 0.5 is considered good · {">"} 1.0 is elite<br />
           Source: signal_tracker PostgreSQL · live data in production
