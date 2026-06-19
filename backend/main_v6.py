@@ -268,6 +268,35 @@ async def lifespan(app: FastAPI):
                 replace_existing=True, max_instances=1, coalesce=True,
             )
             logger.info("✅ Ascent Radar scans scheduled (hourly 10:05-15:05 ET + 16:30 ET EOD)")
+
+        # News briefings — pre-build each morning for popular tickers (warms cache)
+        async def _refresh_news():
+            try:
+                from routers.news_router import build_briefing
+                tickers = ["AAPL", "NVDA", "TSLA", "MSFT", "AMZN", "META", "GOOGL",
+                           "AMD", "SPY", "QQQ"]
+                redis = app.state.redis
+                for tk in tickers:
+                    try:
+                        payload = await build_briefing(tk, redis, limit=10)
+                        await redis.setex(f"news:briefing:v2:{tk}:10", 1800,
+                                          __import__("json").dumps(payload))
+                    except Exception as e:
+                        logger.warning(f"News refresh {tk} failed: {e}")
+                    await asyncio.sleep(2)  # gentle on Finnhub/Anthropic rate limits
+                logger.info(f"✅ Morning news refresh complete ({len(tickers)} tickers)")
+            except Exception as e:
+                logger.error(f"News refresh job error: {e}")
+
+        scheduler.add_job(
+            _refresh_news,
+            trigger=CronTrigger(day_of_week="mon-fri", hour=7, minute=0, timezone=et),
+            id="news_morning_refresh",
+            name="Morning news briefings refresh",
+            replace_existing=True, max_instances=1, coalesce=True,
+        )
+        logger.info("✅ Morning news refresh scheduled (07:00 ET)")
+
         scheduler.start()
         app.state.scheduler = scheduler
         logger.info("✅ APScheduler started — OutcomeFillerJob at 18:00 ET daily")
