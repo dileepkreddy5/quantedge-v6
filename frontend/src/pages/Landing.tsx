@@ -75,6 +75,11 @@ export default function Landing() {
               style={{ color: '#9d8b7a', fontSize: 12, fontWeight: 600, textDecoration: 'none', letterSpacing: 1 }}>
               dileepkapu.com
             </a>
+            <button className="qe-hide-mobile" onClick={() => navigate('/screener')} style={{
+              background: 'none', border: 'none',
+              color: '#9d8b7a', fontFamily: "'Fira Code', monospace",
+              fontSize: 10, letterSpacing: 2, padding: '7px 4px', cursor: 'pointer', fontWeight: 700,
+            }}>⚹ SCREENER</button>
             <button className="qe-hide-mobile" onClick={() => navigate('/ascent')} style={{
               background: 'none', border: 'none', color: '#daa520',
               fontFamily: "'Fira Code', monospace", fontSize: 10, letterSpacing: 2,
