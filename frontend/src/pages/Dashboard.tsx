@@ -28,6 +28,7 @@ import PriceChart from '../components/charts/PriceChart';
 import Screener from './Screener';
 import OverviewV2 from './overview_v2/OverviewV2';
 import NewsPanel from '../components/ui/NewsPanel';
+import PeerPanel from '../components/ui/PeerPanel';
 
 const TABS = [
   { id: 'overview',     label: '⬡ OVERVIEW' },
@@ -37,6 +38,7 @@ const TABS = [
   { id: 'regime',      label: '🌡 REGIME' },
   { id: 'sentiment',   label: '💬 SENTIMENT' },
   { id: 'news',        label: '📰 NEWS' },
+  { id: 'peers',       label: '👥 PEERS' },
   { id: 'montecarlo',  label: '🎲 MONTE CARLO' },
   { id: 'risk',        label: '🛡 RISK' },
   { id: 'fundamental', label: '📋 FUNDAMENTALS' },
@@ -387,6 +389,7 @@ export default function Dashboard() {
               {activeTab === 'regime'      && <RegimePanel data={data} />}
               {activeTab === 'sentiment'   && <SentimentPanel data={data} />}
               {activeTab === 'news'        && <NewsPanel data={data} ticker={ticker} />}
+              {activeTab === 'peers'       && <PeerPanel data={data} ticker={ticker} onAnalyze={runAnalysis} />}
               {activeTab === 'montecarlo'  && <MonteCarloPanel data={data} />}
               {activeTab === 'risk'        && <RiskPanel data={data} />}
               {activeTab === 'fundamental' && <FundamentalsPanel data={data} />}
