@@ -114,8 +114,65 @@ export function MLModelsPanel({ data }: { data: any }) {
   const shap = preds.shap_top_drivers || [];
   const quantile = preds.quantile || {};
 
+  // ── Cross-model conviction: how aligned are the models on 21-day direction? ──
+  const sentiment21 = (data.sentiment && (data.sentiment.score ?? data.sentiment.compound)) ?? null;
+  const kalman21 = (data.kalman && (data.kalman.trend ?? data.kalman.slope)) ?? null;
+  const modelDirs = [
+    { name: 'LSTM',     v: lstm.pred_21d },
+    { name: 'XGBoost',  v: xgb.pred_21d },
+    { name: 'LightGBM', v: lgbm.pred_21d },
+    { name: 'Ensemble', v: ensemble.pred_21d },
+    { name: 'Kalman',   v: kalman21 },
+    { name: 'Sentiment',v: sentiment21 },
+  ].filter(m => m.v != null && !isNaN(Number(m.v)));
+
+  const signs = modelDirs.map(m => Math.sign(Number(m.v)));
+  const nBull = signs.filter(s => s > 0).length;
+  const nBear = signs.filter(s => s < 0).length;
+  const nTotal = modelDirs.length || 1;
+  const majority = nBull >= nBear ? nBull : nBear;
+  const agreement = majority / nTotal;                    // 0.5 (split) .. 1.0 (unanimous)
+  const direction = nBull > nBear ? 'BULLISH' : nBull < nBear ? 'BEARISH' : 'MIXED';
+  // Conviction scales agreement above the 50% baseline -> 0..100
+  const conviction = Math.round(Math.max(0, (agreement - 0.5) * 2) * 100);
+  const convLabel = conviction >= 66 ? 'High conviction' : conviction >= 33 ? 'Moderate' : 'Low conviction';
+  const convColor = direction === 'MIXED' ? '#8a7560' : direction === 'BULLISH' ? '#22c55e' : '#ef4444';
+
   return (
     <div className="qe-grid-3">
+      {/* Cross-model conviction */}
+      <Card style={{ gridColumn:'span 3' }}>
+        <SectionTitle>MODEL CONVICTION — CROSS-MODEL AGREEMENT</SectionTitle>
+        <div style={{ display:'flex', alignItems:'center', gap:20, flexWrap:'wrap' }}>
+          <div style={{ textAlign:'center', minWidth:110 }}>
+            <div style={{ fontFamily:"'Fira Code',monospace", fontSize:36, fontWeight:800, color: convColor, lineHeight:1 }}>{conviction}</div>
+            <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:10, color:'#8a7560', marginTop:4, letterSpacing:1 }}>CONVICTION / 100</div>
+          </div>
+          <div style={{ flex:1, minWidth:200 }}>
+            <div style={{ fontFamily:"'Fira Code',monospace", fontSize:14, fontWeight:700, color: convColor, marginBottom:4 }}>
+              {convLabel} · {direction}
+            </div>
+            <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:12, color:'#d4c4b0', lineHeight:1.5 }}>
+              {majority} of {nTotal} models agree on a {direction.toLowerCase()} 21-day lean
+              {nTotal - majority > 0 ? `, ${nTotal - majority} disagree` : ''}.
+              {' '}Conviction measures <b style={{color:'#d4c4b0'}}>agreement across models</b>, not predictive accuracy.
+            </div>
+          </div>
+          <div style={{ display:'flex', gap:6, flexWrap:'wrap', minWidth:160 }}>
+            {modelDirs.map((m, i) => {
+              const s = Math.sign(Number(m.v));
+              const col = s > 0 ? '#22c55e' : s < 0 ? '#ef4444' : '#8a7560';
+              return (
+                <span key={i} style={{ fontFamily:"'Fira Code',monospace", fontSize:9, letterSpacing:0.5,
+                  padding:'3px 7px', borderRadius:4, border:`1px solid ${col}40`, color: col, background:`${col}10` }}>
+                  {m.name} {s > 0 ? '▲' : s < 0 ? '▼' : '—'}
+                </span>
+              );
+            })}
+          </div>
+        </div>
+      </Card>
+
       {/* Ensemble */}
       <Card style={{ gridColumn:'span 3' }}>
         <SectionTitle>ENSEMBLE MODEL — DRIFT ESTIMATES &amp; UNCERTAINTY</SectionTitle>
