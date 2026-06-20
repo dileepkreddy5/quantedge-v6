@@ -114,19 +114,31 @@ export function MLModelsPanel({ data }: { data: any }) {
   const shap = preds.shap_top_drivers || [];
   const quantile = preds.quantile || {};
 
-  // ── Cross-model conviction: how aligned are the models on 21-day direction? ──
-  const sentiment21 = (data.sentiment && (data.sentiment.score ?? data.sentiment.compound)) ?? null;
-  const kalman21 = (data.kalman && (data.kalman.trend ?? data.kalman.slope)) ?? null;
-  const modelDirs = [
-    { name: 'LSTM',     v: lstm.pred_21d },
-    { name: 'XGBoost',  v: xgb.pred_21d },
-    { name: 'LightGBM', v: lgbm.pred_21d },
-    { name: 'Ensemble', v: ensemble.pred_21d },
-    { name: 'Kalman',   v: kalman21 },
-    { name: 'Sentiment',v: sentiment21 },
-  ].filter(m => m.v != null && !isNaN(Number(m.v)));
+  // ── Cross-model conviction: agreement among INDEPENDENT model signals on 21-day direction ──
+  // Note: Ensemble is excluded — it's derived from LSTM/XGB/LGBM, so it isn't an independent vote.
+  const dirFromString = (s: string | undefined, bull: string[], bear: string[]): number | null => {
+    if (!s) return null;
+    const u = String(s).toUpperCase();
+    if (bull.some(b => u.includes(b))) return 1;
+    if (bear.some(b => u.includes(b))) return -1;
+    return 0;
+  };
+  const kalmanDir = dirFromString(data.kalman?.signal_interpretation, ['UP', 'BULL', 'RISING'], ['DOWN', 'BEAR', 'FALLING']);
+  const regimeDir = dirFromString(data.current_regime, ['BULL'], ['BEAR']);
+  const gexDir = dirFromString(data.options?.gex?.gex_regime, ['POSITIVE'], ['NEGATIVE']);
+  const sentVal = data.sentiment?.composite;
 
-  const signs = modelDirs.map(m => Math.sign(Number(m.v)));
+  const modelDirs = [
+    { name: 'LSTM',      v: lstm.pred_21d != null ? Math.sign(Number(lstm.pred_21d)) : null },
+    { name: 'XGBoost',   v: xgb.pred_21d != null ? Math.sign(Number(xgb.pred_21d)) : null },
+    { name: 'LightGBM',  v: lgbm.pred_21d != null ? Math.sign(Number(lgbm.pred_21d)) : null },
+    { name: 'Kalman',    v: kalmanDir },
+    { name: 'Regime',    v: regimeDir },
+    { name: 'Sentiment', v: sentVal != null ? Math.sign(Number(sentVal)) : null },
+    { name: 'Options',   v: gexDir },
+  ].filter(m => m.v != null) as { name: string; v: number }[];
+
+  const signs = modelDirs.map(m => m.v);
   const nBull = signs.filter(s => s > 0).length;
   const nBear = signs.filter(s => s < 0).length;
   const nTotal = modelDirs.length || 1;
@@ -160,7 +172,7 @@ export function MLModelsPanel({ data }: { data: any }) {
           </div>
           <div style={{ display:'flex', gap:6, flexWrap:'wrap', minWidth:160 }}>
             {modelDirs.map((m, i) => {
-              const s = Math.sign(Number(m.v));
+              const s = m.v;
               const col = s > 0 ? '#22c55e' : s < 0 ? '#ef4444' : '#8a7560';
               return (
                 <span key={i} style={{ fontFamily:"'Fira Code',monospace", fontSize:9, letterSpacing:0.5,
