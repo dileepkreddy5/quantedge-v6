@@ -645,7 +645,6 @@ export function MonteCarloPanel({ data }: { data: any }) {
 // ══════════════════════════════════════════════════════════════
 export function RiskPanel({ data }: { data: any }) {
   const risk = data.risk_metrics || {};
-  const ff = data.ff_alpha != null ? data : {};
 
   const ratios = [
     { label: 'Sharpe Ratio', value: risk.sharpe_ratio, good: v => v > 1, fmt: (v:any)=>fmtN(v,3) },
@@ -677,10 +676,26 @@ export function RiskPanel({ data }: { data: any }) {
       </Card>
 
       <Card>
-        <SectionTitle>FACTOR EXPOSURES (Fama-French)</SectionTitle>
-        {[['Alpha (annualized)','ff_alpha'],['MKT Beta','ff_mkt_beta'],['SMB (Size)','ff_smb'],['HML (Value)','ff_hml'],['RMW (Profitability)','ff_rmw'],['CMA (Investment)','ff_cma'],['WML (Momentum)','ff_wml'],['R²','ff_r_squared'],['Idio Risk','ff_idio_risk']].map(([l,k]) => (
-          <Row key={k} label={l} value={data[k] != null ? fmtN(data[k],4) : '—'} />
-        ))}
+        <SectionTitle>MARKET MODEL — CAPM (vs SPY)</SectionTitle>
+        {data.capm_available ? (
+          <>
+            <Row label="Market Beta (β)" value={fmtN(data.capm_beta,3)} />
+            <Row label="Alpha (annualized)" value={data.capm_alpha != null ? `${(data.capm_alpha*100).toFixed(2)}%` : '—'} />
+            <Row label="R² (market fit)" value={data.capm_r_squared != null ? `${(data.capm_r_squared*100).toFixed(1)}%` : '—'} />
+            <Row label="Idiosyncratic Risk" value={data.capm_idio_risk != null ? `${(data.capm_idio_risk*100).toFixed(1)}%` : '—'} />
+            <Row label="Observations" value={data.capm_n_obs != null ? `${data.capm_n_obs}d` : '—'} />
+            <div style={{fontSize:10,color:'#8a7560',marginTop:10,lineHeight:1.5,fontStyle:'italic'}}>
+              Single-factor regression of the stock's excess returns on the market's (SPY).
+              β&gt;1 = more volatile than market; R² = share of moves explained by the market;
+              the rest is stock-specific (idiosyncratic) risk. Full Fama-French 5-factor
+              decomposition is on the roadmap.
+            </div>
+          </>
+        ) : (
+          <div style={{fontSize:11,color:'#8a7560',padding:'8px 0',lineHeight:1.6}}>
+            Market regression unavailable for this name (insufficient overlapping history vs SPY).
+          </div>
+        )}
       </Card>
     </div>
   );
@@ -718,7 +733,7 @@ export function FundamentalsPanel({ data }: { data: any }) {
         <SectionTitle>ETF / FUND — MARKET STATISTICS</SectionTitle>
         <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12}}>
           {[["Market Cap",fm(data.market_cap)],["Annual Vol",fp(data.annual_vol)],["Sharpe",f(data.sharpe_ratio)],["Max DD",fp(data.max_drawdown)],
-            ["Hurst",f(data.hurst_exponent,4)],["Regime",data.current_regime?.replace(/_/g," ")??"—"],["Beta",f(data.ff_mkt_beta,3)],["1Y Ret",fp(data.annual_return)]
+            ["Hurst",f(data.hurst_exponent,4)],["Regime",data.current_regime?.replace(/_/g," ")??"—"],["Beta",f(data.capm_beta,3)],["1Y Ret",fp(data.annual_return)]
           ].map(([l,v])=>(
             <div key={l} style={{background:"#1a0f0a",borderRadius:6,padding:"12px 14px",border:"1px solid rgba(212,149,108,0.1)"}}>
               <div style={{fontFamily:"'Fira Code',monospace",fontSize:8,color:"#9d8b7a",letterSpacing:2,marginBottom:6}}>{l}</div>
@@ -829,7 +844,7 @@ export function FundamentalsPanel({ data }: { data: any }) {
         <FRow l="Institutional" v={fp(data.institutional_ownership)} />
         <FRow l="Insider Own."  v={fp(data.insider_ownership)} />
         <FRow l="Short Interest" v={fp(data.short_interest)} c={data.short_interest&&data.short_interest>0.05?"#ff8090":"#d4c4b0"} />
-        <FRow l="Beta (5Y)"     v={f(data.beta??data.ff_mkt_beta,3)} />
+        <FRow l="Beta (5Y)"     v={f(data.beta??data.capm_beta,3)} />
         <SubTitle>QUALITY SCORES</SubTitle>
         <FRow l="Piotroski F-Score" v={data.gross_margin&&data.roe&&data.current_ratio?String(Math.min(9,Math.round((data.gross_margin>0.4?1:0)+(data.roe>0.1?1:0)+(data.current_ratio>1.5?1:0)+(data.revenue_growth>0.05?1:0)+(data.debt_to_equity<1?1:0)*2+3))):"—"} c="#daa520" />
         <FRow l="Altman Z-Score"    v="N/A (public)" />
@@ -865,18 +880,18 @@ export function FundamentalsPanel({ data }: { data: any }) {
         </div>
       </Card>
 
-      {/* FACTOR EXPOSURES */}
+      {/* MARKET MODEL — CAPM */}
       <Card>
-        <SectionTitle>◈ FACTOR EXPOSURES (FAMA-FRENCH 5)</SectionTitle>
-        <FRow l="Alpha (Annualized)" v={fp(data.ff_alpha)}    c={gc(data.ff_alpha)} />
-        <FRow l="MKT Beta"           v={f(data.ff_mkt_beta,3)} />
-        <FRow l="SMB (Size)"         v={f(data.ff_smb,3)}     c={data.ff_smb!=null&&data.ff_smb<0?"#40dda0":"#e8b84b"} />
-        <FRow l="HML (Value)"        v={f(data.ff_hml,3)}     />
-        <FRow l="RMW (Profitability)" v={f(data.ff_rmw,3)}   c={gc(data.ff_rmw)} />
-        <FRow l="CMA (Investment)"   v={f(data.ff_cma,3)}    />
-        <FRow l="WML (Momentum)"     v={f(data.ff_wml,3)}    c={gc(data.ff_wml)} />
-        <FRow l="R²"                 v={f(data.ff_r_squared,3)} />
-        <FRow l="Idiosyncratic Risk" v={fp(data.ff_idio_risk)} />
+        <SectionTitle>◈ MARKET MODEL — CAPM (vs SPY)</SectionTitle>
+        {data.capm_available ? (<>
+        <FRow l="Market Beta (β)"     v={f(data.capm_beta,3)} />
+        <FRow l="Alpha (Annualized)"  v={data.capm_alpha!=null?`${(data.capm_alpha*100).toFixed(2)}%`:"—"} c={gc(data.capm_alpha)} />
+        <FRow l="R² (Market Fit)"     v={data.capm_r_squared!=null?`${(data.capm_r_squared*100).toFixed(1)}%`:"—"} />
+        <FRow l="Idiosyncratic Risk"  v={data.capm_idio_risk!=null?`${(data.capm_idio_risk*100).toFixed(1)}%`:"—"} />
+        <FRow l="Observations"        v={data.capm_n_obs!=null?`${data.capm_n_obs}d`:"—"} />
+        </>) : (
+        <FRow l="Market regression"   v="unavailable" />
+        )}
         <div style={{fontFamily:"'Fira Code',monospace",fontSize:7,color:"#8a7560",marginTop:12,lineHeight:1.7}}>
           Fama & French (1993, 2015) · Carhart (1997)<br/>
           Kenneth French Data Library · 60M rolling OLS<br/>
@@ -1285,8 +1300,8 @@ export function PortfolioPanel({ data }: { data: any }) {
         {risk.cvar ? (
           <>
             <Row label="CVaR 95% (worst case)" value={fmtN((risk.cvar?.worst_case_daily || 0) * 100, 2) + "%"} highlight="#ff8090" />
-            <Row label="CVaR 95% (historical)" value={fmtN((risk.cvar?.historical || 0) * 100, 2) + "%"} highlight="#ff8090" />
-            <Row label="CVaR (Cornish-Fisher)" value={fmtN((risk.cvar?.cornish_fisher || 0) * 100, 2) + "%"} highlight="#ff8090" />
+            <Row label="CVaR 95% (historical)" value={fmtN((risk.cvar?.historical?.cvar || 0) * 100, 2) + "%"} highlight="#ff8090" />
+            <Row label="CVaR (Cornish-Fisher)" value={fmtN((risk.cvar?.cornish_fisher?.cvar || 0) * 100, 2) + "%"} highlight="#ff8090" />
           </>
         ) : (
           <div style={{ color: "#8a7560", fontFamily: "'Fira Code',monospace", fontSize: 10, padding: "20px 0" }}>Risk engine data unavailable</div>
@@ -1318,7 +1333,7 @@ export function PortfolioPanel({ data }: { data: any }) {
             {dsr != null ? dsr.toFixed(3) : "—"}
           </div>
           <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 11, color: dsrColor, marginTop: 6, letterSpacing: 1 }}>
-            {gov.is_genuine_alpha ? "✓ GENUINE ALPHA" : "✗ LIKELY OVERFITTING"}
+            {gov.is_genuine_alpha ? "✓ DSR > 0 · UNLIKELY CHANCE" : "✗ DSR ≤ 0 · COULD BE CHANCE"}
           </div>
           <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 9, color: "#8a7560", marginTop: 4 }}>
             Raw Sharpe: {fmtN(gov.sharpe_ratio_raw, 3)} · {gov.n_models_tested || 8} models tested
@@ -1357,7 +1372,6 @@ export function PerformancePanel({ data }: { data: any }) {
   const ens = ml.ensemble || {};
 
   // Simulate IC decay over time (would be real from signal_tracker in prod)
-  const icHistory = [0.08, 0.12, 0.09, 0.15, 0.11, 0.07, 0.13, 0.10, 0.14, 0.09, 0.08, 0.12];
   const months = ["Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec","Jan","Feb","Mar"];
 
   return (
@@ -1366,17 +1380,18 @@ export function PerformancePanel({ data }: { data: any }) {
       {/* Signal Quality */}
       <Card>
         <SectionTitle>SIGNAL QUALITY METRICS</SectionTitle>
-        <Row label="IC (Information Coeff)" value={fmtN(ens.confidence, 3)} highlight={(ens.confidence || 0) > 0.1 ? "#40dda0" : "#e8b84b"} />
-        <Row label="IC Estimate" value={fmtN(ml.ic_estimate, 4)} />
-        <Row label="Rank IC" value={fmtN(ml.rank_ic_estimate, 4)} />
+        <Row label="IC (in-sample, XGB train)" value={fmtN(ml.ic_estimate, 4)} highlight="#e8b84b" />
+        <Row label="Rank IC (out-of-sample)" value={ml.rank_ic_estimate != null ? fmtN(ml.rank_ic_estimate, 4) : "—"} />
         <Row label="Model Disagreement" value={fmtN(ens.model_disagreement, 3) + "%"} />
-        <Row label="Deflated Sharpe" value={fmtN(gov.deflated_sharpe_ratio, 4)} highlight={(gov.deflated_sharpe_ratio || 0) > 0 ? "#40dda0" : "#ff8090"} />
-        <Row label="Genuine Alpha" value={gov.is_genuine_alpha ? "YES ✓" : "NO ✗"} highlight={gov.is_genuine_alpha ? "#40dda0" : "#ff8090"} />
+        <Row label="Deflated Sharpe (DSR)" value={fmtN(gov.deflated_sharpe_ratio, 3)} highlight={(gov.deflated_sharpe_ratio || 0) > 0.5 ? "#40dda0" : "#e8b84b"} />
+        <Row label="DSR verdict" value={gov.is_genuine_alpha ? "unlikely chance" : "could be chance"} highlight={gov.is_genuine_alpha ? "#40dda0" : "#e8b84b"} />
 
         <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: "#8a7560", marginTop: 12, lineHeight: 1.7 }}>
-          IC = Spearman rank correlation of predictions vs realized returns<br />
-          IC {">"} 0.05: good · IC {">"} 0.10: exceptional · IC {">"} 0.20: elite<br />
-          Jegadeesh & Titman (1993), Grinold & Kahn (2000)
+          IC = Spearman rank correlation of predictions vs realized returns.<br />
+          The in-sample IC is measured on training data and is optimistic; the out-of-sample<br />
+          Rank IC is the honest read (real-world equity IC is typically 0.02–0.05).<br />
+          DSR (Bailey &amp; López de Prado) deflates the Sharpe for multiple-testing across<br />
+          8 model variants; it saturates near 1.0 when the raw Sharpe is high.
         </div>
       </Card>
 
@@ -1397,34 +1412,30 @@ export function PerformancePanel({ data }: { data: any }) {
         <Row label="Hurst Exponent" value={fmtN(data.hurst_exponent, 4)} highlight={(data.hurst_exponent || 0.5) > 0.55 ? "#40dda0" : "#8b5cf6"} />
       </Card>
 
-      {/* IC History */}
+      {/* IC Tracking — honest accumulating state */}
       <Card>
-        <SectionTitle>IC HISTORY — 12 MONTHS</SectionTitle>
-        <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 9, color: "#8a7560", marginBottom: 12 }}>
-          Monthly Information Coefficient (signal vs realized returns)
+        <SectionTitle>OUT-OF-SAMPLE IC TRACKING</SectionTitle>
+        <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 11, color: "#d4c4b0", marginBottom: 14, lineHeight: 1.6 }}>
+          Every signal this engine generates is recorded with a timestamp, then scored
+          against the stock's <span style={{color:"#daa520"}}>realized 21-day forward return</span> once
+          that horizon completes. The out-of-sample Information Coefficient — the honest
+          measure of whether the signal actually predicts returns — accumulates from those
+          matured signals.
         </div>
-        {icHistory.map((ic, i) => {
-          const color = ic > 0.12 ? "#40dda0" : ic > 0.08 ? "#e8b84b" : "#ff8090";
-          return (
-            <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
-              <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 9, color: "#9d8b7a", width: 28 }}>{months[i]}</div>
-              <div style={{ flex: 1, height: 8, background: "#1a0f0a", borderRadius: 2 }}>
-                <div style={{ height: "100%", background: color, borderRadius: 2, width: `${ic * 500}%`, maxWidth: "100%", transition: "width 1s ease" }} />
-              </div>
-              <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 9, color, width: 40, textAlign: "right" }}>
-                {ic.toFixed(3)}
-              </div>
-            </div>
-          );
-        })}
-        <div style={{ marginTop: 12, display: "flex", justifyContent: "space-between", fontFamily: "'Fira Code',monospace", fontSize: 9, color: "#8a7560" }}>
-          <span>AVG IC: {(icHistory.reduce((a,b)=>a+b,0)/icHistory.length).toFixed(3)}</span>
-          <span>ICIR: {((icHistory.reduce((a,b)=>a+b,0)/icHistory.length) / (Math.sqrt(icHistory.reduce((a,b)=>a+Math.pow(b-(icHistory.reduce((a,b)=>a+b,0)/icHistory.length),2),0)/icHistory.length))).toFixed(2)}</span>
+        <div style={{ display:"flex", alignItems:"center", gap:10, padding:"12px 14px", background:"#1a0f0a", borderRadius:6, border:"1px solid rgba(212,149,108,0.12)", marginBottom:12 }}>
+          <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:30, color:"#daa520", lineHeight:1 }}>⏳</div>
+          <div style={{ fontFamily:"'Fira Code',monospace", fontSize:11, color:"#9d8b7a", lineHeight:1.5 }}>
+            Signal history is still maturing. A meaningful IC series needs several months of
+            signals that have each reached their 21-day evaluation horizon. Until then, the
+            honest IC read is the per-analysis <span style={{color:"#daa520"}}>out-of-sample Rank IC</span> on
+            the left, not a backfilled track record.
+          </div>
         </div>
-        <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: "#8a7560", marginTop: 12, lineHeight: 1.7 }}>
-          ICIR = IC / std(IC) — information ratio of the signal itself<br />
-          ICIR {">"} 0.5 is considered good · {">"} 1.0 is elite<br />
-          Source: signal_tracker PostgreSQL · live data in production
+        <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: "#8a7560", marginTop: 8, lineHeight: 1.7 }}>
+          Why no 12-month chart? Because the platform doesn't have 12 months of live signals
+          yet — and showing a backfilled one would misrepresent the track record.<br />
+          IC = Spearman rank correlation of signal vs realized forward returns.<br />
+          Real-world single-name equity IC is typically 0.02–0.05.
         </div>
       </Card>
     </div>
