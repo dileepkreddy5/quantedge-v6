@@ -41,6 +41,7 @@ from routers.screener_router import router as screener_router
 from routers.portfolio_sizer_router import router as portfolio_sizer_router
 from routers.news_momentum_router import router as news_momentum_router
 from routers.ascent_router import router as ascent_router
+from routers.peers_router import router as peers_router
 from routers.news_router import router as news_router
 from ml.price_oracle.router import router as oracle_router
 from services.signal_tracker import SignalTracker, OutcomeFillerJob
@@ -213,6 +214,8 @@ async def lifespan(app: FastAPI):
     # 6b. Ascent Radar — store + scan job (needs DB)
     app.state.ascent_store = None
     app.state.ascent_job = None
+    app.state.peer_store = None
+    app.state.peer_job = None
     if app.state.db:
         try:
             from services.ascent_store import AscentStore
@@ -224,6 +227,14 @@ async def lifespan(app: FastAPI):
             _polygon_key = getattr(_settings, "POLYGON_API_KEY", None) or _os.getenv("POLYGON_API_KEY", "")
             app.state.ascent_store = _ascent_store
             app.state.ascent_job = AscentScanJob(store=_ascent_store, api_key=_polygon_key)
+            # Peer stats — full-universe sector comparison
+            from services.peer_store import PeerStore
+            from services.peer_scan_job import PeerScanJob
+            _peer_store = PeerStore(db_pool=app.state.db)
+            await _peer_store.ensure_tables()
+            app.state.peer_store = _peer_store
+            app.state.peer_job = PeerScanJob(store=_peer_store, api_key=_polygon_key)
+            logger.info("✅ Peer stats store + job initialized")
             logger.info("✅ Ascent Radar store + job initialized")
         except Exception as e:
             logger.error(f"Ascent Radar init error: {e}")
@@ -296,6 +307,17 @@ async def lifespan(app: FastAPI):
             replace_existing=True, max_instances=1, coalesce=True,
         )
         logger.info("✅ Morning news refresh scheduled (07:00 ET)")
+
+        # Peer stats — daily full-universe scan (peer rankings move slowly)
+        if app.state.peer_job:
+            scheduler.add_job(
+                app.state.peer_job.run,
+                trigger=CronTrigger(day_of_week="mon-fri", hour=6, minute=30, timezone=et),
+                id="peer_daily_scan",
+                name="Daily peer stats scan",
+                replace_existing=True, max_instances=1, coalesce=True,
+            )
+            logger.info("✅ Peer stats scan scheduled (06:30 ET daily)")
 
         scheduler.start()
         app.state.scheduler = scheduler
@@ -437,6 +459,7 @@ app.include_router(performance_router,   prefix="/api/v6/performance", tags=["Pe
 app.include_router(quality_router,       prefix="/api/v6",             tags=["Quality"])
 app.include_router(screener_router,      prefix="/api/v6",             tags=["Screener"])
 app.include_router(ascent_router,        prefix="/api/v6",             tags=["Ascent Radar"])
+app.include_router(peers_router,         prefix="/api/v6",             tags=["Peers"])
 app.include_router(news_router,          prefix="/api/v6",             tags=["News"])
 app.include_router(portfolio_sizer_router, prefix="/api/v6",           tags=["PortfolioSizer"])
 app.include_router(news_momentum_router, prefix="/api/v6",             tags=["NewsMomentum"])
