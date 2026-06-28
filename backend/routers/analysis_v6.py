@@ -473,78 +473,45 @@ class QuantEdgeAnalyzerV6:
                 result["garman_klass_vol"] = 0.0
                 result["yang_zhang_vol"] = 0.0
 
-            # ── SCENARIOS ────────────────────────────────────
-            # ── FAMA-FRENCH 5-FACTOR EXPOSURES ──────────────
-            # OLS regression of excess returns on FF5 factors
-            # Alpha, MKT, SMB, HML, RMW, CMA, WML (momentum)
-            # Uses 252-day rolling window; R² shows fit quality
+            # ── MARKET MODEL (CAPM) — real regression vs SPY ─────────────
+            # Single-factor market model: regress the stock's excess returns on
+            # the market's (SPY) excess returns. Yields a genuine beta, alpha,
+            # R-squared, and idiosyncratic risk. (Full Fama-French 5-factor
+            # attribution requires Ken French daily factor data — roadmap.)
             try:
-                ret_series = returns.tail(252).values
-                n_ff = len(ret_series)
-                if n_ff >= 60:
-                    # Approximate factor proxies from price data
-                    # (Full FF data requires FRED/Ken French library)
-                    # MKT proxy: SPY-like systematic component via beta
-                    rf = 0.053 / 252  # risk-free rate daily
-                    excess_ret = ret_series - rf
-
-                    # Market beta via OLS on own returns as proxy
-                    X = np.column_stack([
-                        np.ones(n_ff),
-                        excess_ret,  # MKT
-                    ])
-                    try:
+                spy_data = await self.market_feed.get_price_history("SPY")
+                if spy_data is not None and "close" in spy_data and len(spy_data["close"]) > 60:
+                    spy_close = spy_data["close"]
+                    spy_ret = spy_close.pct_change().dropna()
+                    aligned = pd.concat([returns.rename("stock"), spy_ret.rename("mkt")], axis=1, join="inner").dropna()
+                    aligned = aligned.tail(252)
+                    if len(aligned) >= 60:
+                        rf = 0.053 / 252
+                        y = aligned["stock"].values - rf
+                        x = aligned["mkt"].values - rf
                         from numpy.linalg import lstsq
-                        coeffs, residuals, _, _ = lstsq(X, excess_ret, rcond=None)
+                        X = np.column_stack([np.ones(len(x)), x])
+                        coeffs, _, _, _ = lstsq(X, y, rcond=None)
                         alpha_daily = float(coeffs[0])
-                        mkt_beta = float(coeffs[1]) if len(coeffs) > 1 else 1.0
-
-                        # Annualize alpha
-                        ff_alpha = alpha_daily * 252
-
-                        # Idiosyncratic risk = std of residuals annualized
+                        mkt_beta = float(coeffs[1])
                         y_hat = X @ coeffs
-                        resid = excess_ret - y_hat
-                        ff_idio_risk = float(np.std(resid) * np.sqrt(252))
-
-                        # R-squared
-                        ss_res = np.sum(resid**2)
-                        ss_tot = np.sum((excess_ret - excess_ret.mean())**2)
-                        ff_r2 = float(1 - ss_res / ss_tot) if ss_tot > 0 else 0.0
-
-                        result["ff_alpha"] = round(ff_alpha, 6)
-                        result["ff_mkt_beta"] = round(mkt_beta, 4)
-                        result["ff_r_squared"] = round(ff_r2, 4)
-                        result["ff_idio_risk"] = round(ff_idio_risk, 6)
-
-                        # Approximate factor loadings from return characteristics
-                        # SMB (size): large caps load negatively
-                        mc = result.get("market_cap", 0) or 0
-                        result["ff_smb"] = round(-0.3 if mc > 1e12 else 0.1 if mc < 1e10 else -0.1, 4)
-
-                        # HML (value): low P/B loads positively on HML
-                        pb = result.get("price_to_book", result.get("pb_ratio", 3.0)) or 3.0
-                        result["ff_hml"] = round(-0.4 if pb > 5 else 0.2 if pb < 1.5 else -0.1, 4)
-
-                        # RMW (profitability): high ROE loads positively
-                        roe = result.get("roe", 0.15) or 0.15
-                        result["ff_rmw"] = round(0.4 if roe > 0.2 else -0.1 if roe < 0.05 else 0.2, 4)
-
-                        # CMA (investment): low capex growth loads positively
-                        rev_growth = result.get("revenue_growth", 0.1) or 0.1
-                        result["ff_cma"] = round(-0.2 if rev_growth > 0.2 else 0.1, 4)
-
-                        # WML (momentum): trailing 12-1 month return
-                        if len(close) >= 252:
-                            mom_12_1 = float((close.iloc[-21] / close.iloc[-252]) - 1)
-                            result["ff_wml"] = round(0.3 if mom_12_1 > 0.1 else -0.3 if mom_12_1 < -0.1 else 0.0, 4)
-                        else:
-                            result["ff_wml"] = 0.0
-
-                    except Exception as e:
-                        logger.warning(f"FF OLS failed: {e}")
+                        resid = y - y_hat
+                        ss_res = float(np.sum(resid**2))
+                        ss_tot = float(np.sum((y - y.mean())**2))
+                        r2 = (1 - ss_res / ss_tot) if ss_tot > 0 else 0.0
+                        result["capm_alpha"] = round(alpha_daily * 252, 6)
+                        result["capm_beta"] = round(mkt_beta, 4)
+                        result["capm_r_squared"] = round(r2, 4)
+                        result["capm_idio_risk"] = round(float(np.std(resid) * np.sqrt(252)), 6)
+                        result["capm_n_obs"] = int(len(aligned))
+                        result["capm_available"] = True
+                    else:
+                        result["capm_available"] = False
+                else:
+                    result["capm_available"] = False
             except Exception as e:
-                logger.warning(f"Fama-French computation error: {e}")
+                logger.warning(f"CAPM market regression error: {e}")
+                result["capm_available"] = False
 
             result["scenarios"] = self._build_scenarios(
                 current_price=current_price,

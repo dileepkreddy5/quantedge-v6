@@ -33,7 +33,6 @@ import PeerPanel from '../components/ui/PeerPanel';
 const TABS = [
   { id: 'overview',     label: '⬡ OVERVIEW' },
   { id: 'ml',          label: '🧠 ML MODELS' },
-  { id: 'screener',    label: '🔍 SCREENER' },
   { id: 'volatility',  label: '📊 VOLATILITY' },
   { id: 'regime',      label: '🌡 REGIME' },
   { id: 'sentiment',   label: '💬 SENTIMENT' },
@@ -384,7 +383,6 @@ export default function Dashboard() {
             <div style={{ animation: 'fadeIn 0.3s ease' }}>
               {activeTab === 'overview'    && <OverviewV2 data={data} ticker={ticker} onAnalyze={runAnalysis} />}
               {activeTab === 'ml'          && <MLModelsPanel data={data} />}
-              {activeTab === 'screener'    && <Screener embedded />}
               {activeTab === 'volatility'  && <VolatilityPanel data={data} />}
               {activeTab === 'regime'      && <RegimePanel data={data} />}
               {activeTab === 'sentiment'   && <SentimentPanel data={data} />}
