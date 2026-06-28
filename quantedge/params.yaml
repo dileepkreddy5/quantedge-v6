@@ -1,0 +1,65 @@
+# QuantEdge — Committed Starting Parameters
+# Source: Build Manual v1.0, Appendix §22 (Tables 36–40).
+#
+# THE RULE (Manual §22, Table 41):
+#   Starting points, not truths. Commit them now, in writing, BEFORE the
+#   first backtest. Change any one only with a logged reason in the Research
+#   Journal. NEVER tune a kill-threshold number after seeing the result it
+#   judges. The whole point of the kill-threshold is that it is fixed before
+#   results are visible. A silent edit is a discipline violation.
+
+schema_version: "1.0"
+frozen: true
+committed_on: "2026-06"
+
+# --- Winner definition (Table 36) ---
+winner_definition:
+  forward_horizon_years: 5
+  horizon_sweep_years: [3, 5, 7]
+  market_test:
+    rule: "cumulative excess return vs sector >= 2x over the window"
+    multiple: 2.0
+  business_test:
+    revenue_multiple: 2.0
+    require_roic_improving: true
+  survival_test:
+    max_terminal_dilution_pct: 40
+    exclude_bankrupt: true
+  min_winner_definitions_reported: 3
+
+# --- Kill-threshold (Table 37) — committed before first backtest ---
+kill_threshold:
+  min_oos_lift_over_base_rate: 2.0
+  min_t_stat: 3.0
+  calibration_tolerance_pct: 20
+  min_distinct_regimes: 2
+
+# --- Network graph (Table 38) ---
+network_graph:
+  edge_materiality_floor_pct: 10
+  distance_decay: {tier_1: 1.0, tier_2: 0.5, tier_3: 0.25}
+  edge_confirmation_sources: 2
+  shock_window_months: [1, 3]
+
+# --- Acceleration divergence (Table 39) ---
+acceleration_divergence:
+  timeframe_ladder: ["1w", "2w", "1m", "2m", "4m", "6m", "1y"]
+  fundamental_acceleration_min_consecutive_periods: 2
+  quiet_price_percentile_max: 50
+  inflection_corroborating_sources: 1
+
+# --- Cap tiers and universe (Table 40) ---
+cap_tiers:
+  large_cap_min_usd: 10000000000
+  mid_cap_usd: [2000000000, 10000000000]
+  small_cap_usd: [300000000, 2000000000]
+universe:
+  liquidity_floor_adv_usd: 1000000
+  scope: "full_liquid_us"
+  display_n_per_tier: 100
+
+# --- Cost model (§13 — gross returns never shown alone) ---
+costs:
+  commission_bps: 1.0
+  slippage_bps: 5.0
+  spread_bps: 2.0

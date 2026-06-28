@@ -103,3 +103,7 @@ docker-compose.override.yml
 
 # local edit backups
 *.bak
+
+# research harness — runtime state, not source
+quantedge/journal/graveyard/*.jsonl
+quantedge/**/__pycache__/

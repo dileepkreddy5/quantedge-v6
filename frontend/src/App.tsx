@@ -10,6 +10,7 @@ import Dashboard from './pages/Dashboard';
 import Screener from './pages/Screener';
 import AscentRadar from './pages/AscentRadar';
 import Login from './pages/Login';
+import Research from './pages/Research';
 
 export default function App() {
   return (
@@ -34,6 +35,7 @@ export default function App() {
         <Route path="/screener"  element={<Screener />} />
         <Route path="/ascent"    element={<AscentRadar />} />
         <Route path="/login"     element={<Login />} />
+        <Route path="/research"  element={<Research />} />
         {/* Catch-all → landing */}
         <Route path="*"          element={<Navigate to="/" replace />} />
       </Routes>

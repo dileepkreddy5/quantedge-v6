@@ -1,0 +1,286 @@
+{
+  "unit": "network.customer_momentum",
+  "status": "research",
+  "generated": "2026-06-28T21:35:08.411591Z",
+  "title": "Cohen-Frazzini customer-momentum \u2014 directional check",
+  "mechanism": "Investors are inattentive to economic links; a customer shock predicts the supplier's lagged return.",
+  "n_edges": 11,
+  "n_observations": 33,
+  "avg_supplier_after_pos_shock": 0.0801,
+  "avg_supplier_after_neg_shock": -0.0088,
+  "directional_spread": 0.0889,
+  "rows": [
+    {
+      "window": "2023-05",
+      "supplier": "AVGO",
+      "customer": "AAPL",
+      "weight": 0.2,
+      "customer_shock": 0.0452,
+      "supplier_next": 0.0981
+    },
+    {
+      "window": "2023-05",
+      "supplier": "SWKS",
+      "customer": "AAPL",
+      "weight": 0.58,
+      "customer_shock": 0.0452,
+      "supplier_next": 0.0453
+    },
+    {
+      "window": "2023-05",
+      "supplier": "QRVO",
+      "customer": "AAPL",
+      "weight": 0.32,
+      "customer_shock": 0.0452,
+      "supplier_next": 0.0366
+    },
+    {
+      "window": "2023-05",
+      "supplier": "CRUS",
+      "customer": "AAPL",
+      "weight": 0.8,
+      "customer_shock": 0.0452,
+      "supplier_next": 0.0303
+    },
+    {
+      "window": "2023-05",
+      "supplier": "GLW",
+      "customer": "AAPL",
+      "weight": 0.16,
+      "customer_shock": 0.0452,
+      "supplier_next": 0.1351
+    },
+    {
+      "window": "2023-05",
+      "supplier": "JBL",
+      "customer": "AAPL",
+      "weight": 0.2,
+      "customer_shock": 0.0452,
+      "supplier_next": 0.1999
+    },
+    {
+      "window": "2023-05",
+      "supplier": "LITE",
+      "customer": "AAPL",
+      "weight": 0.15,
+      "customer_shock": 0.0452,
+      "supplier_next": 0.0864
+    },
+    {
+      "window": "2023-05",
+      "supplier": "TSM",
+      "customer": "AAPL",
+      "weight": 0.23,
+      "customer_shock": 0.0452,
+      "supplier_next": 0.021
+    },
+    {
+      "window": "2023-05",
+      "supplier": "TSM",
+      "customer": "NVDA",
+      "weight": 0.11,
+      "customer_shock": 0.3087,
+      "supplier_next": 0.021
+    },
+    {
+      "window": "2023-05",
+      "supplier": "MU",
+      "customer": "AAPL",
+      "weight": 0.1,
+      "customer_shock": 0.0452,
+      "supplier_next": -0.0866
+    },
+    {
+      "window": "2023-05",
+      "supplier": "NVDA",
+      "customer": "MSFT",
+      "weight": 0.13,
+      "customer_shock": 0.0747,
+      "supplier_next": 0.0637
+    },
+    {
+      "window": "2023-09",
+      "supplier": "AVGO",
+      "customer": "AAPL",
+      "weight": 0.2,
+      "customer_shock": -0.0963,
+      "supplier_next": 0.0077
+    },
+    {
+      "window": "2023-09",
+      "supplier": "SWKS",
+      "customer": "AAPL",
+      "weight": 0.58,
+      "customer_shock": -0.0963,
+      "supplier_next": -0.1172
+    },
+    {
+      "window": "2023-09",
+      "supplier": "QRVO",
+      "customer": "AAPL",
+      "weight": 0.32,
+      "customer_shock": -0.0963,
+      "supplier_next": -0.081
+    },
+    {
+      "window": "2023-09",
+      "supplier": "CRUS",
+      "customer": "AAPL",
+      "weight": 0.8,
+      "customer_shock": -0.0963,
+      "supplier_next": -0.0834
+    },
+    {
+      "window": "2023-09",
+      "supplier": "GLW",
+      "customer": "AAPL",
+      "weight": 0.16,
+      "customer_shock": -0.0963,
+      "supplier_next": -0.1142
+    },
+    {
+      "window": "2023-09",
+      "supplier": "JBL",
+      "customer": "AAPL",
+      "weight": 0.2,
+      "customer_shock": -0.0963,
+      "supplier_next": -0.0471
+    },
+    {
+      "window": "2023-09",
+      "supplier": "LITE",
+      "customer": "AAPL",
+      "weight": 0.15,
+      "customer_shock": -0.0963,
+      "supplier_next": -0.1416
+    },
+    {
+      "window": "2023-09",
+      "supplier": "TSM",
+      "customer": "AAPL",
+      "weight": 0.23,
+      "customer_shock": -0.0963,
+      "supplier_next": -0.0153
+    },
+    {
+      "window": "2023-09",
+      "supplier": "TSM",
+      "customer": "NVDA",
+      "weight": 0.11,
+      "customer_shock": -0.1033,
+      "supplier_next": -0.0153
+    },
+    {
+      "window": "2023-09",
+      "supplier": "MU",
+      "customer": "AAPL",
+      "weight": 0.1,
+      "customer_shock": -0.0963,
+      "supplier_next": -0.016
+    },
+    {
+      "window": "2023-09",
+      "supplier": "NVDA",
+      "customer": "MSFT",
+      "weight": 0.13,
+      "customer_shock": -0.0393,
+      "supplier_next": -0.0894
+    },
+    {
+      "window": "2024-01",
+      "supplier": "AVGO",
+      "customer": "AAPL",
+      "weight": 0.2,
+      "customer_shock": -0.0067,
+      "supplier_next": 0.0837
+    },
+    {
+      "window": "2024-01",
+      "supplier": "SWKS",
+      "customer": "AAPL",
+      "weight": 0.58,
+      "customer_shock": -0.0067,
+      "supplier_next": 0.019
+    },
+    {
+      "window": "2024-01",
+      "supplier": "QRVO",
+      "customer": "AAPL",
+      "weight": 0.32,
+      "customer_shock": -0.0067,
+      "supplier_next": 0.0832
+    },
+    {
+      "window": "2024-01",
+      "supplier": "CRUS",
+      "customer": "AAPL",
+      "weight": 0.8,
+      "customer_shock": -0.0067,
+      "supplier_next": 0.1929
+    },
+    {
+      "window": "2024-01",
+      "supplier": "GLW",
+      "customer": "AAPL",
+      "weight": 0.16,
+      "customer_shock": -0.0067,
+      "supplier_next": 0.0047
+    },
+    {
+      "window": "2024-01",
+      "supplier": "JBL",
+      "customer": "AAPL",
+      "weight": 0.2,
+      "customer_shock": -0.0067,
+      "supplier_next": 0.0971
+    },
+    {
+      "window": "2024-01",
+      "supplier": "LITE",
+      "customer": "AAPL",
+      "weight": 0.15,
+      "customer_shock": -0.0067,
+      "supplier_next": -0.1368
+    },
+    {
+      "window": "2024-01",
+      "supplier": "TSM",
+      "customer": "AAPL",
+      "weight": 0.23,
+      "customer_shock": -0.0067,
+      "supplier_next": 0.1348
+    },
+    {
+      "window": "2024-01",
+      "supplier": "TSM",
+      "customer": "NVDA",
+      "weight": 0.11,
+      "customer_shock": 0.2773,
+      "supplier_next": 0.1348
+    },
+    {
+      "window": "2024-01",
+      "supplier": "MU",
+      "customer": "AAPL",
+      "weight": 0.1,
+      "customer_shock": -0.0067,
+      "supplier_next": 0.0584
+    },
+    {
+      "window": "2024-01",
+      "supplier": "NVDA",
+      "customer": "MSFT",
+      "weight": 0.13,
+      "customer_shock": 0.072,
+      "supplier_next": 0.2552
+    }
+  ],
+  "honest_caveats": [
+    "NOT a tradable edge and NOT a reproduced t-stat.",
+    "Windows are not independent \u2014 most edges share AAPL as customer (~3 real observations).",
+    "Effect is confounded with semiconductor sector beta; link-specific alpha not isolated.",
+    "Windows were chosen post hoc \u2014 a researcher degree of freedom.",
+    "Full validation needs the universe + survivorship-free history + pre-committed windows (Phase 5)."
+  ],
+  "promotion": "Unit is status: research. It has NOT passed the gate. Not investment advice."
+}
