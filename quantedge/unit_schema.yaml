@@ -1,0 +1,28 @@
+# unit_schema.yaml — The Research-Unit contract
+# Manual §9, §12.3, Table 28. Every unit emits this fixed shape so signals
+# compose uniformly and honesty is structural.
+#
+# Lifecycle (§9): Hypothesis -> Research -> Math -> Implementation ->
+#                 Validation -> Promotion -> Production -> Monitoring
+# status moves research -> validated -> production ONLY through the gate.
+
+required_fields:
+  id:           "str   # dotted, e.g. multibagger.traits"
+  version:      "str   # semver, e.g. 0.1.0"
+  provenance:   "list  # sources, e.g. [Piotroski2000, NovyMarx2013]"
+  mechanism:    "str   # REQUIRED economic mechanism per §3 — non-empty"
+  inputs:       "list  # e.g. [pit_fundamentals]"
+  output:       "map   # {type: distribution} — never a bare number (§19)"
+  validation:   "map   # {oos_lift, t_stat, calibration, regimes, cost_survival}"
+  status:       "enum  # research | validated | production"
+
+contract_methods:
+  - "fit(pit_data, as_of)     # train using ONLY data <= as_of"
+  - "score(pit_data, as_of)   # emit an expected-return distribution + conviction"
+  - "explain(ticker, as_of)   # name the driver of the score (Table 12, 21)"
+
+rules:
+  - "mechanism must be a non-empty statement (§3). No mechanism = invalid."
+  - "output is a distribution (base/upside/downside + odds), not a point number (§19)."
+  - "status: production requires a PASS from promotion_gate.py (PROMOTION.md)."
+  - "a unit never reads data with available_date > as_of (enforced by pit_loader)."
