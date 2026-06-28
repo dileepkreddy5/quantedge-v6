@@ -43,6 +43,7 @@ from routers.news_momentum_router import router as news_momentum_router
 from routers.ascent_router import router as ascent_router
 from routers.peers_router import router as peers_router
 from routers.news_router import router as news_router
+from routers.research_router import router as research_router
 from ml.price_oracle.router import router as oracle_router
 from services.signal_tracker import SignalTracker, OutcomeFillerJob
 
@@ -461,6 +462,7 @@ app.include_router(screener_router,      prefix="/api/v6",             tags=["Sc
 app.include_router(ascent_router,        prefix="/api/v6",             tags=["Ascent Radar"])
 app.include_router(peers_router,         prefix="/api/v6",             tags=["Peers"])
 app.include_router(news_router,          prefix="/api/v6",             tags=["News"])
+app.include_router(research_router,      prefix="/api/v6",             tags=["Research"])
 app.include_router(portfolio_sizer_router, prefix="/api/v6",           tags=["PortfolioSizer"])
 app.include_router(news_momentum_router, prefix="/api/v6",             tags=["NewsMomentum"])
 app.include_router(oracle_router,        prefix="/api/v1/oracle",      tags=["Price Oracle"])
