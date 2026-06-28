@@ -1,0 +1,19 @@
+id: network.customer_momentum
+version: 0.1.0
+provenance: [CohenFrazzini2008, MenzlyOzbas2010]
+mechanism: >
+  Investors are inattentive to economic links between firms. When a customer
+  experiences an unpriced shock, its suppliers' fundamentals are predictably
+  affected, but the supplier's price adjusts with a lag. Buying the supplier
+  after a positive customer shock earns alpha until the link is priced in.
+  (Cohen-Frazzini 2008.) The edge is largest where coverage is lowest.
+inputs: [pit_prices, customer_edges]
+output:
+  type: distribution
+validation:
+  oos_lift: null
+  t_stat: null
+  calibration: null
+  regimes: null
+  cost_survival: null
+status: research
