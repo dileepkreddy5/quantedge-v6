@@ -11,6 +11,7 @@ import Screener from './pages/Screener';
 import AscentRadar from './pages/AscentRadar';
 import Login from './pages/Login';
 import Research from './pages/Research';
+import Multibagger from './pages/Multibagger';
 
 export default function App() {
   return (
@@ -36,6 +37,7 @@ export default function App() {
         <Route path="/ascent"    element={<AscentRadar />} />
         <Route path="/login"     element={<Login />} />
         <Route path="/research"  element={<Research />} />
+        <Route path="/multibagger" element={<Multibagger />} />
         {/* Catch-all → landing */}
         <Route path="*"          element={<Navigate to="/" replace />} />
       </Routes>
