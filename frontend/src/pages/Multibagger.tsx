@@ -17,6 +17,7 @@ interface Row {
   margin_trend:number|null; accruals:number|null; debt_trend:number|null;
   vol_change_pct:number|null; up_vol_ratio:number|null; market_cap?:number;
   price_ladder:Record<string,number|null>;
+  beneficiaries?:{ticker:string;revenue_share:number;note:string}[];
 }
 interface Artifact { generated:string; disclaimer:string; tiers:Record<string,Row[]>; }
 
@@ -25,6 +26,7 @@ export default function Multibagger(){
   const [data,setData] = useState<Artifact|null>(null);
   const [err,setErr] = useState<string|null>(null);
   const [tier,setTier] = useState<'small'|'mid'|'large'>('small');
+  const [expanded,setExpanded] = useState<string|null>(null);
 
   useEffect(()=>{ api.get('/api/v6/scan/tiers')
     .then(r=>setData(r.data)).catch(()=>setErr('Could not load scan.')); },[]);
@@ -79,11 +81,19 @@ export default function Multibagger(){
                 {LADDER.map(l=><th key={l}>{l.toUpperCase()}</th>)}
               </tr></thead>
               <tbody>
-                {rows.map((r,i)=>(
-                  <tr key={r.ticker} style={{borderTop:`1px solid ${BORDER}`,color:'#cbb89a',textAlign:'right'}}>
+                {rows.map((r,i)=>{
+                  const hasKids = r.beneficiaries && r.beneficiaries.length>0;
+                  const isOpen = expanded===r.ticker;
+                  return (
+                  <React.Fragment key={r.ticker}>
+                  <tr style={{borderTop:`1px solid ${BORDER}`,color:'#cbb89a',textAlign:'right'}}>
                     <td style={{padding:6,textAlign:'left',color:DIM}}>{i+1}</td>
-                    <td style={{textAlign:'left',color:GOLD,cursor:'pointer'}}
-                        onClick={()=>nav('/dashboard?ticker='+r.ticker)}>{r.ticker}</td>
+                    <td style={{textAlign:'left',color:GOLD,cursor:hasKids?'pointer':'default'}}
+                        onClick={()=>hasKids&&setExpanded(isOpen?null:r.ticker)}>
+                        {hasKids?(isOpen?'▾ ':'▸ '):''}{r.ticker}
+                        <span style={{color:DIM,cursor:'pointer',marginLeft:6,fontSize:9}}
+                          onClick={(e)=>{e.stopPropagation();nav('/dashboard?ticker='+r.ticker);}}>↗</span>
+                    </td>
                     <td style={{color:'#e8dcc8'}}>{r.score.toFixed(1)}</td>
                     <td style={{color:r.qtr_yoy_growth>=0?'#6fbf73':'#cf6b5a'}}>{pct(r.qtr_yoy_growth)}</td>
                     <td>{r.piotroski}/9</td>
@@ -96,7 +106,29 @@ export default function Multibagger(){
                     {LADDER.map(l=>{const v=r.price_ladder?.[l];
                       return <td key={l} style={{color:v==null?DIM:(v>=0?'#6fbf73':'#cf6b5a')}}>{pct(v??null)}</td>;})}
                   </tr>
-                ))}
+                  {isOpen && hasKids && (
+                    <tr style={{background:'#140c06'}}>
+                      <td colSpan={16} style={{padding:'8px 16px',textAlign:'left'}}>
+                        <div style={{color:GOLD,fontSize:10,letterSpacing:1,marginBottom:6}}>
+                          KNOWN BENEFICIARIES — if {r.ticker} grows, these tend to ride along
+                          <span style={{color:DIM,marginLeft:8,letterSpacing:0}}>(curated from 10-K disclosures; not exhaustive)</span>
+                        </div>
+                        <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
+                          {r.beneficiaries!.map(b=>(
+                            <span key={b.ticker} onClick={()=>nav('/dashboard?ticker='+b.ticker)}
+                              style={{border:`1px solid ${BORDER}`,borderRadius:4,padding:'4px 10px',cursor:'pointer',fontSize:11,color:'#cbb89a'}}>
+                              <span style={{color:GOLD}}>{b.ticker}</span>
+                              {b.revenue_share>0 && <span style={{color:DIM}}> · {(b.revenue_share*100).toFixed(0)}% rev</span>}
+                              <span style={{color:DIM}}> · {b.note}</span>
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </React.Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>

@@ -321,6 +321,22 @@ async def lifespan(app: FastAPI):
             )
             logger.info("✅ Peer stats scan scheduled (06:30 ET daily)")
 
+        # Multibagger full-universe scan — nightly at 02:00 ET (zero traffic);
+        # 30-60 min job, re-ranks live caps, refreshes the /scan/tiers artifact.
+        try:
+            from services.multibagger_scan_job import MultibaggerScanJob
+            mb_job = MultibaggerScanJob(top_universe=1000, display=100)
+            scheduler.add_job(
+                mb_job.run,
+                trigger=CronTrigger(hour=2, minute=0, timezone=et),
+                id="multibagger_nightly_scan",
+                name="Nightly multibagger full-universe scan",
+                replace_existing=True, max_instances=1, coalesce=True,
+            )
+            logger.info("✅ Multibagger scan scheduled (02:00 ET nightly)")
+        except Exception as e:
+            logger.warning(f"Multibagger scan not scheduled: {e}")
+
         scheduler.start()
         app.state.scheduler = scheduler
         logger.info("✅ APScheduler started — OutcomeFillerJob at 18:00 ET daily")
