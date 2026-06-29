@@ -14,6 +14,8 @@ const pct = (x:number|null) => x==null ? '–' : (x>=0?'+':'')+(x*100).toFixed(1
 interface Row {
   ticker:string; score:number; qtr_yoy_growth:number; piotroski:number;
   price_move_6mo:number|null; quiet_price:boolean;
+  margin_trend:number|null; accruals:number|null; debt_trend:number|null;
+  vol_change_pct:number|null; up_vol_ratio:number|null; market_cap?:number;
   price_ladder:Record<string,number|null>;
 }
 interface Artifact { generated:string; disclaimer:string; tiers:Record<string,Row[]>; }
@@ -73,7 +75,7 @@ export default function Multibagger(){
               <thead><tr style={{color:GOLD,textAlign:'right'}}>
                 <th style={{padding:6,textAlign:'left'}}>#</th>
                 <th style={{textAlign:'left'}}>TICKER</th>
-                <th>SCORE</th><th>QTR YOY</th><th>PIOT</th><th>QUIET</th>
+                <th>SCORE</th><th>QTR YOY</th><th>PIOT</th><th>MARGIN↑</th><th>ACCRUAL</th><th>DEBT↑</th><th>VOLΔ</th><th>UP-VOL</th><th>QUIET</th>
                 {LADDER.map(l=><th key={l}>{l.toUpperCase()}</th>)}
               </tr></thead>
               <tbody>
@@ -85,6 +87,11 @@ export default function Multibagger(){
                     <td style={{color:'#e8dcc8'}}>{r.score.toFixed(1)}</td>
                     <td style={{color:r.qtr_yoy_growth>=0?'#6fbf73':'#cf6b5a'}}>{pct(r.qtr_yoy_growth)}</td>
                     <td>{r.piotroski}/9</td>
+                    <td style={{color:(r.margin_trend??0)>=0?'#6fbf73':'#cf6b5a'}}>{pct(r.margin_trend)}</td>
+                    <td style={{color:(r.accruals??0)<=0?'#6fbf73':'#cf6b5a'}}>{r.accruals==null?'–':r.accruals.toFixed(3)}</td>
+                    <td style={{color:(r.debt_trend??0)<=0?'#6fbf73':'#cf6b5a'}}>{pct(r.debt_trend)}</td>
+                    <td style={{color:(r.vol_change_pct??0)>=0?'#6fbf73':DIM}}>{pct(r.vol_change_pct)}</td>
+                    <td style={{color:(r.up_vol_ratio??0)>=0.5?'#6fbf73':DIM}}>{r.up_vol_ratio==null?'–':(r.up_vol_ratio*100).toFixed(0)+'%'}</td>
                     <td style={{color:r.quiet_price?'#6fbf73':DIM}}>{r.quiet_price?'yes':'no'}</td>
                     {LADDER.map(l=>{const v=r.price_ladder?.[l];
                       return <td key={l} style={{color:v==null?DIM:(v>=0?'#6fbf73':'#cf6b5a')}}>{pct(v??null)}</td>;})}
