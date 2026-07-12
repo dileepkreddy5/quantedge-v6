@@ -91,7 +91,7 @@ class AnalyzeRequest(BaseModel):
     ticker: str
     include_options: bool = True
     include_sentiment: bool = True
-    mc_paths: int = 100_000
+    mc_paths: int = 20_000
     include_portfolio: bool = False
     portfolio_tickers: List[str] = []
     target_vol: float = 0.10
@@ -102,6 +102,12 @@ class AnalyzeRequest(BaseModel):
         if not v.replace('-', '').isalpha() or len(v) > 10:
             raise ValueError("Invalid ticker symbol")
         return v
+
+    @validator("mc_paths")
+    def cap_mc_paths(cls, v):
+        # FIX (step-5): server-side cap — a public request must not be able to
+        # order a 100k-path Monte Carlo on a 3-vCPU box (compute DoS).
+        return max(1_000, min(int(v), 20_000))
 
 
 class QuantEdgeAnalyzerV6:
@@ -152,7 +158,7 @@ class QuantEdgeAnalyzerV6:
         target_vol: float = 0.10,
     ) -> Dict:
         """
-        Full institutional analysis pipeline with 120-second timeout.
+        Full institutional analysis pipeline with 240-second timeout.
         All layers run in correct dependency order.
         """
         # Hard timeout: prevents hung external calls from blocking the server forever
@@ -579,7 +585,7 @@ class QuantEdgeAnalyzerV6:
         except HTTPException:
             raise
         except asyncio.TimeoutError:
-            raise HTTPException(status_code=504, detail="Analysis timed out after 120 seconds")
+            raise HTTPException(status_code=504, detail="Analysis timed out after 240 seconds")
         except Exception as e:
             logger.error(f"Analysis error for {ticker}: {e}")
             raise HTTPException(status_code=500, detail=str(e))
@@ -1395,9 +1401,11 @@ async def analyze(
 async def clear_cache(
     ticker: str,
     http_request: Request,
-    current_user: Optional[CognitoUser] = Depends(get_optional_user),
+    current_user: CognitoUser = Depends(get_current_user),
 ):
-    """Clear Redis cache for a specific ticker — forces fresh analysis on next request."""
+    """Clear Redis cache for a specific ticker — forces fresh analysis on next request.
+    FIX (step-5): owner login required — every public cache clear forced a fresh
+    paid-API + compute run, so this was an open cost-amplification endpoint."""
     ticker = ticker.upper().strip()
     redis = http_request.app.state.redis
     keys_deleted = 0
