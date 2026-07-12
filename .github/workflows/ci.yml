@@ -34,7 +34,7 @@ jobs:
           PYTHONPATH: .
         run: |
           set -e
-          for f in quantedge/harness/_test_*.py; do
+          for f in quantedge/harness/_test_*.py quantedge/fundamentals/rebound/_test_*.py; do
             echo "── $f"
             python "$f"
           done
