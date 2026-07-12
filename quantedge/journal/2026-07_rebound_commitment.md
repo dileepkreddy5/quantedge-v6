@@ -15,3 +15,11 @@ Any future change to these numbers requires a new entry here stating the
 reason. The kill-threshold is never edited after seeing a result it judges.
 The backtest (step 21) will be built AGAINST these bars, per-stage and
 per-tier, net of the committed cost model.
+
+## Amendment — 2026-07-12: step-18 (13F holder-count) deferred
+
+13F cannot be fetched per-issuer: it requires ingesting every fund's
+quarterly filing and inverting the dataset — a separate bulk-data project
+for a signal that is 45-days lagged by construction. Deferred to the
+post-launch roadmap. REBOUND's confirmation layer ships on volume,
+buybacks, and insider clusters (the stronger three). No threshold changed.
