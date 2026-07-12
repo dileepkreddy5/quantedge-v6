@@ -66,10 +66,13 @@ class SignalTracker:
         """
         signal_id = str(uuid.uuid4())
         try:
-            # Extract model outputs
+            # Extract model outputs.
+            # FIX (step-2): garch/kalman/regime live at the TOP LEVEL of
+            # analysis_result (see analysis_v6._run_pipeline), NOT inside
+            # ml_predictions — the old lookups recorded NULLs since day one.
             ml = analysis_result.get("ml_predictions", {})
-            garch = ml.get("garch", ml.get("volatility", {}))
-            kalman = ml.get("kalman", ml.get("kalman_filter", {}))
+            garch = analysis_result.get("garch") or ml.get("garch", {})
+            kalman = analysis_result.get("kalman") or ml.get("kalman", {})
             lstm = ml.get("lstm", {})
             xgb = ml.get("xgboost", ml.get("xgb", {}))
             lgb = ml.get("lightgbm", ml.get("lgb", {}))
@@ -82,13 +85,22 @@ class SignalTracker:
             )
             ensemble_direction = _direction(ensemble_signal)
 
-            # HMM state probs
-            hmm_data = ml.get("hmm", ml.get("regime", {}))
-            state_probs = hmm_data.get("state_probs", hmm_data.get("probabilities"))
+            # HMM state probs — regime result is top-level (analysis_result["regime"])
+            hmm_data = analysis_result.get("regime") or ml.get("hmm", {})
+            state_probs = hmm_data.get(
+                "regime_probabilities",
+                hmm_data.get("state_probs", hmm_data.get("probabilities")),
+            )
+            # regime_confidence arrives 0.0 from the endpoint (key mismatch there);
+            # recover it from the regime result itself.
+            if not regime_confidence:
+                regime_confidence = float(hmm_data.get("confidence", 0.0) or 0.0)
             state_probs_json = json.dumps(state_probs) if state_probs else None
 
             # SHAP
-            shap_data = xgb.get("shap_values", xgb.get("shap_top_drivers"))
+            shap_data = ml.get("shap_top_drivers") or xgb.get(
+                "shap_values", xgb.get("shap_top_drivers")
+            )
             shap_json = json.dumps(shap_data) if shap_data else None
 
             async with self.pool.acquire() as conn:
@@ -117,13 +129,17 @@ class SignalTracker:
                     str(regime)[:30],
                     float(regime_confidence or 0.0),
                     # GARCH
-                    _f(garch.get("vol_forecast", garch.get("annualized_vol"))),
-                    str(garch.get("regime", garch.get("garch_regime", "")))[:20] or None,
+                    _f(garch.get("current_annual_vol",
+                                 garch.get("vol_forecast", garch.get("annualized_vol")))),
+                    str(garch.get("vol_regime",
+                                  garch.get("regime", garch.get("garch_regime", ""))))[:20] or None,
                     # HMM state probs
                     state_probs_json,
                     # Kalman
-                    _f(kalman.get("trend", kalman.get("kalman_trend"))),
-                    _f(kalman.get("uncertainty", kalman.get("kalman_uncertainty"))),
+                    _f(kalman.get("trend_slope",
+                                  kalman.get("trend", kalman.get("kalman_trend")))),
+                    _f(kalman.get("snr",
+                                  kalman.get("uncertainty", kalman.get("kalman_uncertainty")))),
                     # LSTM
                     _f(lstm.get("pred_5d")),
                     _f(lstm.get("pred_21d")),
