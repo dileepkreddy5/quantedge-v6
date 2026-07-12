@@ -151,3 +151,23 @@ def knowable(series: Series, as_of: date) -> Series:
 def latest_knowable(series: Series, as_of: date) -> Optional[Tuple[date, float, date]]:
     k = knowable(series, as_of)
     return k[-1] if k else None
+
+
+def quarterly_gross_profit(facts: dict) -> Series:
+    """Quarterly gross profit; falls back to revenue - cost_of_revenue where
+    GrossProfit isn't filed quarterly (common). Used by health (step-13)."""
+    gaap = facts.get("facts", {}).get("us-gaap", {})
+    gp = _duration_series(gaap, ["GrossProfit"])
+    if gp:
+        return gp
+    rev = _duration_series(gaap, [
+        "RevenueFromContractWithCustomerExcludingAssessedTax", "Revenues",
+        "RevenueFromContractWithCustomerIncludingAssessedTax", "SalesRevenueNet"])
+    cost = _duration_series(gaap, [
+        "CostOfRevenue", "CostOfGoodsAndServicesSold", "CostOfGoodsSold"])
+    cd = {e: (v, f) for e, v, f in cost}
+    out = []
+    for e, v, f in rev:
+        if e in cd:
+            out.append((e, v - cd[e][0], max(f, cd[e][1])))
+    return out
