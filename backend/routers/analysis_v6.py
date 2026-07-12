@@ -1002,8 +1002,13 @@ class QuantEdgeAnalyzerV6:
             ens_21d = sum(p * w for p, w in weighted) / total_w
 
             def scale(base: float, h: int) -> float:
-                """Square-root-of-time scaling: σ(h) = σ(1) * sqrt(h)."""
-                return round(base * np.sqrt(h / 21), 4)
+                """Linear time-scaling of EXPECTED RETURNS: E[r(h)] = E[r(21d)] * h/21.
+                The previous sqrt(h/21) rule is a VOLATILITY scaling law, not a
+                return law — it distorted every non-21d horizon. Long horizons are
+                extrapolations, so clip to sane bounds."""
+                scaled = base * (h / 21.0)
+                cap = 15.0 if h <= 21 else 30.0 if h <= 63 else 60.0
+                return round(float(np.clip(scaled, -cap, cap)), 4)
 
             n_models = len(weighted)
             # Defensive NaN guard: even though xgboost_lgbm.py now returns 0
