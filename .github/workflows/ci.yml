@@ -1,0 +1,40 @@
+# QuantEdge CI (step-9)
+# Runs on every push and PR to main:
+#   1. Syntax-compile every Python file in backend/ and quantedge/
+#      (catches broken code before it can reach the VPS)
+#   2. Run the research-harness test suite — PIT loader, promotion gate,
+#      labeler, learning loop. These guard the platform's honesty rules.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install test dependencies
+        run: pip install pyyaml
+
+      - name: Syntax-compile backend + quantedge
+        run: python -m compileall -q backend quantedge
+
+      - name: Run harness tests
+        env:
+          PYTHONPATH: .
+        run: |
+          set -e
+          for f in quantedge/harness/_test_*.py; do
+            echo "── $f"
+            python "$f"
+          done
