@@ -63,3 +63,50 @@ costs:
   commission_bps: 1.0
   slippage_bps: 5.0
   spread_bps: 2.0
+
+# --- REBOUND tracker (step-11) — committed 2026-07-12, BEFORE any backtest ---
+# Discounted-quality rebound: deep drawdown x improving business x confirmation.
+# Provenance: DeBondtThaler1985, Piotroski2000, ChanLakonishokSougiannis2001,
+#             CohenMalloyPomorski2012, IkenberryLakonishokVermaelen1995.
+# THE RULE (same as §22): starting points, not truths. Any change requires a
+# journal entry. NEVER tune kill_threshold after seeing the result it judges.
+rebound:
+  committed_on: "2026-07-12"
+  frozen: true
+  universe:
+    min_drawdown_from_3y_high: 0.35   # at least -35% from 3y high to qualify
+    liquidity_floor_adv_usd: 1000000
+    min_price_usd: 2.0                # no sub-$2 lottery tickets
+  discount:
+    lookback_high_years: 3
+    valuation_history_years: 5
+    ps_vs_5y_median_max: 0.70         # P/S <= 70% of own 5y median
+  health:
+    min_growth_quarters: 4            # consecutive YoY revenue-growth quarters
+    min_piotroski: 5
+    min_revenue_base_usd: 25000000    # tiny-base rule (reused from multibagger)
+  disqualifiers:                      # the falling-knife filter — any one = OUT
+    ttm_revenue_shrinking: true       # TTM revenue below prior TTM = out
+    max_leverage_increase_yoy: 0.10   # delta(liabilities/assets) > +0.10 = out
+    max_share_dilution_yoy: 0.10      # >10% share count growth = out
+    min_cash_runway_months: 18        # burn rate must survive 18 months
+  stages:
+    basing_min_days_since_low: 60
+    turning_updayvol_min: 0.55
+    turning_min_accum_weeks: 3
+    recovering_min_off_low: 0.25      # +25% off the low = RECOVERING
+  confirm:
+    volume_baseline_days: 60
+    volume_recent_week_days: 5
+    volume_recent_month_days: 21
+    accum_updayvol_min: 0.55
+    insider_cluster_min_buyers: 2     # opportunistic cluster = 2+ distinct buyers
+    insider_cluster_window_days: 90
+    buyback_lookback_quarters: 4
+  display_n_per_tier: 100
+  # Kill-thresholds for the promotion gate — frozen local copy (Table 37 bars)
+  kill_threshold:
+    min_oos_lift_over_base_rate: 2.0
+    min_t_stat: 3.0
+    calibration_tolerance_pct: 20
+    min_distinct_regimes: 2
