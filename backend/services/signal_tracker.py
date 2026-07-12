@@ -222,8 +222,13 @@ class SignalTracker:
                                 if target_date > date.today():
                                     continue  # not yet matured
 
-                                entry_price = price_map.get(signal_date)
-                                exit_price = price_map.get(target_date)
+                                # FIX (step-3): exact-date lookups meant signals
+                                # generated on weekends/holidays could NEVER fill
+                                # (no price bar on that exact date). Use the first
+                                # trading day ON OR AFTER — also the economically
+                                # correct entry: the first close you could act on.
+                                entry_price = _price_on_or_after(price_map, signal_date)
+                                exit_price = _price_on_or_after(price_map, target_date)
                                 if entry_price and exit_price and entry_price > 0:
                                     updates[col] = (exit_price - entry_price) / entry_price
 
@@ -401,6 +406,16 @@ def _direction(signal: float) -> str:
     if signal < -0.02:
         return "SHORT"
     return "NEUTRAL"
+
+
+def _price_on_or_after(price_map: Dict[date, float], d: date, max_slip: int = 7):
+    """First available close on or after date d (skips weekends/holidays).
+    Returns None if no bar within max_slip days — e.g. not yet matured."""
+    for i in range(max_slip + 1):
+        p = price_map.get(d + timedelta(days=i))
+        if p:
+            return p
+    return None
 
 
 def _add_trading_days(start: date, n: int) -> date:
