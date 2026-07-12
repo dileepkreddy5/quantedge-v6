@@ -97,41 +97,6 @@ async def _ensure_models_trained(analyzer: QuantEdgeAnalyzerV6) -> None:
         logger.error(f"⚠️  Startup model training failed: {e} — models will train on first prediction request")
 
 
-# ── Cache Warmer ───────────────────────────────────────────────
-async def _cache_warmer(redis, analyzer: QuantEdgeAnalyzerV6) -> None:
-    """
-    Pre-warm analysis cache for top-8 tickers.
-    Waits 60s after startup, then sweeps every 15 minutes.
-    Only warms tickers with a cache miss.
-    """
-    TOP_TICKERS = ["AAPL", "NVDA", "TSLA", "SPY", "QQQ", "MSFT", "AMZN", "META"]
-    await asyncio.sleep(60)
-
-    while True:
-        for ticker in TOP_TICKERS:
-            try:
-                cache_key = f"analysis:v6:{ticker}"
-                if not await redis.exists(cache_key):
-                    logger.info(f"Cache warmer: warming {ticker}")
-                    data = await analyzer.run_full_analysis(
-                        ticker=ticker,
-                        include_options=True,
-                        include_sentiment=True,
-                        mc_paths=10_000,
-                    )
-                    await redis.setex(cache_key, 300, json.dumps(data, default=str))
-                    logger.info(f"Cache warmer: {ticker} warmed")
-                    await asyncio.sleep(5)
-            except asyncio.CancelledError:
-                return
-            except Exception as e:
-                logger.warning(f"Cache warmer error {ticker}: {e}")
-        try:
-            await asyncio.sleep(900)
-        except asyncio.CancelledError:
-            return
-
-
 # ── Lifespan ───────────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -345,34 +310,40 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"APScheduler error: {e}")
 
-    # 8. Cache warmer — pre-warms top tickers so first user request is instant
+    # 8. Cache warmer — pre-warms top tickers so first user request is instant.
+    # FIX (step-4): warms the FULL variant (options+sentiment) under the
+    # variant-aware key, and actually LOOPS every 15 minutes (the old version
+    # ran once at startup and exited, contrary to the docs).
     async def _startup_warmer():
-        await asyncio.sleep(120)  # wait for ECS health checks + allow manual cache clear first
+        await asyncio.sleep(120)  # let health checks settle first
         TOP = ["AAPL", "MSFT", "NVDA", "TSLA", "SPY", "QQQ", "AMZN", "META"]
-        for ticker in TOP:
+        while True:
+            for ticker in TOP:
+                try:
+                    cache_key = f"analysis:v6:{ticker}:o1s1"
+                    if not await app.state.redis.exists(cache_key):
+                        logger.info(f"Cache warmer: pre-warming {ticker}...")
+                        data = await app.state.analyzer.run_full_analysis(
+                            ticker=ticker,
+                            include_options=True,
+                            include_sentiment=True,
+                            mc_paths=10_000,
+                        )
+                        await app.state.redis.setex(
+                            cache_key, 3600,
+                            json.dumps(data, default=str)
+                        )
+                        logger.info(f"Cache warmer: ✅ {ticker} warmed")
+                    await asyncio.sleep(10)  # space out requests
+                except asyncio.CancelledError:
+                    return
+                except Exception as e:
+                    logger.warning(f"Cache warmer error {ticker}: {e}")
+                    await asyncio.sleep(5)
             try:
-                cache_key = f"analysis:v6:{ticker}"
-                if not await app.state.redis.exists(cache_key):
-                    logger.info(f"Cache warmer: pre-warming {ticker}...")
-                    data = await app.state.analyzer.run_full_analysis(
-                        ticker=ticker,
-                        include_options=False,
-                        include_sentiment=True,
-                        mc_paths=1000,
-                    )
-                    await app.state.redis.setex(
-                        cache_key, 3600,
-                        json.dumps(data, default=str)
-                    )
-                    logger.info(f"Cache warmer: ✅ {ticker} warmed")
-                else:
-                    logger.info(f"Cache warmer: {ticker} already cached")
-                await asyncio.sleep(10)  # space out requests
+                await asyncio.sleep(900)  # sweep again in 15 minutes
             except asyncio.CancelledError:
                 return
-            except Exception as e:
-                logger.warning(f"Cache warmer error {ticker}: {e}")
-                await asyncio.sleep(5)
 
     app.state.warmer_task = asyncio.create_task(_startup_warmer())
     logger.info("✅ Cache warmer started — will pre-warm AAPL MSFT NVDA TSLA SPY QQQ AMZN META")

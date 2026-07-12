@@ -1334,7 +1334,10 @@ async def analyze(
     redis = http_request.app.state.redis
     analyzer: QuantEdgeAnalyzerV6 = http_request.app.state.analyzer
 
-    cache_key = f"analysis:v6:{req.ticker}"
+    # FIX (step-4): the key must encode request options — a result computed
+    # WITHOUT options must never be served to a request that wants them.
+    variant = f"o{int(req.include_options)}s{int(req.include_sentiment)}"
+    cache_key = f"analysis:v6:{req.ticker}:{variant}"
 
     # Check cache
     try:
@@ -1403,6 +1406,11 @@ async def clear_cache(
             # Delete analysis cache
             deleted = await redis.delete(f"{prefix}{ticker}")
             keys_deleted += deleted
+            # FIX (step-4): also clear the option-variant keys (and the legacy bare
+            # key above stays covered for older cached entries)
+            if prefix == "analysis:v6:":
+                for v in ("o0s0", "o0s1", "o1s0", "o1s1"):
+                    keys_deleted += await redis.delete(f"{prefix}{ticker}:{v}")
             # Delete polygon sub-caches
             for suffix in [":ohlcv", ":fundamentals", ":news", ":options"]:
                 deleted = await redis.delete(f"polygon:v1:{ticker}{suffix}")
