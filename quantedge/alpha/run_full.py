@@ -25,7 +25,7 @@ from quantedge.alpha.panel_cache import _cache_key
 from quantedge.alpha.model import CrossSectionalModel, walk_forward
 from quantedge.alpha.portfolio import backtest_long_book
 from quantedge.alpha.longshort import backtest_long_short
-from quantedge.alpha.fundamentals_hook import FundamentalsProvider
+from quantedge.alpha.fundamentals_precompute import FundTable
 from quantedge.alpha.run_portfolio import _costs_params
 from quantedge.harness.costs import round_trip_cost_bps
 
@@ -33,7 +33,7 @@ A = yaml.safe_load(open(os.path.join(os.path.dirname(__file__), "params_alpha.ya
 CFG, PCFG, LS = A["alpha_xs"], A["alpha_portfolio"], A["alpha_longshort"]
 
 
-def _build_with_fundamentals(store, cikmap, cfg, cache_path):
+def _build_with_fundamentals(store, cikmap, cfg, cache_path, fund_db):
     cov = store.coverage()
     fund_cfg = dict(cfg); fund_cfg["_fund"] = True
     key = _cache_key(cov, fund_cfg, len(cikmap))
@@ -43,10 +43,7 @@ def _build_with_fundamentals(store, cikmap, cfg, cache_path):
             print(f"fund panel cache HIT — {len(blob['panel'])} months", flush=True)
             return blob["panel"]
 
-    def price_lookup(ticker, as_of):
-        bars = store.series(ticker, as_of - timedelta(days=3*366), as_of)
-        return [(d, c) for d, c, _ in bars]
-    prov = FundamentalsProvider(cikmap, price_lookup)
+    prov = FundTable(fund_db, cikmap)     # reads scalar rows, memory-safe
 
     first = date.fromisoformat(cov["from"]); last = date.fromisoformat(cov["to"])
     dates = month_ends(first + timedelta(days=400),
@@ -67,13 +64,14 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--price-db", required=True)
     ap.add_argument("--panel-cache", required=True)
+    ap.add_argument("--fund-db", required=True)
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
 
     t0 = time.time()
     store = PriceStore(args.price_db)
     cikmap = ticker_cik_map()
-    panel = _build_with_fundamentals(store, cikmap, CFG, args.panel_cache)
+    panel = _build_with_fundamentals(store, cikmap, CFG, args.panel_cache, args.fund_db)
 
     ic = walk_forward(panel, CFG["label"], CFG["min_train_months"])
 
