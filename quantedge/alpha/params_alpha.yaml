@@ -24,3 +24,16 @@ alpha_portfolio:
     min_sharpe_excess: 0.5        # excess-return Sharpe >= 0.5
     min_t_stat: 2.0               # mean period excess significant
     max_drawdown_excess: -0.35    # excess curve MDD not worse than -35%
+
+# Pre-registered long-short spread test — committed 2026-07-13 before running.
+# Isolates the signal from the benchmark: top-decile minus bottom-decile.
+alpha_longshort:
+  committed_on: "2026-07-13"
+  frozen: true
+  top_frac: 0.10
+  bottom_frac: 0.10
+  kill_threshold:
+    min_ann_spread: 0.04        # >= 4%/yr top-minus-bottom, net of 2x costs
+    min_sharpe: 0.6
+    min_t_stat: 2.5
+    min_positive_frac: 0.55

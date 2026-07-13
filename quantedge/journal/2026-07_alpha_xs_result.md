@@ -37,3 +37,25 @@ not noise.
 alpha_xs is a VALIDATED cross-sectional signal on available data. It advances
 to portfolio construction + net-of-cost backtest before any live/shipped use.
 First unit in the project to pass an honest pre-committed gate.
+
+## Portfolio backtest (Stage H): FAIL — long-only vs SPY
+
+Top-decile equal-weight long book, monthly rebalance, net of committed costs,
+vs SPY over identical 3m windows. Real walk-forward predictions.
+
+- gross period excess: -0.0156  (book LOST to SPY before costs)
+- net period excess:   -0.0161
+- ann excess, Sharpe, t-stat, drawdown: all FAIL
+- VERDICT: FAIL
+
+Reading (honest): the IC (0.087) proves cross-sectional ranking information,
+but an equal-weight top-decile book vs a CAP-WEIGHTED mega-cap index (SPY) is
+a benchmark mismatch on a 2022-2025 window dominated by mega-cap tech. The
+book lost pre-cost, so costs are not the cause. This is a result about THIS
+construction + benchmark, not proof the signal is worthless.
+
+## Pre-registered next test (decided before running): long-short spread
+The textbook isolation of a cross-sectional signal: top-decile MINUS
+bottom-decile return, which removes the benchmark entirely and measures
+whether liked stocks beat disliked stocks. Frozen gate below. ONE run.
+If flat -> signal is real but not monetizable long-only; stop.
