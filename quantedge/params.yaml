@@ -110,3 +110,22 @@ rebound:
     min_t_stat: 3.0
     calibration_tolerance_pct: 20
     min_distinct_regimes: 2
+  # Scoring weights (step-20) — sum to exactly 100; committed BEFORE the
+  # step-21 backtest. Tuning after seeing results requires a journal entry.
+  scoring:
+    dd_depth: 15
+    cheap_vs_self: 10
+    growth_streak: 15
+    fscore: 10
+    margin: 5
+    accruals: 3
+    roic: 2
+    accum_streak: 8
+    upday_share: 5
+    vol_ratio: 4
+    buyback: 4
+    insider: 4
+    rd_intensity: 3
+    rd_growth: 2
+    val_history: 6
+    verifiable: 4

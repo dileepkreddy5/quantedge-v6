@@ -23,3 +23,10 @@ quarterly filing and inverting the dataset — a separate bulk-data project
 for a signal that is 45-days lagged by construction. Deferred to the
 post-launch roadmap. REBOUND's confirmation layer ships on volume,
 buybacks, and insider clusters (the stronger three). No threshold changed.
+
+## Amendment — 2026-07-12: scoring weights committed (step-20)
+
+Sixteen score weights (sum = 100) added to the frozen rebound block, in the
+repo BEFORE the step-21 backtest exists. Component budget: discount 25,
+health 35, confirmation 25, R&D bonus 5, data-trust 10 (opacity penalized).
+Same rule as everything else: no tuning after results without an entry here.
