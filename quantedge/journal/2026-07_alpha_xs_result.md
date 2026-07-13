@@ -59,3 +59,36 @@ The textbook isolation of a cross-sectional signal: top-decile MINUS
 bottom-decile return, which removes the benchmark entirely and measures
 whether liked stocks beat disliked stocks. Frozen gate below. ONE run.
 If flat -> signal is real but not monetizable long-only; stop.
+
+## Long-short spread (pre-registered): FAIL — signal not tradeable
+
+Top-decile minus bottom-decile, 31 walk-forward periods, net of 2x costs.
+
+- ann spread:      0.0002   (dead flat)
+- t-stat:          0.0
+- positive frac:   0.516    (coin flip)
+- max drawdown:    -0.78    (wildly unstable)
+- gross period spread 0.0014 -> net 0.00005  (costs not the cause; gross ~0)
+- VERDICT: FAIL
+
+## Final honest verdict on alpha_xs (all three tests done)
+- IC (whole cross-section):     PASS (0.087, t 3.47)
+- Long-only vs SPY:             FAIL (benchmark mismatch + thin signal)
+- Long-short decile spread:     FAIL (no tail separation, flat, unstable)
+
+Reconciliation: the IC is real but lives in the MIDDLE of the ranking, not
+the tradable tails. The extreme deciles do not separate. A signal can carry
+average rank information yet be dominated by idiosyncratic noise at the tails
+where a book is actually formed. -78% spread drawdown confirms instability.
+
+CONCLUSION: alpha_xs is a statistically real but NOT TRADEABLE signal on
+available data (2021-2026, Polygon 5y floor). It does NOT ship as a live
+strategy. Three pre-committed tests, three honest verdicts, no re-slicing.
+The feature-importance finding (low-vol + momentum dominate) stands as a real,
+honest observation about this market and is the durable output.
+
+STOP condition reached: no further constructions tested on this window
+(that would be fishing). Real paths forward, both requiring inputs I do not
+have from here: (1) deeper price history to test across real bear regimes;
+(2) richer features (fundamentals wired into the panel) tested under the SAME
+frozen discipline. Neither is a tweak; both are new, separately-gated work.
