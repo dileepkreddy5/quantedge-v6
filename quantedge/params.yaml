@@ -144,3 +144,18 @@ rebound:
       min_t_stat: 2.5
       min_distinct_regimes: 2
       min_dates: 3
+  # Pre-registered SECOND test (step-22) — committed 2026-07-12 BEFORE its
+  # result is known. Hypothesis: restricting to stages that have stopped
+  # falling (TURNING, RECOVERING) turns the strategy positive. This is a
+  # SECOND look at the same data, so the bar is RAISED vs the primary gate
+  # (multiple-comparison honesty). One shot. Failing this = the idea is done
+  # on this data and waits for deeper history.
+  rebound_stage_restricted:
+    committed_on: "2026-07-12"
+    frozen: true
+    eligible_stages: ["TURNING", "RECOVERING"]
+    kill_threshold:
+      min_oos_lift_over_base_rate: 1.5
+      min_t_stat: 2.5
+      min_distinct_regimes: 2
+      min_dates: 3
