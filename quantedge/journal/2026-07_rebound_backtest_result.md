@@ -43,3 +43,30 @@ positive. Consistent with the falling-knife literature.
 - Pre-registered second test (below): stage-restricted, separate frozen bar,
   ONE shot, declared before seeing the result.
 - Deeper-history test of the core thesis pending real data (Polygon depth).
+
+## Pre-registered stage-restricted test (step-22): also FAIL
+
+Restricting passers to TURNING+RECOVERING (the buckets that were positive in
+the primary test), same control, same cost, judged against the raised bar
+committed before the result:
+
+- 6m:  dates=6  passers=127  spread=+0.0182  t=0.70  lift=1.01  win 0.370 vs 0.366
+- 12m: dates=4  passers=81   spread=-0.1045  t=-1.09 lift=1.11  win 0.407 vs 0.366
+- checks: lift>=1.5 FALSE; t>=2.5 FALSE; regimes>=2 TRUE; dates>=3 TRUE
+- VERDICT: FAIL
+
+The restriction flipped 6m spread positive (as the per-stage table implied)
+but the effect is noise (t=0.70, lift ~1.0) and 12m stays negative. No edge
+that clears an honest bar on this window.
+
+## Decision (final for this data)
+STOP slicing. Two frozen tests, both failed. REBOUND is NOT validated and
+does NOT ship as a live signal on 2024-2025 data. No further re-cuts of this
+window — additional slices would be fishing for a false positive.
+
+The ONE open question the data itself raises: the window contained no bear
+market, and the core thesis (overreaction -> mean reversion) is strongest out
+of drawdowns. This is testable ONLY with deeper history than the current
+Polygon plan provides (floors ~2021). That is a data-acquisition decision,
+not a code or threshold decision. Until/unless that data exists, REBOUND
+stays in research, unvalidated, not on the site as a signal.
