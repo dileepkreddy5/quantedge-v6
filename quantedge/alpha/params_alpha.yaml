@@ -1,0 +1,14 @@
+# Cross-sectional alpha model — frozen config (committed before results).
+# The gate that decides ship / no-ship, judged on walk-forward rank-IC.
+alpha_xs:
+  committed_on: "2026-07-12"
+  frozen: true
+  label: fwd_3m_rank
+  fwd_nbars: 63                # ~3 trading months
+  min_dollar_adv: 2000000      # $2M ADV liquidity floor
+  min_train_months: 12
+  rebalance: monthly
+  kill_threshold:
+    min_mean_rank_ic: 0.03     # institutional bar: sustained IC >= 0.03 is real
+    min_ic_t_stat: 3.0
+    min_positive_month_frac: 0.55
