@@ -147,8 +147,14 @@ def run_scan(price_db: str, insider_db: str, as_of: Optional[date] = None,
              sample: Optional[int] = None, skip_insiders: bool = False,
              workers: int = 8, display: Optional[int] = None) -> Dict:
     t0 = time.time()
-    as_of = as_of or date.today()
     display = display or PARAMS["rebound"]["display_n_per_tier"]
+
+    store = PriceStore(price_db)
+    if as_of is None:
+        # weekend/holiday runs must anchor to the last TRADING day — pricing
+        # "today" on a Sunday otherwise fails for every stock in the universe
+        as_of = store.last_day() or date.today()
+    print(f"as_of: {as_of}", flush=True)
 
     closes = all_closes()
     cikmap = ticker_cik_map()
@@ -156,8 +162,6 @@ def run_scan(price_db: str, insider_db: str, as_of: Optional[date] = None,
     if sample:
         tickers = tickers[:sample]
     print(f"universe: {len(tickers)} tickers with CIK", flush=True)
-
-    store = PriceStore(price_db)
     candidates = price_prefilter(store, tickers, as_of)
     print(f"price prefilter: {len(candidates)} clear drawdown/price/liquidity "
           f"({time.time()-t0:.0f}s)", flush=True)
@@ -204,7 +208,7 @@ def run_scan(price_db: str, insider_db: str, as_of: Optional[date] = None,
         tiers[k] = sorted(tiers[k], key=lambda x: x["score"], reverse=True)[:display]
 
     artifact = {
-        "generated": datetime.utcnow().isoformat() + "Z",
+        "generated": datetime.now(__import__("datetime").timezone.utc).isoformat(),
         "as_of": as_of.isoformat(),
         "n_universe": len(tickers),
         "n_prefilter": len(candidates),

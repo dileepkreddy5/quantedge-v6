@@ -111,8 +111,23 @@ def test_layer_verdict():
     print("  shallow-drawdown correctly rejected")
 
 
+def test_weekend_as_of_still_prices_now():
+    """as_of on a Sunday (store's last bar = Friday) must still produce a
+    current multiple — the bug that blanked valuation for the whole universe."""
+    closes = build_closes()
+    q = q_rev_series()
+    shares = [(date(2022, 12, 31), 10_000_000, date(2023, 1, 30))]
+    sunday = AS_OF + timedelta(days=2)          # 2026-07-12
+    assert closes[-1][0] < sunday               # no bar on/after as_of
+    val = valuation_vs_own_history(closes, q, shares, [], [], sunday)
+    assert val["ok"], val
+    assert val["ps_percentile_own"] <= 25.0
+    print("  Sunday as_of priced from Friday close; percentile",
+          val["ps_percentile_own"])
+
+
 if __name__ == "__main__":
-    for t in (test_drawdown, test_ttm_pit, test_valuation_vs_own_history, test_layer_verdict):
+    for t in (test_drawdown, test_ttm_pit, test_valuation_vs_own_history, test_layer_verdict, test_weekend_as_of_still_prices_now):
         print(f"── {t.__name__}")
         t()
     print("ALL DISCOUNT TESTS PASSED")

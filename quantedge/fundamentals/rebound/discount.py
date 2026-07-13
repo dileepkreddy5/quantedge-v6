@@ -45,6 +45,17 @@ def _close_on_or_after(closes: Closes, d: date, max_slip_days: int = 10) -> Opti
     return None
 
 
+def _close_on_or_before(closes: Closes, d: date, max_slip_days: int = 10) -> Optional[float]:
+    """Latest close at or before d — the honest price for the CURRENT point
+    (weekends/holidays: Friday's close IS today's price). Historical points
+    keep on-or-AFTER pricing so a knowable-date can never see backward."""
+    dates = [x[0] for x in closes]
+    i = bisect_left(dates, d + timedelta(days=1)) - 1
+    if i >= 0 and (d - closes[i][0]).days <= max_slip_days:
+        return closes[i][1]
+    return None
+
+
 def drawdown_structure(closes: Closes, as_of: date, lookback_years: int = 3) -> Dict:
     """The shape of the decline: how deep, how long, and where price sits now."""
     px = _truncate(closes, as_of)
@@ -110,11 +121,16 @@ def valuation_vs_own_history(
         return {"ok": False, "reason": "insufficient_valuation_history",
                 "n_ttm_points": len(ttm)}
 
-    def mult_at(knowable_date: date, ttm_rev: float) -> Optional[Tuple[float, Optional[float]]]:
+    def mult_at(knowable_date: date, ttm_rev: float,
+                current: bool = False) -> Optional[Tuple[float, Optional[float]]]:
         if ttm_rev <= 0:
             return None
         sh = latest_knowable(shares_pit, knowable_date)
-        p = _close_on_or_after(px, knowable_date)
+        # historical points: first close ON/AFTER the knowable date (no
+        # backward peeking). The CURRENT point: last close ON/BEFORE as_of —
+        # otherwise every weekend/holiday run fails to price "now".
+        p = (_close_on_or_before(px, knowable_date) if current
+             else _close_on_or_after(px, knowable_date))
         if not sh or sh[1] <= 0 or p is None:
             return None
         mcap = p * sh[1]
@@ -134,7 +150,7 @@ def valuation_vs_own_history(
             if m[1] is not None:
                 hist_evs.append(m[1])
 
-    now = mult_at(as_of, ttm[-1][1])
+    now = mult_at(as_of, ttm[-1][1], current=True)
     if now is None or len(hist_ps) < min_points - 1:
         return {"ok": False, "reason": "could_not_price_history",
                 "n_ps_points": len(hist_ps)}
