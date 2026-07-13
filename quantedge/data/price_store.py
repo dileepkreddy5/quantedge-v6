@@ -94,6 +94,18 @@ class PriceStore:
                     total += n
                     if verbose and n:
                         print(f"{d} {n} tickers", flush=True)
+                except urllib.error.HTTPError as e:
+                    if e.code == 403:
+                        # plan-entitlement floor: permanent for this day —
+                        # record it so future backfills never re-crawl it
+                        self._con.execute(
+                            "INSERT OR REPLACE INTO fetched_days (d, n) VALUES (?, 0)",
+                            (d.isoformat(),))
+                        self._con.commit()
+                        if verbose:
+                            print(f"{d} 403 plan floor — marked, won't retry", flush=True)
+                    else:
+                        print(f"{d} HTTP {e.code} — will retry on next run", flush=True)
                 except Exception as e:
                     print(f"{d} ERROR {e} — will retry on next run", flush=True)
                 time.sleep(pause)
