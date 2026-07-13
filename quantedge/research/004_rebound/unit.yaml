@@ -1,0 +1,21 @@
+id: 004_rebound
+name: Discounted-quality rebound
+status: testing
+mechanism: >
+  Markets overpunish multi-year bad stretches (De Bondt-Thaler 1985); within
+  the beaten-down set, verifiably improving fundamentals separate rebounds
+  from value traps (Piotroski 2000); expensed R&D hides value (CLS 2001);
+  buybacks and insider clusters confirm (ILV 1995; CMP 2012). Small size is
+  the structural edge: limits-to-arbitrage keep professionals out of
+  uncomfortable small/mid names (Shleifer-Vishny 1997).
+falsifiable_prediction: >
+  Gate-passers (discount AND health AND knife-filter) earn higher forward
+  6m/12m excess returns, net of committed costs, than the beaten-down control
+  group (prefilter-passers that failed gates), with lift and t-stat clearing
+  the frozen kill_threshold in params.yaml (rebound block, 2026-07-12).
+kill_threshold_ref: params.yaml -> rebound.kill_threshold (frozen step-11)
+data: local price store (Polygon 5y plan floor) + EDGAR companyfacts (PIT)
+known_caveats:
+  - insider component scored as None historically (conservative)
+  - current-day CIK map; survivorship shared by passers and control
+  - window limited by plan depth; INSUFFICIENT_DATA is an accepted verdict
