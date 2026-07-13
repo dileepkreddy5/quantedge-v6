@@ -16,7 +16,7 @@ All return [(period_end_or_asof, value, filed_date)] ascending. Filtering to
 `filed <= as_of` is the caller's PIT contract — helper `knowable` provided.
 """
 from __future__ import annotations
-from datetime import date
+from datetime import date, timedelta
 from typing import List, Optional, Tuple
 
 Series = List[Tuple[date, float, date]]  # (period_end, value, filed)
@@ -134,7 +134,7 @@ def ttm_points(q_revenue: Series) -> Series:
         # ~3 quarters (~273 days) — NOT 365. Guard rejects gapped windows
         # (a missing quarter stretches the span to ~365+).
         span = (window[-1][0] - window[0][0]).days
-        if not (240 <= span <= 310):
+        if not (230 <= span <= 320):   # 52/53-week fiscal calendars drift
             continue
         out.append((
             window[-1][0],
@@ -171,3 +171,45 @@ def quarterly_gross_profit(facts: dict) -> Series:
         if e in cd:
             out.append((e, v - cd[e][0], max(f, cd[e][1])))
     return out
+
+
+def annual_revenue(facts: dict) -> Series:
+    """Annual (350-380d) revenue durations across all revenue tags."""
+    from quantedge.fundamentals.bulk_adapter import REV_TAGS
+    gaap = facts.get("facts", {}).get("us-gaap", {})
+    return _duration_series(gaap, list(REV_TAGS), 350, 380)
+
+
+def synthesize_missing_quarters(quarterly: Series, annual: Series) -> Series:
+    """Fill missing fiscal Q4s: many companies never tag Q4 as a discrete
+    duration (no Q4 10-Q exists — Q4 lives only inside the 10-K). Without it,
+    rolling 4-quarter windows break and TTM production silently halts (the
+    ADBE-2021 bug). Synthesis: Q4 = FY annual - (the 3 in-year quarters),
+    PIT-stamped filed = max(annual filed, quarters' filed) — you cannot know
+    a synthesized Q4 before the annual report that defines it is filed."""
+    if not annual:
+        return quarterly
+    q_ends = {e for e, _, _ in quarterly}
+    out = list(quarterly)
+    for a_end, a_val, a_filed in annual:
+        if a_end in q_ends:
+            continue                      # Q4 exists as a real duration
+        fy_start = a_end - timedelta(days=380)
+        in_year = [(e, v, f) for e, v, f in quarterly
+                   if fy_start < e < a_end and (a_end - e).days <= 320]
+        if len(in_year) != 3:
+            continue                      # can't reconstruct without exactly Q1-Q3
+        q4_val = a_val - sum(v for _, v, _ in in_year)
+        if q4_val <= 0:
+            continue                      # reconstruction failed sanity — skip
+        filed = max([a_filed] + [f for _, _, f in in_year])
+        out.append((a_end, q4_val, filed))
+    return sorted(out)
+
+
+def quarterly_revenue_complete(facts: dict) -> Series:
+    """Quarterly revenue with missing Q4s synthesized from annuals — the
+    series every REBOUND layer should consume."""
+    from quantedge.fundamentals.bulk_adapter import quarterly_revenue_from_bulk
+    return synthesize_missing_quarters(
+        quarterly_revenue_from_bulk(facts), annual_revenue(facts))

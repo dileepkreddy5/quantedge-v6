@@ -97,7 +97,7 @@ def score_one(ticker: str, cik: str, bars: list, as_of: date,
         return None
     closes = [(d, c) for d, c, _ in bars]
 
-    q_rev = quarterly_revenue_from_bulk(facts)
+    q_rev = bx.quarterly_revenue_complete(facts)   # Q4-synthesized (ADBE bug fix)
     q_gp = bx.quarterly_gross_profit(facts)
     shares = bx.quarterly_shares(facts)
     cash = bx.cash_series(facts)
