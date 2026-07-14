@@ -88,7 +88,10 @@ def _shape(artifact: dict, live_prices: bool = True) -> dict:
     return {
         "as_of": artifact.get("as_of"), "generated": artifact.get("generated"),
         "tiers": out_tiers, "stage_counts": artifact.get("stage_counts"),
-        "total_passed": artifact.get("total_passed"), "disclaimer": DISCLAIMER,
+        "total_passed": artifact.get("n_passed_gates", artifact.get("total_passed")),
+        "n_universe": artifact.get("n_universe"),
+        "n_prefilter": artifact.get("n_prefilter"),
+        "disclaimer": DISCLAIMER,
     }
 
 
