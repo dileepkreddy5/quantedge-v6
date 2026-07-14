@@ -56,18 +56,26 @@ def _recovery(entry: float, current: float, high: float) -> dict:
 
 def _latest_closes() -> dict:
     """All tickers' most-recent close in ONE query, keyed by ticker.
-    Uses the store's actual last trading day (not date.today(), which may be a
-    weekend/holiday or ahead of the last bar). Returns {} on any failure —
-    callers then show recovery as n/a rather than a fabricated value."""
+
+    Uses raw sqlite3 (stdlib) against the price store rather than importing the
+    quantedge package — the backend image does not ship that package, so the
+    import previously failed and silently disabled recovery. Schema: table
+    `bars(t TEXT ticker, d TEXT date, c REAL close)`. Reads the store's actual
+    last trading day (not date.today()). Returns {} on any failure — callers
+    then show recovery as n/a rather than a fabricated value."""
+    import sqlite3
+    db = os.environ.get("PRICE_DB", "/app/data/price_store.db")
+    if not os.path.exists(db):
+        logger.warning(f"price store not found at {db}")
+        return {}
     try:
-        from quantedge.data.price_store import PriceStore
-        store = PriceStore(os.environ.get("PRICE_DB", "/app/data/price_store.db"))
-        last = store.last_day()
-        if not last:
-            store.close(); return {}
-        closes = store.closes_on(last)
-        store.close()
-        return closes or {}
+        con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+        last = con.execute("SELECT MAX(d) FROM bars").fetchone()
+        if not last or not last[0]:
+            con.close(); return {}
+        rows = con.execute("SELECT t, c FROM bars WHERE d = ?", (last[0],)).fetchall()
+        con.close()
+        return {t: c for t, c in rows}
     except Exception as e:
         logger.warning(f"latest closes lookup failed: {e}")
         return {}
