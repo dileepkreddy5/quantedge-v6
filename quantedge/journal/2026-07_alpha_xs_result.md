@@ -92,3 +92,14 @@ STOP condition reached: no further constructions tested on this window
 have from here: (1) deeper price history to test across real bear regimes;
 (2) richer features (fundamentals wired into the panel) tested under the SAME
 frozen discipline. Neither is a tweak; both are new, separately-gated work.
+
+## Fundamentals-enhanced (final on this model): no improvement
+IC 0.0851 (t 3.5) vs 0.0867 price-only — statistically identical. Fundamental
+features rank LOW (growth_streak 0.046, bottom of top-8; others below). Top
+drivers unchanged: downside_dev, r_3m, vol. Long-short still flat (0.0023, t
+0.02). Long-only worse (-0.072, t -2.65).
+
+CONCLUSION: value/quality/growth add no cross-sectional signal on 2021-2026.
+The cross-sectional model is fully explored: real IC, untradeable tails,
+fundamentals redundant. CLOSED on available data. Durable finding stands:
+low-vol + momentum dominate this market's cross-section.
