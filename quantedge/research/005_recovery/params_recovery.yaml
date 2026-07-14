@@ -1,0 +1,13 @@
+# Recovery-to-high test — frozen before results (2026-07-13).
+# The user's thesis: buy low + good financials, wait for recovery to prior high.
+recovery:
+  committed_on: "2026-07-13"
+  frozen: true
+  min_drawdown: 0.35          # >= 35% off 3y high to be "beaten down"
+  lookback_days: 1095         # 3y prior-high window
+  recover_frac: 1.0           # success = fully back to the prior high
+  tracking_days: 365          # give it up to a year to recover
+  kill_threshold:
+    min_hit_rate_edge: 0.08   # healthy recovery rate >= control + 8pp
+    min_z_stat: 2.0
+    min_events: 30
