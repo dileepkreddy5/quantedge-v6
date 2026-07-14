@@ -54,18 +54,27 @@ def _recovery(entry: float, current: float, high: float) -> dict:
     }
 
 
-def _price_lookup(ticker: str):
+def _latest_closes() -> dict:
+    """All tickers' most-recent close in ONE query, keyed by ticker.
+    Uses the store's actual last trading day (not date.today(), which may be a
+    weekend/holiday or ahead of the last bar). Returns {} on any failure —
+    callers then show recovery as n/a rather than a fabricated value."""
     try:
         from quantedge.data.price_store import PriceStore
         store = PriceStore(os.environ.get("PRICE_DB", "/app/data/price_store.db"))
-        bars = store.series(ticker, date.today() - timedelta(days=10), date.today())
+        last = store.last_day()
+        if not last:
+            store.close(); return {}
+        closes = store.closes_on(last)
         store.close()
-        return bars[-1][1] if bars else None
-    except Exception:
-        return None
+        return closes or {}
+    except Exception as e:
+        logger.warning(f"latest closes lookup failed: {e}")
+        return {}
 
 
 def _shape(artifact: dict, live_prices: bool = True) -> dict:
+    closes = _latest_closes() if live_prices else {}
     out_tiers = {}
     for tier_name, rows in artifact.get("tiers", {}).items():
         shaped = []
@@ -79,9 +88,9 @@ def _shape(artifact: dict, live_prices: bool = True) -> dict:
                 "prior_high": r.get("prior_high"),
             }
             if live_prices and r.get("prior_high") and r.get("price"):
-                cur = _price_lookup(r["ticker"])
+                cur = closes.get(r["ticker"])
                 if cur:
-                    row["current_price"] = cur
+                    row["current_price"] = round(cur, 2)
                     row["recovery"] = _recovery(r["price"], cur, r["prior_high"])
             shaped.append(row)
         out_tiers[tier_name] = shaped

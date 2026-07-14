@@ -12,6 +12,7 @@ import AscentRadar from './pages/AscentRadar';
 import Login from './pages/Login';
 import Research from './pages/Research';
 import Multibagger from './pages/Multibagger';
+import Rebound from './pages/Rebound';
 
 export default function App() {
   return (
@@ -38,6 +39,7 @@ export default function App() {
         <Route path="/login"     element={<Login />} />
         <Route path="/research"  element={<Research />} />
         <Route path="/multibagger" element={<Multibagger />} />
+        <Route path="/rebound"     element={<Rebound />} />
         {/* Catch-all → landing */}
         <Route path="*"          element={<Navigate to="/" replace />} />
       </Routes>
