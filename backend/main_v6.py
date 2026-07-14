@@ -299,6 +299,8 @@ async def lifespan(app: FastAPI):
                 replace_existing=True, max_instances=1, coalesce=True,
             )
             logger.info("✅ Multibagger scan scheduled (02:00 ET nightly)")
+        except Exception as e:
+            logger.warning(f"Multibagger scan not scheduled: {e}")
 
         try:
             from services.rebound_scan_job import ReboundScanJob
@@ -313,8 +315,6 @@ async def lifespan(app: FastAPI):
             logger.info("✅ Rebound scan scheduled (02:30 ET nightly)")
         except Exception as e:
             logger.warning(f"Rebound scan not scheduled: {e}")
-        except Exception as e:
-            logger.warning(f"Multibagger scan not scheduled: {e}")
 
         scheduler.start()
         app.state.scheduler = scheduler
