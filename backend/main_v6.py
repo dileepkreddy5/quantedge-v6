@@ -299,6 +299,20 @@ async def lifespan(app: FastAPI):
                 replace_existing=True, max_instances=1, coalesce=True,
             )
             logger.info("✅ Multibagger scan scheduled (02:00 ET nightly)")
+
+        try:
+            from services.rebound_scan_job import ReboundScanJob
+            rb_job = ReboundScanJob()
+            scheduler.add_job(
+                rb_job.run,
+                trigger=CronTrigger(hour=2, minute=30, timezone=et),
+                id="rebound_nightly_scan",
+                name="Nightly rebound discounted-quality scan",
+                replace_existing=True, max_instances=1, coalesce=True,
+            )
+            logger.info("✅ Rebound scan scheduled (02:30 ET nightly)")
+        except Exception as e:
+            logger.warning(f"Rebound scan not scheduled: {e}")
         except Exception as e:
             logger.warning(f"Multibagger scan not scheduled: {e}")
 
@@ -452,6 +466,8 @@ app.include_router(peers_router,         prefix="/api/v6",             tags=["Pe
 app.include_router(news_router,          prefix="/api/v6",             tags=["News"])
 app.include_router(research_router,      prefix="/api/v6",             tags=["Research"])
 app.include_router(scan_router,          prefix="/api/v6",             tags=["Scan"])
+from routers import rebound_router
+app.include_router(rebound_router.router, prefix="/api/v6",             tags=["Rebound"])
 app.include_router(portfolio_sizer_router, prefix="/api/v6",           tags=["PortfolioSizer"])
 app.include_router(news_momentum_router, prefix="/api/v6",             tags=["NewsMomentum"])
 app.include_router(oracle_router,        prefix="/api/v1/oracle",      tags=["Price Oracle"])
