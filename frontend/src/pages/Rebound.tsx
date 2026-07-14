@@ -33,6 +33,7 @@ export default function Rebound(){
   const [err,setErr] = useState<string|null>(null);
   const [tier,setTier] = useState<'small'|'mid'|'large'>('small');
   const [expanded,setExpanded] = useState<string|null>(null);
+  const [showInfo,setShowInfo] = useState(false);
 
   useEffect(()=>{ api.get('/api/v6/rebound/list')
     .then(r=>{ if(r.data.error) setErr(r.data.error); else setData(r.data); })
@@ -67,6 +68,47 @@ export default function Rebound(){
           name has climbed back toward its prior high — as information, not a
           forecast. Research before acting.
         </div>
+      </div>
+
+      <div style={{...card,padding:0,overflow:'hidden'}}>
+        <div onClick={()=>setShowInfo(!showInfo)}
+          style={{padding:'12px 16px',cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <span style={{...label,fontSize:10}}>What do these scores mean? {showInfo?'▾':'▸'}</span>
+        </div>
+        {showInfo && (
+          <div style={{padding:'0 16px 16px',color:DIM,fontSize:12,lineHeight:1.7,borderTop:`1px solid ${BORDER}`}}>
+            <div style={{marginTop:12,color:'#cbb896'}}>
+              <strong style={{color:GOLD}}>F-score (0–9)</strong> — the Piotroski score, a
+              9-point financial-health checklist from accounting research (Piotroski, 2000).
+              A company earns one point for each test it passes. 7–9 is strong, 4–6 is
+              middling, 0–3 is weak. The nine tests:
+            </div>
+            <ol style={{marginTop:10,paddingLeft:20,color:DIM}}>
+              <li>Positive net income (the company is profitable)</li>
+              <li>Positive operating cash flow (profits are backed by real cash)</li>
+              <li>Return on assets rising vs last year (getting more efficient)</li>
+              <li>Cash flow greater than net income (earnings quality, not accounting tricks)</li>
+              <li>Falling leverage (less debt relative to assets)</li>
+              <li>Rising current ratio (better able to cover short-term bills)</li>
+              <li>No share dilution (not printing new stock and shrinking your slice)</li>
+              <li>Rising gross margin (pricing power improving)</li>
+              <li>Rising asset turnover (generating more revenue per dollar of assets)</li>
+            </ol>
+            <div style={{marginTop:12,color:'#cbb896'}}>
+              <strong style={{color:GOLD}}>Score (0–100)</strong> — QuantEdge's blend of the
+              discount (how far below its own history), the F-score above, revenue-growth
+              streak, and volume confirmation. Higher = a cleaner discounted-quality profile.
+              It is a ranking of candidates, not a prediction.
+            </div>
+            <div style={{marginTop:12,color:'#cbb896'}}>
+              <strong style={{color:GOLD}}>Stage</strong> —
+              <span style={{color:RED}}> FALLING</span> (still declining),
+              <span style={{color:GOLD}}> TURNING</span> (decline slowing),
+              <span style={{color:GREEN}}> RECOVERING</span> (climbing back). Based on recent
+              price action and volume.
+            </div>
+          </div>
+        )}
       </div>
 
       {data && (
