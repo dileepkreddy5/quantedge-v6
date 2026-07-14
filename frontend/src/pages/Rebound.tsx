@@ -18,6 +18,14 @@ interface Row {
   drawdown_from_high_pct:number|null; thesis:string;
   entry_price:number|null; prior_high:number|null;
   current_price?:number; recovery?:Recovery;
+  insights?:{
+    required_return_to_high_pct?:number;
+    historical_recovery?:{drawdown_bucket:string;recovered_within_1y_pct:number;
+      median_days_when_recovered:number|null;sample_size:number;note:string;};
+    days_since_low?:number; off_the_lows?:boolean;
+    accumulation_signal?:boolean; up_day_volume_share_pct?:number;
+    analysis_url?:string;
+  };
 }
 interface Artifact {
   as_of:string; generated:string; disclaimer:string;
@@ -133,7 +141,9 @@ export default function Rebound(){
         <div key={r.ticker} style={{...card,padding:0,overflow:'hidden'}}>
           <div onClick={()=>setExpanded(expanded===r.ticker?null:r.ticker)}
             style={{display:'flex',alignItems:'center',gap:14,padding:'14px 16px',cursor:'pointer'}}>
-            <span style={{color:GOLD,fontWeight:700,fontSize:15,minWidth:70}}>{r.ticker}</span>
+            <span onClick={(e)=>{e.stopPropagation(); nav(r.insights?.analysis_url || `/dashboard?ticker=${r.ticker}`);}}
+              style={{color:GOLD,fontWeight:700,fontSize:15,minWidth:70,textDecoration:'underline',cursor:'pointer'}}
+              title="Open full analysis">{r.ticker}</span>
             <span style={{color:'#e8dcc8',fontSize:12,minWidth:52,textAlign:'right'}}>{r.score.toFixed(1)}</span>
             <span style={{color:stageColor(r.stage),fontSize:10,letterSpacing:1,minWidth:96}}>{r.stage}</span>
             <span style={{color:RED,fontSize:12,minWidth:70}}>
@@ -161,6 +171,41 @@ export default function Rebound(){
                 {r.recovery?.upside_to_high_pct!=null &&
                   <span>upside to high <span style={{color:GREEN}}>+{r.recovery.upside_to_high_pct}%</span></span>}
               </div>
+              {r.insights && (
+                <div style={{marginTop:14,paddingTop:12,borderTop:`1px solid ${BORDER}`,fontSize:11.5}}>
+                  {r.insights.required_return_to_high_pct!=null && (
+                    <div style={{marginBottom:8}}>
+                      <span style={{color:DIM}}>To reclaim its prior high this needs </span>
+                      <span style={{color:GOLD,fontWeight:700}}>+{r.insights.required_return_to_high_pct}%</span>
+                      <span style={{color:'#6a5a4a'}}> from here.</span>
+                    </div>
+                  )}
+                  {r.insights.historical_recovery && (
+                    <div style={{marginBottom:8}}>
+                      <span style={{color:DIM}}>Historically, stocks down </span>
+                      <span style={{color:'#cbb896'}}>{r.insights.historical_recovery.drawdown_bucket}%</span>
+                      <span style={{color:DIM}}> reclaimed their high within a year </span>
+                      <span style={{color:r.insights.historical_recovery.recovered_within_1y_pct>=10?GREEN:RED,fontWeight:700}}>
+                        {r.insights.historical_recovery.recovered_within_1y_pct}% </span>
+                      <span style={{color:DIM}}>of the time</span>
+                      {r.insights.historical_recovery.median_days_when_recovered &&
+                        <span style={{color:DIM}}> (median {r.insights.historical_recovery.median_days_when_recovered}d when they did)</span>}
+                      <span style={{color:'#6a5a4a'}}> · {r.insights.historical_recovery.note}</span>
+                    </div>
+                  )}
+                  <div style={{display:'flex',gap:16,flexWrap:'wrap',color:DIM}}>
+                    {r.insights.days_since_low!=null &&
+                      <span>{r.insights.days_since_low}d since low {r.insights.off_the_lows?'· off the lows':'· still near lows'}</span>}
+                    {r.insights.accumulation_signal &&
+                      <span style={{color:GREEN}}>◆ accumulation ({r.insights.up_day_volume_share_pct}% up-day volume)</span>}
+                  </div>
+                  <div style={{marginTop:10}}>
+                    <span onClick={()=>nav(r.insights!.analysis_url || `/dashboard?ticker=${r.ticker}`)}
+                      style={{color:GOLD,cursor:'pointer',textDecoration:'underline',fontSize:11}}>
+                      → Open full analysis for {r.ticker}</span>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

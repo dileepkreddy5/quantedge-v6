@@ -81,6 +81,53 @@ def _latest_closes() -> dict:
         return {}
 
 
+# Historical recovery-to-prior-high base rates by drawdown depth, measured on
+# our own 5y data (recovery backtest, unit 005, healthy cohort). These are REAL
+# measured frequencies — the honest odds, not a promise. Small sample; stated as
+# such. Journal: 2026-07_recovery_result.md.
+_RECOVERY_BASE_RATE = {
+    "35-50": {"rate_pct": 13.6, "median_days": 243, "n": 66},
+    "50-70": {"rate_pct": 7.1,  "median_days": None, "n": 42},
+    "70+":   {"rate_pct": 0.0,  "median_days": None, "n": 15},
+}
+
+def _dd_bucket(dd_frac: float) -> str:
+    if dd_frac < 0.50: return "35-50"
+    if dd_frac < 0.70: return "50-70"
+    return "70+"
+
+def _insights(r: dict) -> dict:
+    """Real, computed insights per name — no fabrication, all from fields the
+    scan already produced."""
+    out = {}
+    dd = r.get("drawdown")
+    price = r.get("price")
+    high = r.get("prior_high")
+    if price and high and price > 0:
+        out["required_return_to_high_pct"] = round((high / price - 1) * 100, 1)
+    if dd is not None:
+        b = _RECOVERY_BASE_RATE.get(_dd_bucket(dd))
+        if b:
+            out["historical_recovery"] = {
+                "drawdown_bucket": _dd_bucket(dd),
+                "recovered_within_1y_pct": b["rate_pct"],
+                "median_days_when_recovered": b["median_days"],
+                "sample_size": b["n"],
+                "note": "measured on 5y data, healthy cohort, small sample — odds not a promise",
+            }
+    dsl = r.get("days_since_low")
+    if dsl is not None:
+        out["days_since_low"] = dsl
+        out["off_the_lows"] = dsl > 20
+    up_share = r.get("up_day_share_1m")
+    vol_ratio = r.get("vol_1m_ratio")
+    if up_share is not None and vol_ratio is not None:
+        out["accumulation_signal"] = bool(up_share >= 0.55 and vol_ratio <= 1.1)
+        out["up_day_volume_share_pct"] = round(up_share * 100, 1)
+    out["analysis_url"] = f"/dashboard?ticker={r['ticker']}"
+    return out
+
+
 def _shape(artifact: dict, live_prices: bool = True) -> dict:
     closes = _latest_closes() if live_prices else {}
     out_tiers = {}
@@ -94,6 +141,7 @@ def _shape(artifact: dict, live_prices: bool = True) -> dict:
                     if r.get("drawdown") is not None else None,
                 "thesis": r.get("thesis"), "entry_price": r.get("price"),
                 "prior_high": r.get("prior_high"),
+                "insights": _insights(r),
             }
             if live_prices and r.get("prior_high") and r.get("price"):
                 cur = closes.get(r["ticker"])
