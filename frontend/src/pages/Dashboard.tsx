@@ -30,6 +30,7 @@ import OverviewV2 from './overview_v2/OverviewV2';
 import NewsPanel from '../components/ui/NewsPanel';
 import PeerPanel from '../components/ui/PeerPanel';
 import FinancialIntelligencePanel from '../components/ui/FinancialIntelligencePanel';
+import ConvictionBadge from '../components/ui/ConvictionBadge';
 
 const TABS = [
   { id: 'overview',     label: '⬡ OVERVIEW' },
@@ -477,6 +478,9 @@ function TickerHeader({ data, ticker }: { data: any; ticker: string }) {
           }} />
         </div>
       </div>
+
+      {/* QuantEdge Conviction (new 20-module consolidated score) */}
+      <ConvictionBadge ticker={ticker} />
 
       {/* Key stats */}
       <div style={{ display: 'flex', gap: 20, marginLeft: 'auto', flexWrap: 'wrap' }}>
