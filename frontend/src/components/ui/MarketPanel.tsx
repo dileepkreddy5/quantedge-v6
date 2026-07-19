@@ -17,6 +17,7 @@ interface MktData {
   relative_strength:Record<string,number|null>|null;
   price_position:Record<string,number|null>|null;
   reasons:string[]|null;
+  sector_breadth:Record<string,any>|null;
   reason?:string;
 }
 const heat=(s:number|null)=>s==null?'#2a2a2a':s>=75?'#0f6e56':s>=58?'#1d9e75':s>=42?'#8a7519':s>=25?'#a35a1d':'#7a2320';
@@ -83,7 +84,7 @@ export default function MarketPanel({ ticker }:{ ticker:string }){
 
       {d.reasons && d.reasons.length>0 && (
         <div style={{background:'#1a1512',border:'1px solid #3a2a1a',borderRadius:12,padding:'12px 16px',marginBottom:14}}>
-          <div style={{fontSize:12,color:'#c9a227',letterSpacing:1,marginBottom:6,fontWeight:600}}>MARKET READ</div>
+          <div style={{fontSize:12,color:'#c9a227',letterSpacing:1,marginBottom:6,fontWeight:600}}>MARKET SUMMARY</div>
           <div style={{display:'flex',flexWrap:'wrap',gap:'4px 16px'}}>
             {d.reasons.map((r,i)=><span key={i} style={{fontSize:12,color:'#cdbfae'}}>▸ {r}</span>)}
           </div>
@@ -133,6 +134,30 @@ export default function MarketPanel({ ticker }:{ ticker:string }){
         )}
       </div>
 
+      {/* SECTOR BREADTH */}
+      {d.sector_breadth && d.sector_breadth.breadth_score!=null && (
+        <div style={{background:'#141414',border:'1px solid #2a2a2a',borderRadius:12,padding:16,marginBottom:14}}>
+          <div style={{fontSize:12,color:'#9d8b7a',letterSpacing:1,marginBottom:12}}>
+            {d.sector_breadth.sector} SECTOR BREADTH — {d.sector_breadth.universe_size} peers</div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(150px,1fr))',gap:12}}>
+            {[['% above 50-day MA',d.sector_breadth.pct_above_ma50],
+              ['% above 200-day MA',d.sector_breadth.pct_above_ma200],
+              ['% positive momentum',d.sector_breadth.pct_positive_mom],
+              ['Breadth score',d.sector_breadth.breadth_score]].map(([k,v])=>(
+              <div key={k as string}>
+                <div style={{fontSize:10,color:'#9d8b7a',marginBottom:4}}>{k as string}</div>
+                <div style={{display:'flex',alignItems:'center',gap:8}}>
+                  <div style={{flex:1,height:8,background:'#242424',borderRadius:4,overflow:'hidden'}}>
+                    <div style={{height:'100%',width:`${v}%`,background:(v as number)>=50?'#1d9e75':'#a35a1d'}}/></div>
+                  <span style={{fontSize:13,fontWeight:600,color:(v as number)>=50?'#1d9e75':'#c0705a',width:44,textAlign:'right'}}>{(v as number).toFixed(0)}%</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={{fontSize:10,color:'#7a7266',marginTop:8}}>Is the sector healthy? High breadth = broad participation, not just a few names.</div>
+        </div>
+      )}
+
       {/* MOMENTUM LADDER — hero */}
       <div style={{background:'#141414',border:'1px solid #2a2a2a',borderRadius:12,padding:18,marginBottom:16}}>
         <div style={{fontSize:12,color:'#9d8b7a',letterSpacing:1,marginBottom:16}}>MOMENTUM LADDER — return & peer-percentile by timeframe</div>
@@ -168,7 +193,7 @@ export default function MarketPanel({ ticker }:{ ticker:string }){
       </div>
 
       {/* 6 CATEGORY SCORES */}
-      <div style={{fontSize:12,color:'#9d8b7a',letterSpacing:1,marginBottom:8}}>6 MARKET CATEGORIES · peer-relative</div>
+      <div style={{fontSize:12,color:'#9d8b7a',letterSpacing:1,marginBottom:8}}>MARKET INTELLIGENCE COMPONENTS · peer-relative + technical</div>
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(170px,1fr))',gap:8}}>
         {d.tree.categories.map(cat=>(
           <div key={cat.id} style={{background:heat(cat.score),borderRadius:8,padding:'10px 12px'}}>

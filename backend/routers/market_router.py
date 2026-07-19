@@ -161,6 +161,19 @@ async def compute_market_intelligence(ticker: str, api_key: str, pool=None) -> D
     deep["short_interest"]=short_interest_signals(si_records)
     tree=score_market(me_factors, peer_list, deep_data=deep)
     bench=await _benchmarks_and_position(ticker, api_key)
+    # Sector breadth from peer factors (real, from the bucket)
+    breadth={}
+    if peer_list:
+        above50=[1 for p in peer_list if (p.get("pct_above_ma50") or -1)>0]
+        above200=[1 for p in peer_list if (p.get("pct_above_ma200") or -1)>0]
+        mom_pos=[1 for p in peer_list if (p.get("mom_3m") or 0)>0]
+        n=len(peer_list)
+        breadth={"pct_above_ma50":round(100*len(above50)/n,1),
+                 "pct_above_ma200":round(100*len(above200)/n,1),
+                 "pct_positive_mom":round(100*len(mom_pos)/n,1),
+                 "sector":bucket,"universe_size":n}
+        # breadth score: average of the three
+        breadth["breadth_score"]=round((breadth["pct_above_ma50"]+breadth["pct_above_ma200"]+breadth["pct_positive_mom"])/3,1)
     n_scored=sum(c["n_scored"] for c in tree["categories"])
     n_total=sum(c["n_signals"] for c in tree["categories"])
     # momentum ladder for the frontend
@@ -176,6 +189,7 @@ async def compute_market_intelligence(ticker: str, api_key: str, pool=None) -> D
             "volume":deep.get("volume"),"short_interest":deep.get("short_interest"),
             "relative_strength":bench.get("relative_strength"),"price_position":bench.get("price_position"),
             "reasons":_market_reasons(tree, ladder, regime),
+            "sector_breadth":breadth,
             "key_metrics":{"hurst":me_factors.get("hurst"),"sharpe_3m":me_factors.get("sharpe_3m"),
                 "ma_alignment":me_factors.get("ma_alignment"),"amihud":me_factors.get("amihud"),
                 "pct_above_ma50":me_factors.get("pct_above_ma50"),"pct_above_ma200":me_factors.get("pct_above_ma200")}}
