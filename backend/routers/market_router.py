@@ -149,9 +149,7 @@ async def compute_market_intelligence(ticker: str, api_key: str, pool=None) -> D
             logger.info(f"market: peers unavailable {ticker}: {e}")
     if not me_factors:
         return {"ticker":ticker,"available":False,"reason":"ticker not in peer universe (run the peer scan)"}
-    tree=score_market(me_factors, peer_list)
     regime=await _regime_read(ticker, api_key)
-    # Deep signals — volatility, trading risk, volume, short interest (all real)
     from quantedge.scoring.market_deep import volatility_suite, trading_risk, volume_liquidity, short_interest_signals
     closes, volumes, si_records = await _price_volume_si(ticker, api_key)
     spy = await _spy_closes(api_key)
@@ -161,6 +159,7 @@ async def compute_market_intelligence(ticker: str, api_key: str, pool=None) -> D
         deep["trading_risk"]=trading_risk(closes)
         deep["volume"]=volume_liquidity(closes, volumes)
     deep["short_interest"]=short_interest_signals(si_records)
+    tree=score_market(me_factors, peer_list, deep_data=deep)
     bench=await _benchmarks_and_position(ticker, api_key)
     n_scored=sum(c["n_scored"] for c in tree["categories"])
     n_total=sum(c["n_signals"] for c in tree["categories"])
