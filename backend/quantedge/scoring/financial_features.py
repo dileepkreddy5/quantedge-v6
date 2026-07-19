@@ -131,7 +131,16 @@ def _compute_deepening(m, feats, market_cap=None):
     eq=_f(cur.get("equity")); assets=_f(cur.get("assets"))
     gw=_f(cur.get("goodwill")) or 0; intang=_f(cur.get("intangibles")) or 0
     shares=_f(cur.get("diluted_shares"))
-    rev=ttm("revenue"); oi=ttm("operating_income"); int_exp=ttm("interest_expense")
+    rev=ttm("revenue"); oi=ttm("operating_income")
+    # interest expense: use latest COMPLETE 4Q window (some firms stop tagging it
+    # in recent quarters — a real recent figure beats a false 'missing')
+    def latest_ttm(k):
+        for i in range(len(m)-1, 2, -1):
+            vals=[m[j].get(k) for j in range(i-3,i+1)]
+            if all(v is not None for v in vals):
+                return sum(vals)
+        return None
+    int_exp=ttm("interest_expense") or latest_ttm("interest_expense")
     fcf=feats.get("fcf_margin") and rev and feats["fcf_margin"]*rev
     f["net_debt"]=total_debt-cash
     if market_cap:
