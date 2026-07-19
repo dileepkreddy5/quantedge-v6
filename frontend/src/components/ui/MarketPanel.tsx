@@ -10,6 +10,13 @@ interface MktData {
   regime:{garch?:{current_vol:number|null;vol_regime:string|null};regime?:{current:string|null;confidence:number|null};kalman?:{trend:string|null;state:string|null}}|null;
   momentum_ladder:Record<string,number|null>|null;
   key_metrics:Record<string,number|null>;
+  volatility:Record<string,number|null>|null;
+  trading_risk:Record<string,number|null>|null;
+  volume:Record<string,number|null>|null;
+  short_interest:Record<string,any>|null;
+  relative_strength:Record<string,number|null>|null;
+  price_position:Record<string,number|null>|null;
+  reasons:string[]|null;
   reason?:string;
 }
 const heat=(s:number|null)=>s==null?'#2a2a2a':s>=75?'#0f6e56':s>=58?'#1d9e75':s>=42?'#8a7519':s>=25?'#a35a1d':'#7a2320';
@@ -68,6 +75,58 @@ export default function MarketPanel({ ticker }:{ ticker:string }){
               <div style={{background:'#181818',border:'1px solid #2a2a2a',borderRadius:8,padding:'8px 14px',textAlign:'center'}}>
                 <div style={{fontSize:10,color:'#9d8b7a'}}>VOLATILITY</div>
                 <div style={{fontSize:14,fontWeight:600,color:rg.garch.vol_regime==='HIGH'?'#c0705a':rg.garch.vol_regime==='LOW'?'#1d9e75':'#c9a227'}}>{rg.garch.vol_regime}</div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {d.reasons && d.reasons.length>0 && (
+        <div style={{background:'#1a1512',border:'1px solid #3a2a1a',borderRadius:12,padding:'12px 16px',marginBottom:14}}>
+          <div style={{fontSize:12,color:'#c9a227',letterSpacing:1,marginBottom:6,fontWeight:600}}>MARKET READ</div>
+          <div style={{display:'flex',flexWrap:'wrap',gap:'4px 16px'}}>
+            {d.reasons.map((r,i)=><span key={i} style={{fontSize:12,color:'#cdbfae'}}>▸ {r}</span>)}
+          </div>
+        </div>
+      )}
+
+      {/* RELATIVE STRENGTH vs benchmarks + PRICE POSITION */}
+      <div style={{display:'grid',gridTemplateColumns:'1.3fr 1fr',gap:14,marginBottom:14}}>
+        {d.relative_strength && Object.keys(d.relative_strength).length>0 && (
+          <div style={{background:'#141414',border:'1px solid #2a2a2a',borderRadius:12,padding:16}}>
+            <div style={{fontSize:12,color:'#9d8b7a',letterSpacing:1,marginBottom:12}}>RELATIVE STRENGTH — 3-month vs benchmarks</div>
+            {Object.entries(d.relative_strength).map(([k,v])=>{
+              const val=v as number; const w=Math.min(50,Math.abs(val));
+              return (
+                <div key={k} style={{display:'flex',alignItems:'center',gap:10,marginBottom:8}}>
+                  <div style={{width:44,fontSize:12,color:'#cdbfae'}}>{k}</div>
+                  <div style={{flex:1,position:'relative',height:16,background:'#242424',borderRadius:8}}>
+                    <div style={{position:'absolute',left:'50%',top:0,bottom:0,width:1,background:'#555'}}/>
+                    <div style={{position:'absolute',left:val>=0?'50%':`${50-w}%`,width:`${w}%`,top:0,bottom:0,
+                      background:val>=0?'#1d9e75':'#c0705a',borderRadius:4}}/>
+                  </div>
+                  <div style={{width:56,fontSize:12,fontWeight:600,color:val>=0?'#1d9e75':'#c0705a',textAlign:'right'}}>{val>=0?'+':''}{val.toFixed(1)}%</div>
+                </div>
+              );
+            })}
+            <div style={{fontSize:10,color:'#7a7266',marginTop:4}}>vs SPY (market), QQQ (growth), XLK (tech sector)</div>
+          </div>
+        )}
+        {d.price_position && (
+          <div style={{background:'#141414',border:'1px solid #2a2a2a',borderRadius:12,padding:16}}>
+            <div style={{fontSize:12,color:'#9d8b7a',letterSpacing:1,marginBottom:12}}>PRICE POSITION</div>
+            <div style={{display:'flex',justifyContent:'space-between',marginBottom:10,fontSize:12}}>
+              <span style={{color:'#9d8b7a'}}>From 52-week high</span>
+              <span style={{color:'#c0705a',fontWeight:600}}>{d.price_position.pct_from_52w_high?.toFixed(1)}%</span></div>
+            <div style={{display:'flex',justifyContent:'space-between',marginBottom:10,fontSize:12}}>
+              <span style={{color:'#9d8b7a'}}>From 52-week low</span>
+              <span style={{color:'#1d9e75',fontWeight:600}}>+{d.price_position.pct_from_52w_low?.toFixed(1)}%</span></div>
+            {d.price_position.range_percentile!=null && (
+              <div>
+                <div style={{fontSize:10,color:'#7a7266',marginBottom:4}}>Position in 52-week range</div>
+                <div style={{height:12,background:'#242424',borderRadius:6,overflow:'hidden'}}>
+                  <div style={{height:'100%',width:`${d.price_position.range_percentile}%`,background:'#c9a227'}}/></div>
+                <div style={{fontSize:11,color:'#cdbfae',marginTop:3}}>{d.price_position.range_percentile.toFixed(0)}th percentile of range</div>
               </div>
             )}
           </div>
