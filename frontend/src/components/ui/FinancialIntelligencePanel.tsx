@@ -54,7 +54,8 @@ export default function FinancialIntelligencePanel({ ticker }: { ticker: string 
   const [data, setData] = useState<FinData | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
-  const [open, setOpen] = useState<string | null>(null);
+  const [openSet, setOpenSet] = useState<Set<string>>(new Set());
+  const [allOpen, setAllOpen] = useState(true);
   useEffect(() => {
     if (!ticker) return;
     setLoading(true); setErr(''); setData(null);
@@ -63,6 +64,20 @@ export default function FinancialIntelligencePanel({ ticker }: { ticker: string 
       .catch(e => setErr(e?.message || 'Request failed'))
       .finally(() => setLoading(false));
   }, [ticker]);
+
+  useEffect(() => {
+    if (data) { setOpenSet(new Set(data.tree.categories.map(c => c.id))); setAllOpen(true); }
+  }, [data]);
+
+  const isOpen = (id: string) => openSet.has(id);
+  const toggle = (id: string) => setOpenSet(prev => {
+    const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const toggleAll = () => {
+    if (!data) return;
+    if (allOpen) { setOpenSet(new Set()); setAllOpen(false); }
+    else { setOpenSet(new Set(data.tree.categories.map(c => c.id))); setAllOpen(true); }
+  };
+
   if (!ticker) return <div style={{ color: '#9d8b7a', padding: 24 }}>Enter a ticker to load Financial Intelligence.</div>;
   if (loading) return <div style={{ color: '#daa520', padding: 24 }}>Computing Financial Intelligence — hybrid Polygon + SEC EDGAR, 58 signals, 6 models…</div>;
   if (err) return <div style={{ color: '#c0705a', padding: 24 }}>Financial Intelligence: {err}</div>;
@@ -109,13 +124,16 @@ export default function FinancialIntelligencePanel({ ticker }: { ticker: string 
           </div>
         ))}
       </div>
-      <div style={{ fontSize: 12, color: '#9d8b7a', marginBottom: 8, letterSpacing: 1 }}>12 CATEGORIES · click to expand signals</div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 8 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+        <span style={{ fontSize: 12, color: '#9d8b7a', letterSpacing: 1 }}>12 CATEGORIES · {data.coverage.scored} live signals</span>
+        <span onClick={toggleAll} style={{ fontSize: 11, color: '#daa520', cursor: 'pointer', border: '1px solid #3a3020', borderRadius: 6, padding: '4px 10px' }}>
+          {allOpen ? '▲ Collapse all' : '▼ Expand all'}</span>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(300px,1fr))', gap: 10, alignItems: 'start' }}>
         {data.tree.categories.map(cat => (
-          <div key={cat.id}>
-            <div onClick={() => setOpen(open === cat.id ? null : cat.id)}
-              style={{ background: heat(cat.score), borderRadius: 10, padding: '12px 14px', cursor: 'pointer',
-                border: open === cat.id ? '2px solid #daa520' : '2px solid transparent' }}>
+          <div key={cat.id} style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid #2a2a2a' }}>
+            <div onClick={() => toggle(cat.id)}
+              style={{ background: heat(cat.score), padding: '12px 14px', cursor: 'pointer' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: 12, fontWeight: 600, color: heatText(cat.score) }}>{cat.label.replace(' Intelligence', '')}</span>
                 <span style={{ fontSize: 18, fontWeight: 700, color: heatText(cat.score) }}>{cat.score?.toFixed(0) ?? '—'}</span>
@@ -123,8 +141,8 @@ export default function FinancialIntelligencePanel({ ticker }: { ticker: string 
               <div style={{ fontSize: 10, color: heatText(cat.score), opacity: 0.75, marginTop: 3 }}>
                 wt {cat.weight.toFixed(2)} · {cat.n_scored}/{cat.n_signals} live · conf {(cat.confidence * 100).toFixed(0)}%</div>
             </div>
-            {open === cat.id && (
-              <div style={{ background: '#141414', border: '1px solid #2a2a2a', borderTop: 'none', borderRadius: '0 0 10px 10px', padding: 10 }}>
+            {isOpen(cat.id) && (
+              <div style={{ background: '#141414', padding: 10 }}>
                 {cat.signals.map(s => (
                   <div key={s.id} style={{ marginBottom: 9 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
