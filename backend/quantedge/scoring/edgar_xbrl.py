@@ -71,47 +71,62 @@ def classify_period(start, end) -> Optional[str]:
     if 350 <= d <= 380: return "annual"
     return None
 
+def _derive_from_cumulative(pts: List[Dict]) -> Dict[str, float]:
+    """Given classified points, derive quarterly values by successive subtraction
+    within each fiscal year (grouped by shared FY start date). Handles filers that
+    report cumulative (H1/9mo/FY) rather than discrete quarters. Q_n = cum_n - cum_(n-1)."""
+    from collections import defaultdict
+    by_start = defaultdict(list)
+    for p in pts:
+        if p.get("start"):
+            by_start[p["start"]].append(p)
+    quarters: Dict[str, float] = {}
+    for start, group in by_start.items():
+        group.sort(key=lambda x: x["end"])
+        chain = [g for g in group if g["cls"] in ("quarter","half","ytd3","annual")]
+        prev_cum = 0.0
+        for g in chain:
+            if g["cls"] == "quarter" and g["start"] == start:
+                quarters[g["end"]] = g["val"]; prev_cum = g["val"]
+            else:
+                quarters[g["end"]] = g["val"] - prev_cum; prev_cum = g["val"]
+    # keep standalone clean quarters not tied to FY start
+    for p in pts:
+        if p["cls"] == "quarter" and p["end"] not in quarters:
+            quarters[p["end"]] = p["val"]
+    return quarters
+
 def parse_flow_concept(units: List[Dict], years_back: int = 6) -> List[Dict]:
     """Clean quarters, PLUS derive missing fiscal-Q4 from annual - (Q1+Q2+Q3).
     Many filers (esp. non-calendar FY like MSFT June) never file a standalone Q4;
     the 10-K reports the full year. We reconstruct Q4 so the series is complete."""
     cutoff = dt.date.today() - dt.timedelta(days=365 * years_back + 120)
-    q_picked: Dict[str, Dict] = {}
-    a_picked: Dict[str, Dict] = {}
+    # Classify and dedupe every point (prefer framed points for the same end date).
+    classified: Dict[str, Dict] = {}
     for u in units:
         cls = classify_period(u.get("start"), u.get("end"))
+        if cls not in ("quarter","half","ytd3","annual"):
+            continue
         try:
             end_d = dt.date.fromisoformat(u["end"])
         except (KeyError, ValueError):
             continue
         if end_d < cutoff:
             continue
-        if cls == "quarter":
-            key = u["end"]; has_frame = bool(u.get("frame"))
-            if key not in q_picked or (has_frame and not q_picked[key].get("frame")):
-                q_picked[key] = u
-        elif cls == "annual":
-            a_picked[u["end"]] = u
-    quarters = [{"end": u["end"], "start": u.get("start"), "val": float(u["val"]),
-                 "fy": u.get("fy"), "fp": u.get("fp"), "form": u.get("form")}
-                for u in q_picked.values()]
-    # Derive Q4 = annual - sum(3 quarters inside the annual window)
-    for ann in a_picked.values():
-        a_s, a_e = ann.get("start"), ann.get("end")
-        if not a_s or not a_e:
+        try:
+            val = float(u["val"])
+        except (KeyError, ValueError, TypeError):
             continue
-        inside = [q for q in quarters if q["start"] and a_s <= q["start"] and q["end"] <= a_e]
-        if len(inside) == 3:
-            try:
-                q4_val = float(ann["val"]) - sum(q["val"] for q in inside)
-                last_end = max(q["end"] for q in inside)
-                q4_start = (dt.date.fromisoformat(last_end) + dt.timedelta(days=1)).isoformat()
-                if not any(q["end"] == a_e for q in quarters):
-                    quarters.append({"end": a_e, "start": q4_start, "val": q4_val,
-                                     "fy": ann.get("fy"), "fp": "Q4",
-                                     "form": ann.get("form"), "derived": True})
-            except (ValueError, KeyError):
-                continue
+        key = (u.get("start"), u["end"])
+        has_frame = bool(u.get("frame"))
+        if key not in classified or (has_frame and not classified[key].get("frame")):
+            classified[key] = {"start": u.get("start"), "end": u["end"], "val": val,
+                               "cls": cls, "frame": u.get("frame"),
+                               "fy": u.get("fy"), "fp": u.get("fp"), "form": u.get("form")}
+    # Derive quarterly values from the cumulative chain (handles discrete-quarter AND
+    # cumulative-only filers uniformly).
+    q_map = _derive_from_cumulative(list(classified.values()))
+    quarters = [{"end": e, "val": v} for e, v in q_map.items()]
     quarters.sort(key=lambda x: x["end"])
     return quarters
 
