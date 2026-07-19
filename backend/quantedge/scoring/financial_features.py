@@ -32,7 +32,12 @@ def compute_financial_features(merged, market_cap=None, wacc=None):
     m=merged; cur=m[-1]; prev=m[-5] if len(m)>=5 else m[0]
     rev=_ttm(m,"revenue"); cogs=_ttm(m,"cost_of_revenue"); gp=_ttm(m,"gross_profit")
     oi=_ttm(m,"operating_income"); ni=_ttm(m,"net_income"); ocf=_ttm(m,"operating_cash_flow")
-    capex=_ttm(m,"capex"); da=_ttm(m,"depreciation_amortization"); rd=_ttm(m,"rd")
+    def _latest_ttm4(k):
+        for i in range(len(m)-1,2,-1):
+            vals=[m[j].get(k) for j in range(i-3,i+1)]
+            if all(v is not None for v in vals): return sum(vals)
+        return None
+    capex=_ttm(m,"capex") or _latest_ttm4("capex"); da=_ttm(m,"depreciation_amortization"); rd=_ttm(m,"rd")
     sbc=_ttm(m,"sbc"); div=_ttm(m,"dividends_paid"); bb=_ttm(m,"buybacks")
     fcf=(ocf-abs(capex)) if (ocf is not None and capex is not None) else None
     f["gross_margin"]=_safe_div(gp,rev); f["operating_margin"]=_safe_div(oi,rev)

@@ -10,6 +10,19 @@ from __future__ import annotations
 import datetime as dt
 from typing import List, Dict, Optional, Any
 
+def _valid_shares(primary, fallback):
+    """Reject absurd share counts (negative, or implausibly small). Real large-cap
+    share counts are in the hundreds of millions to billions; a value under 1e6 or
+    negative is a bad Polygon field — use the fallback instead."""
+    for v in (primary, fallback):
+        try:
+            fv = float(v)
+            if fv > 1e6:  # at least 1M shares (any real public co); rejects -4M, 1M-ish glitches
+                return fv
+        except (TypeError, ValueError):
+            continue
+    return None
+
 def _nearest_edgar_val(edgar_series: List[dict], period_end: str, tol_days: int = 45) -> Optional[float]:
     if not edgar_series or not period_end:
         return None
@@ -46,8 +59,8 @@ def merge_quarters(polygon_quarters: List[Any], edgar: Dict[str, List[dict]]) ->
             "tax_expense": getattr(q, "tax_expense", None),
             "nonoperating_income": getattr(q, "nonoperating_income", None),
             "eps_diluted": getattr(q, "eps_diluted", None),
-            "diluted_shares": getattr(q, "diluted_shares", None),
-            "basic_shares": getattr(q, "basic_shares", None),
+            "diluted_shares": _valid_shares(getattr(q, "diluted_shares", None), getattr(q, "basic_shares", None)),
+            "basic_shares": _valid_shares(getattr(q, "basic_shares", None), getattr(q, "diluted_shares", None)),
             "assets": getattr(q, "total_assets", None),
             "current_assets": getattr(q, "current_assets", None),
             "current_liabilities": getattr(q, "current_liabilities", None),
@@ -83,4 +96,14 @@ def merge_quarters(polygon_quarters: List[Any], edgar: Dict[str, List[dict]]) ->
             row["free_cash_flow"] = None
         merged.append(row)
     merged.sort(key=lambda r: (r.get("fiscal_year") or 0, r.get("fiscal_period") or ""))
+    # Backfill invalid share counts from the most recent valid quarter (carry-forward),
+    # so per-share metrics never divide by a broken share count.
+    last_valid=None
+    for r in merged:
+        if r.get("diluted_shares"): last_valid=r["diluted_shares"]
+        elif last_valid: r["diluted_shares"]=last_valid
+    last_valid=None
+    for r in reversed(merged):
+        if r.get("diluted_shares"): last_valid=r["diluted_shares"]
+        elif last_valid: r["diluted_shares"]=last_valid
     return merged

@@ -23,7 +23,10 @@ UA = "QuantEdge research dileep@quant.dileepkapu.com"
 
 CONCEPTS = {
     "capex": ["PaymentsToAcquirePropertyPlantAndEquipment",
-              "PaymentsToAcquireProductiveAssets"],
+              "PaymentsToAcquireProductiveAssets",
+              "PaymentsToAcquirePropertyPlantAndEquipmentAndIntangibleAssets",
+              "PaymentsForCapitalImprovements",
+              "PaymentsToAcquireOtherPropertyPlantAndEquipment"],
     "dividends_paid": ["PaymentsOfDividendsCommonStock", "PaymentsOfDividends"],
     "buybacks": ["PaymentsForRepurchaseOfCommonStock",
                  "PaymentsForRepurchaseOfEquity"],
