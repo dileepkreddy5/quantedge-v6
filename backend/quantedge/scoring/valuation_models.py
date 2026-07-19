@@ -19,12 +19,15 @@ def dcf_valuation(fcf_base, growth_rate, wacc, terminal_growth, shares,
     if None in (fcf_base, wacc, shares) or shares<=0: return {"intrinsic_per_share": None}
     if wacc is None or (tg is not None and wacc<=tg): return {"intrinsic_per_share": None}
     g = growth_rate if growth_rate is not None else 0.05
-    g = min(g, 0.25)  # cap explicit growth — no firm compounds >25%/yr for a decade
+    g = min(g, 0.20)  # cap explicit growth — no firm sustains >20%/yr through the window
     tg = tg if tg is not None else 0.025
     tg = min(tg, wacc - 0.03)  # terminal growth floored >=3% below WACC (prevents explosion)
+    # Institutional 2-stage: shorter high-growth window with EXPONENTIAL fade toward
+    # terminal (peak growth decays ~30%/yr). Prevents a decade of compounding at peak.
+    years = min(years, 7)
     pv_sum = 0.0; fcf = fcf_base; projection=[]
     for yr in range(1, years+1):
-        yr_growth = g + (tg - g) * (yr-1)/(years-1) if years>1 else tg
+        yr_growth = tg + (g - tg) * (0.7 ** (yr-1))
         fcf = fcf * (1 + yr_growth)
         pv = fcf / ((1+wacc)**yr); pv_sum += pv
         projection.append({"year":yr,"fcf":round(fcf,0),"growth":round(yr_growth,4),"pv":round(pv,0)})
