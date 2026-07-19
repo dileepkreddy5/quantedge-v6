@@ -8,11 +8,13 @@ from collections import Counter
 
 TIER1={"reuters","bloomberg","wall street journal","wsj","financial times","cnbc","the new york times",
        "associated press","barron's","forbes","marketwatch","the motley fool","seeking alpha","yahoo"}
-NON_ENGLISH_HINT=re.compile(r'[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]')
 
 def _is_english(a):
     t=(a.get("title") or "")+(a.get("description") or "")
-    return not NON_ENGLISH_HINT.search(t)
+    if not t: return True
+    # english if the title is predominantly basic-latin characters
+    latin=sum(1 for ch in t if ord(ch)<0x250 or ch.isspace())
+    return (latin/len(t))>0.85 if len(t)>0 else True
 def _dt(s):
     try: return datetime.fromisoformat(s.replace("Z","+00:00"))
     except: return None
