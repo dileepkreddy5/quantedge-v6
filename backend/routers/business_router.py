@@ -64,7 +64,18 @@ async def compute_business_intelligence(ticker: str, api_key: str) -> Dict[str, 
         ed={}
     merged=merge_quarters(pq,ed)
     wacc=estimate_wacc(beta=None)["mid"]
-    fin_features=compute_financial_features(merged,market_cap=None,wacc=wacc)
+    # market cap for buyback-yield accuracy
+    mcap=None
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=10) as c:
+            r=await c.get(f"https://api.polygon.io/v3/reference/tickers/{ticker}?apiKey={api_key}")
+            if r.status_code==200:
+                res=(r.json() or {}).get("results",{})
+                mcap=res.get("market_cap")
+    except Exception: pass
+    fin_features=compute_financial_features(merged,market_cap=mcap,wacc=wacc)
+    if mcap: fin_features["market_cap"]=mcap
     biz_features=compute_business_features(merged, fin_features, wacc=wacc)
     if not biz_features:
         return {"ticker":ticker,"available":False,"reason":"insufficient history for business analysis"}

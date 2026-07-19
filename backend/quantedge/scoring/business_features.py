@@ -134,11 +134,31 @@ def compute_business_features(merged, fin_features, wacc=None, peer_data=None):
     f["relative_reinvestment"]=fin_features.get("reinvestment_rate")
 
     # 6. MANAGEMENT & CAPITAL ALLOCATION
-    f["buyback_yield"]=fin_features.get("buyback_yield")
-    sh=S("diluted_shares"); shv=[x for x in sh if x is not None]
+    # buyback yield = TTM buybacks / market cap proxy (use equity if no mcap); fallback to buybacks/revenue
+    buyback_t=ttm("buybacks")
+    if buyback_t and rev_t and rev_t[-1]:
+        f["buyback_yield"]=abs(buyback_t[-1])/ (fin_features.get("market_cap") or (rev_t[-1]*5))  # rough mcap proxy
+    else:
+        f["buyback_yield"]=fin_features.get("buyback_yield")
+    # dividend growth from TTM dividends series
+    div_series=ttm("dividends_paid")
+    if len(div_series)>=8:
+        d_now=abs(div_series[-1]); d_old=abs(div_series[-5]) if len(div_series)>=5 else None
+        if d_old and d_old>0: f["dividend_growth"]=(d_now/d_old-1)
+        elif d_now>0 and (d_old==0 or d_old is None): f["dividend_growth"]=None  # initiated, can't compute rate
+    else:
+        f["dividend_growth"]=fin_features.get("dividend_growth")
+    sh=S("diluted_shares"); shv=[x for x in sh if x is not None and x>0]
+    # guard against stock-split / units artifacts: drop points that jump >40% vs neighbor median
     if len(shv)>=8:
-        f["buyback_consistency"]=1.0 if shv[-1]<shv[0] else 0.0
-        f["share_count_cagr"]=_cagr(shv)
+        import statistics as _st
+        med=_st.median(shv)
+        shv_clean=[x for x in shv if 0.5*med<=x<=2.0*med]  # within 2x of median = same share base
+        if len(shv_clean)>=6:
+            f["buyback_consistency"]=1.0 if shv_clean[-1]<shv_clean[0] else 0.0
+            cagr=_cagr(shv_clean)
+            # sanity: real share-count CAGR is within +-15%/yr; else it's an artifact -> None
+            f["share_count_cagr"]=cagr if (cagr is not None and -0.15<cagr<0.15) else None
     f["dividend_growth"]=fin_features.get("dividend_growth")
     f["reinvestment_rate"]=fin_features.get("reinvestment_rate")
     f["reinvestment_quality"]=(fin_features.get("reinvestment_rate")*roic) if (fin_features.get("reinvestment_rate") is not None and roic is not None) else None
