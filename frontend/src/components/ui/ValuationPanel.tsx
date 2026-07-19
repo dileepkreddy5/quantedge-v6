@@ -15,6 +15,9 @@ interface ValData {
   expected_return:Record<string,number|null>|null;
   model_agreement:{dispersion_cv:number|null;consensus_overvalued:number|null;agreement_score:number|null}|null;
   driver_waterfall:Record<string,number>|null;
+  reasons:string[]|null;
+  model_confidence:{models:{model:string;confidence:number}[];overall:number|null}|null;
+  time_horizon_years:number|null;
   reason?:string;
 }
 
@@ -74,6 +77,17 @@ export default function ValuationPanel({ ticker }:{ ticker:string }){
           ))}
         </div>
       </div>
+
+      {d.reasons && d.reasons.length>0 && (
+        <div style={{background:'#1a1512',border:'1px solid #3a2a1a',borderRadius:12,padding:'14px 18px',marginBottom:16}}>
+          <div style={{fontSize:12,color:'#c9a227',letterSpacing:1,marginBottom:8,fontWeight:600}}>WHY {d.valuation_rating.toUpperCase()}?</div>
+          <div style={{display:'flex',flexWrap:'wrap',gap:'6px 18px'}}>
+            {d.reasons.map((r,i)=>(
+              <span key={i} style={{fontSize:12,color:'#cdbfae'}}>▸ {r}</span>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div style={{background:'#141414',border:'1px solid #2a2a2a',borderRadius:12,padding:'18px 20px 18px 130px',marginBottom:18}}>
         <div style={{fontSize:12,color:'#9d8b7a',letterSpacing:1,marginBottom:22,marginLeft:-110}}>VALUATION RANGE — method fair values vs current price ${price.toFixed(2)}</div>
@@ -142,7 +156,7 @@ export default function ValuationPanel({ ticker }:{ ticker:string }){
         )}
         {d.expected_return && (
           <div style={{background:'#141414',border:'1px solid #2a2a2a',borderRadius:12,padding:16}}>
-            <div style={{fontSize:12,color:'#9d8b7a',letterSpacing:1,marginBottom:6}}>EXPECTED RETURN</div>
+            <div style={{fontSize:12,color:'#9d8b7a',letterSpacing:1,marginBottom:6}}>EXPECTED RETURN{d.time_horizon_years?` · ${d.time_horizon_years}YR HORIZON`:''}</div>
             <div style={{fontSize:26,fontWeight:700,color:(d.expected_return.expected_total_return??0)>=0?'#1d9e75':'#c0705a',marginBottom:10}}>
               {((d.expected_return.expected_total_return??0)*100).toFixed(1)}%<span style={{fontSize:11,color:'#7a7266'}}> /yr</span></div>
             {[['Revenue growth',d.expected_return.exp_return_growth,'#1d9e75'],
@@ -157,14 +171,22 @@ export default function ValuationPanel({ ticker }:{ ticker:string }){
             ))}
           </div>
         )}
-        {d.model_agreement && (
+        {d.model_confidence && (
           <div style={{background:'#141414',border:'1px solid #2a2a2a',borderRadius:12,padding:16}}>
-            <div style={{fontSize:12,color:'#9d8b7a',letterSpacing:1,marginBottom:10}}>MODEL AGREEMENT</div>
-            <div style={{fontSize:26,fontWeight:700,color:'#daa520'}}>
-              {d.model_agreement.agreement_score!=null?(d.model_agreement.agreement_score*100).toFixed(0)+'%':'—'}</div>
-            <div style={{fontSize:10,color:'#7a7266',marginBottom:10}}>method concordance</div>
-            {d.model_agreement.consensus_overvalued!=null && (
-              <div style={{fontSize:11,color:'#cdbfae'}}>
+            <div style={{fontSize:12,color:'#9d8b7a',letterSpacing:1,marginBottom:4}}>MODEL CONFIDENCE</div>
+            <div style={{fontSize:22,fontWeight:700,color:'#daa520',marginBottom:8}}>
+              {d.model_confidence.overall!=null?(d.model_confidence.overall*100).toFixed(0)+'%':'—'}
+              <span style={{fontSize:10,color:'#7a7266',fontWeight:400}}> overall</span></div>
+            {d.model_confidence.models.map(m=>(
+              <div key={m.model} style={{marginBottom:5}}>
+                <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:'#9d8b7a'}}>
+                  <span>{m.model}</span><span>{(m.confidence*100).toFixed(0)}%</span></div>
+                <div style={{height:4,background:'#242424',borderRadius:2,overflow:'hidden'}}>
+                  <div style={{height:'100%',width:`${m.confidence*100}%`,background:'#1d9e75'}}/></div>
+              </div>
+            ))}
+            {d.model_agreement?.consensus_overvalued!=null && (
+              <div style={{fontSize:10,color:'#cdbfae',marginTop:8}}>
                 <span style={{color:d.model_agreement.consensus_overvalued>=0.6?'#c0705a':'#1d9e75',fontWeight:600}}>
                   {(d.model_agreement.consensus_overvalued*100).toFixed(0)}%</span> of methods say overvalued</div>
             )}
@@ -203,6 +225,30 @@ export default function ValuationPanel({ ticker }:{ ticker:string }){
           ))}
         </div>
       </div>
+
+      {d.driver_waterfall && (
+        <div style={{background:'#141414',border:'1px solid #2a2a2a',borderRadius:12,padding:16,marginBottom:18}}>
+          <div style={{fontSize:12,color:'#9d8b7a',letterSpacing:1,marginBottom:14}}>VALUATION DRIVER WATERFALL — what builds intrinsic value ($/share)</div>
+          <div style={{display:'flex',alignItems:'flex-end',gap:6,height:140,paddingLeft:4}}>
+            {[['Revenue',d.driver_waterfall.revenue_growth,'#1d9e75'],
+              ['Margins',d.driver_waterfall.margins,'#3a9e75'],
+              ['Buybacks',d.driver_waterfall.buybacks,'#5a9e6a'],
+              ['Terminal',d.driver_waterfall.terminal_value,'#8a9e55'],
+              ['WACC drag',d.driver_waterfall.wacc_drag,'#a35a1d'],
+              ['Intrinsic',d.driver_waterfall.intrinsic_value,'#daa520']].map(([k,v,c])=>{
+              const val=v as number; const maxv=Math.max(...Object.values(d.driver_waterfall!).map(Math.abs));
+              const h=Math.abs(val)/maxv*100;
+              return (
+                <div key={k as string} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'flex-end',height:'100%'}}>
+                  <div style={{fontSize:11,color:c as string,fontWeight:600,marginBottom:3}}>{val>=0?'+':''}{val.toFixed(0)}</div>
+                  <div style={{width:'80%',height:`${h}%`,background:c as string,borderRadius:'3px 3px 0 0',minHeight:4}}/>
+                  <div style={{fontSize:9,color:'#9d8b7a',marginTop:5,textAlign:'center'}}>{k}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div style={{fontSize:12,color:'#9d8b7a',letterSpacing:1,marginBottom:8}}>10 VALUATION CATEGORIES</div>
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(150px,1fr))',gap:8}}>
