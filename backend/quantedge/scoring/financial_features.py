@@ -104,8 +104,10 @@ def compute_financial_features(merged, market_cap=None, wacc=None):
     if rec is not None and rev: f["dso"]=rec/rev*365
     if inv is not None and cogs: f["dio"]=inv/cogs*365
     if ap is not None and cogs: f["dpo"]=ap/cogs*365
-    if all(f.get(k) is not None for k in ("dso","dio","dpo")):
-        f["cash_conversion_cycle"]=f["dso"]+f["dio"]-f["dpo"]
+    # Cash conversion cycle = DSO + DIO - DPO. For asset-light firms with no
+    # inventory, DIO is legitimately 0 (not missing) — don't null the whole metric.
+    if f.get("dso") is not None and f.get("dpo") is not None:
+        f["cash_conversion_cycle"]=f["dso"]+(f.get("dio") or 0.0)-f["dpo"]
     if ni is not None and ocf is not None and assets:
         f["accruals_ratio"]=(ni-ocf)/assets
         f["cash_earnings_gap"]=abs(ni-ocf)/(abs(ni) if ni else 1)
