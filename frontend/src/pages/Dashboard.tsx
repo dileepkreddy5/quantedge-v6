@@ -29,6 +29,7 @@ import Screener from './Screener';
 import OverviewV2 from './overview_v2/OverviewV2';
 import NewsPanel from '../components/ui/NewsPanel';
 import PeerPanel from '../components/ui/PeerPanel';
+import FinancialIntelligencePanel from '../components/ui/FinancialIntelligencePanel';
 
 const TABS = [
   { id: 'overview',     label: '⬡ OVERVIEW' },
@@ -41,6 +42,7 @@ const TABS = [
   { id: 'montecarlo',  label: '🎲 MONTE CARLO' },
   { id: 'risk',        label: '🛡 RISK' },
   { id: 'fundamental', label: '📋 FUNDAMENTALS' },
+  { id: 'financial',   label: '💎 FINANCIAL' },
   { id: 'wallstreet',  label: '🏦 WALL ST.' },
   { id: 'portfolio',   label: '⚖ PORTFOLIO' },
   { id: 'performance', label: '📈 PERFORMANCE' },
@@ -391,6 +393,7 @@ export default function Dashboard() {
               {activeTab === 'montecarlo'  && <MonteCarloPanel data={data} />}
               {activeTab === 'risk'        && <RiskPanel data={data} />}
               {activeTab === 'fundamental' && <FundamentalsPanel data={data} />}
+              {activeTab === 'financial'   && <FinancialIntelligencePanel ticker={ticker} />}
               {activeTab === 'watchlist'   && <Watchlist onAnalyze={runAnalysis} />}
               {activeTab === 'wallstreet'  && <WallStreetPanel data={data} />}
               {activeTab === 'portfolio'   && <PortfolioPanel data={data} />}
