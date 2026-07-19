@@ -14,31 +14,31 @@ def percentile_vs_peers(value, peer_values, higher_is_better=True):
     return round(pct if higher_is_better else 100.0-pct, 1)
 
 MARKET_SIGNALS = {
- "trend_momentum": ("Trend & Momentum", 0.85, [
+ "trend_momentum": ("Trend & Momentum", 0.75, [
    ("mom_3m","3-month momentum","mom_3m",0.35,True,"price momentum vs sector"),
    ("mom_6m","6-month momentum","mom_6m",0.30,True,"medium-term momentum vs sector"),
    ("mom_12_1","12-1 momentum","mom_12_1",0.35,True,"classic 12-1 momentum factor vs sector"),
    ("ma_alignment","MA alignment","ma_alignment",0.30,True,"moving-average trend structure"),
  ]),
- "trend_persistence": ("Trend Persistence", 0.50, [
+ "trend_persistence": ("Trend Persistence", 0.45, [
    ("hurst","Hurst exponent","hurst",0.40,True,"trend persistence (>0.5 trending)"),
    ("pct_above_ma50","% above 50-day MA","pct_above_ma50",0.30,True,"price vs 50-day average"),
    ("pct_above_ma200","% above 200-day MA","pct_above_ma200",0.30,True,"price vs 200-day average"),
  ]),
- "risk_adjusted": ("Risk-Adjusted Performance", 0.60, [
+ "risk_adjusted": ("Risk-Adjusted Performance", 0.50, [
    ("sharpe_3m","3-month Sharpe","sharpe_3m",0.55,True,"risk-adjusted return vs sector"),
    ("vol_adj_return","Vol-adjusted return","vol_adj_return",0.45,True,"return per unit volatility vs sector"),
  ]),
- "relative_strength": ("Relative Strength", 0.70, [
+ "relative_strength": ("Relative Strength", 0.55, [
    ("rs_6m","6-month relative strength","mom_6m",0.50,True,"performance vs sector median"),
    ("rs_12m","12-month relative strength","mom_12_1",0.50,True,"long-term relative strength vs sector"),
  ]),
- "liquidity_flow": ("Liquidity & Flow", 0.40, [
+ "liquidity_flow": ("Liquidity & Flow", 0.30, [
    ("amihud","Amihud liquidity","amihud",0.40,False,"price impact (lower = more liquid)"),
    ("volume_surge","Volume surge","volume_surge",0.30,True,"recent volume vs baseline"),
    ("obv_slope","OBV slope","obv_slope_norm",0.30,True,"on-balance-volume accumulation"),
  ]),
- "short_term": ("Short-Term Signal", 0.25, [
+ "short_term": ("Short-Term Signal", 0.20, [
    ("mom_1m","1-month momentum","mom_1m",1.0,True,"near-term price action vs sector"),
  ]),
 }
@@ -89,6 +89,16 @@ DEEP_CATEGORIES = {
  "short_interest": ("Short Interest", 0.25, [
    ("days_to_cover","Days to cover","days_to_cover",0.50,5,1.5,False,"short interest / avg volume (lower=less bearish bet)"),
    ("si_trend","Short interest trend","short_interest_trend",0.50,0.15,-0.1,False,"rising short interest is bearish"),
+ ]),
+ "benchmark_rs": ("Benchmark Relative Strength", 0.35, [
+   ("rs_spy","vs S&P 500 (3m)","rs_spy",0.35,-5,5,True,"outperformance vs market"),
+   ("rs_qqq","vs Nasdaq-100 (3m)","rs_qqq",0.30,-5,5,True,"outperformance vs growth"),
+   ("rs_xlk","vs sector ETF (3m)","rs_xlk",0.35,-5,5,True,"outperformance vs own sector"),
+ ]),
+ "price_position": ("Price Position", 0.20, [
+   ("range_percentile","52-week range position","range_percentile",0.45,30,70,True,"position within 52w range"),
+   ("pct_from_high","Distance from 52w high","pct_from_52w_high",0.30,-25,-5,True,"proximity to highs (closer=stronger)"),
+   ("pct_from_low","Distance from 52w low","pct_from_52w_low",0.25,10,40,True,"strength above lows"),
  ]),
 }
 

@@ -164,8 +164,12 @@ async def compute_market_intelligence(ticker: str, api_key: str, pool=None) -> D
         deep["volatility"]={**(deep.get("volatility") or {}), **volatility_detail(closes)}
         deep["trading_risk"]={**(deep.get("trading_risk") or {}), **advanced_risk(closes)}
         deep["volume"]={**(deep.get("volume") or {}), **volume_detail(closes, volumes)}
-    tree=score_market(me_factors, peer_list, deep_data=deep)
     bench=await _benchmarks_and_position(ticker, api_key)
+    rs=bench.get("relative_strength",{}); pp=bench.get("price_position",{})
+    deep["benchmark_rs"]={"rs_spy":rs.get("SPY"),"rs_qqq":rs.get("QQQ"),"rs_xlk":rs.get("XLK")}
+    deep["price_position"]={"range_percentile":pp.get("range_percentile"),
+        "pct_from_52w_high":pp.get("pct_from_52w_high"),"pct_from_52w_low":pp.get("pct_from_52w_low")}
+    tree=score_market(me_factors, peer_list, deep_data=deep)
     # Sector breadth from peer factors (real, from the bucket)
     breadth={}
     if peer_list:
