@@ -21,6 +21,7 @@ Reference: Greenblatt (2005), Piotroski (2000), Altman (1968), Sloan (1996)
 import os
 import asyncio
 import aiohttp
+import math
 import numpy as np
 import pandas as pd
 from typing import Dict, List, Optional
@@ -147,6 +148,20 @@ class QualityScorecard:
     altman_z_score: Optional[float] = None
     n_quarters_used: int = 0
     data_quality: str = "unknown"
+
+
+def _finite(v, ndigits=4):
+    """Return a JSON-safe rounded float, or None for NaN/Inf/None.
+    Guards against 'Out of range float values are not JSON compliant'."""
+    try:
+        if v is None:
+            return None
+        v = float(v)
+        if not math.isfinite(v):
+            return None
+        return round(v, ndigits)
+    except (TypeError, ValueError):
+        return None
 
 
 def _safe(d: dict, key: str) -> Optional[float]:
@@ -525,20 +540,20 @@ def build_scorecard(
         past_score=round(past_score, 1),
         sub_scores={k: round(v, 1) for k, v in sub_scores.items()},
         metrics={
-            "roic_mean_5y": round(roic.get("mean", 0) or 0, 4),
-            "roic_trend": round(roic.get("slope", 0) or 0, 6),
-            "wacc_estimate": round(spread.get("wacc", 0) or 0, 4),
-            "value_creation_spread": round(spread.get("spread", 0) or 0, 4),
+            "roic_mean_5y": _finite(roic.get("mean"), 4),
+            "roic_trend": _finite(roic.get("slope"), 6),
+            "wacc_estimate": _finite(spread.get("wacc"), 4),
+            "value_creation_spread": _finite(spread.get("spread"), 4),
             "creates_value": bool(spread.get("creates_value", False)),
-            "beta_used": round(spread.get("beta_used", 0) or 0, 3),
-            "gross_margin_mean": round(margin.get("mean", 0) or 0, 4),
-            "gross_margin_cov": round(margin.get("cov", 0) or 0, 4),
-            "fcf_conversion": round(fcf.get("mean", 0) or 0, 4),
-            "revenue_growth_mean": round(rev_growth.get("mean", 0) or 0, 4),
-            "revenue_growth_std": round(rev_growth.get("std", 0) or 0, 4),
-            "debt_to_equity_latest": round(debt.get("latest", 0) or 0, 4),
-            "debt_trend": round(debt.get("slope", 0) or 0, 6),
-            "accrual_ratio": round(accruals or 0, 4),
+            "beta_used": _finite(spread.get("beta_used"), 3),
+            "gross_margin_mean": _finite(margin.get("mean"), 4),
+            "gross_margin_cov": _finite(margin.get("cov"), 4),
+            "fcf_conversion": _finite(fcf.get("mean"), 4),
+            "revenue_growth_mean": _finite(rev_growth.get("mean"), 4),
+            "revenue_growth_std": _finite(rev_growth.get("std"), 4),
+            "debt_to_equity_latest": _finite(debt.get("latest"), 4),
+            "debt_trend": _finite(debt.get("slope"), 6),
+            "accrual_ratio": _finite(accruals, 4),
         },
         piotroski_f_score=f_score,
         altman_z_score=round(z_score, 2) if z_score is not None else None,

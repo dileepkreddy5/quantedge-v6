@@ -16,6 +16,19 @@ from auth.cognito_auth import get_optional_user, CognitoUser
 router = APIRouter()
 
 
+def _sanitize(obj):
+    """Recursively replace NaN/Inf with None so the response is always valid
+    JSON. Defense-in-depth at the endpoint boundary — no float can escape."""
+    import math
+    if isinstance(obj, float):
+        return obj if math.isfinite(obj) else None
+    if isinstance(obj, dict):
+        return {k: _sanitize(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_sanitize(v) for v in obj]
+    return obj
+
+
 def _scorecard_to_dict(sc: QualityScorecard) -> dict:
     return {
         "ticker": sc.ticker,
@@ -69,7 +82,7 @@ async def get_quality(
         logger.error(f"Quality analysis failed for {ticker}: {e}")
         raise HTTPException(status_code=500, detail=f"Quality analysis error: {str(e)}")
 
-    result = _scorecard_to_dict(scorecard)
+    result = _sanitize(_scorecard_to_dict(scorecard))
 
     # Cache for 24 hours — fundamentals only change quarterly
     try:
