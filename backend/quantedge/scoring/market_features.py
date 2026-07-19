@@ -108,9 +108,11 @@ def score_market_deep(deep_data):
     src_map={"volatility":deep_data.get("volatility") or {},
              "trading_risk":deep_data.get("trading_risk") or {},
              "volume_accum":deep_data.get("volume") or {},
-             "short_interest":deep_data.get("short_interest") or {}}
+             "short_interest":deep_data.get("short_interest") or {},
+             "benchmark_rs":deep_data.get("benchmark_rs") or {},
+             "price_position":deep_data.get("price_position") or {}}
     for cid,(label,wt,sigs) in DEEP_CATEGORIES.items():
-        source=src_map[cid]
+        source=src_map.get(cid, {})
         scored=[]
         for sid,slabel,skey,sw,good,great,hib,ev in sigs:
             val=source.get(skey)
