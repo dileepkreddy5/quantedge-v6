@@ -7,17 +7,17 @@ def _s(id,label,field,weight,good,great,hib=True,status="live",evidence=""):
 
 CATEGORIES = {
  "sentiment_level": ("Sentiment Level", 2.80, [
-   _s("net_sentiment","Net sentiment","net_sentiment",0.22,0.0,0.5,evidence="(positive-negative)/total articles"),
+   _s("net_sentiment","Net sentiment","net_sentiment",0.22,0.10,0.50,evidence="(positive-negative)/total articles"),
    _s("positive_ratio","Positive article share","positive_ratio",0.15,0.4,0.7,evidence="share of bullish coverage"),
    _s("negative_ratio","Negative article share","negative_ratio",0.15,0.2,0.05,hib=False,evidence="share of bearish coverage"),
-   _s("sentiment_mean","Mean sentiment score","sentiment_score_mean",0.18,0.0,0.5,evidence="average sentiment (-1 to +1)"),
+   _s("sentiment_mean","Mean sentiment score","sentiment_score_mean",0.18,0.10,0.50,evidence="average sentiment (-1 to +1)"),
    _s("sentiment_dispersion","Sentiment dispersion","sentiment_dispersion",0.10,0.9,0.5,hib=False,evidence="disagreement in coverage (lower=clearer)"),
    _s("bull_bear_ratio","Bull/bear ratio","bullish_bearish_ratio",0.12,1.5,4.0,evidence="positive vs negative articles"),
    _s("strong_sentiment","Non-neutral share","strong_sentiment_share",0.08,0.3,0.6,evidence="conviction in coverage"),
  ]),
  "sentiment_trend": ("Sentiment Trend", 1.80, [
-   _s("sentiment_7d","7-day sentiment","sentiment_7d",0.22,0.0,0.4,evidence="recent-week sentiment"),
-   _s("sentiment_30d","30-day sentiment","sentiment_30d",0.18,0.0,0.4,evidence="month sentiment"),
+   _s("sentiment_7d","7-day sentiment","sentiment_7d",0.22,0.05,0.45,evidence="recent-week sentiment"),
+   _s("sentiment_30d","30-day sentiment","sentiment_30d",0.18,0.05,0.45,evidence="month sentiment"),
    _s("sentiment_trend","Sentiment trend","sentiment_trend",0.25,-0.1,0.15,evidence="7d vs prior weeks (improving?)"),
    _s("recent_vs_base","Recent vs baseline","recent_vs_baseline_sentiment",0.18,-0.1,0.1,evidence="7d vs 30d shift"),
    _s("sentiment_accel","Sentiment acceleration","sentiment_acceleration",0.17,-0.1,0.1,evidence="latest vs prior articles"),
@@ -54,15 +54,15 @@ CATEGORIES = {
    _s("product_launch","Product launch","product_launch_flag",0.15,0,1,evidence="launch/unveiling"),
  ]),
  "divergence": ("Sentiment-Price Divergence", 0.90, [
-   _s("contrarian","Contrarian signal","contrarian_signal",0.40,-1,1,evidence="positive news + falling price = potential upside"),
+   _s("contrarian","Contrarian signal","contrarian_signal",0.40,-0.5,1.0,evidence="positive news + falling price = potential upside"),
    _s("confirmation","Sentiment-price confirmation","confirmation_score",0.30,0,1,evidence="news and price agree"),
-   _s("divergence","Sentiment-price divergence","sentiment_price_divergence",0.30,-1,1,evidence="news vs price direction"),
+   _s("divergence","Sentiment-price divergence","sentiment_price_divergence",0.30,-0.5,1.0,evidence="news vs price direction"),
  ]),
  "recency": ("Recency & Freshness", 0.30, [
    _s("fresh_share","Fresh-news share","fresh_news_share",0.35,0.1,0.5,evidence="articles in last 2 days"),
    _s("hours_since","Hours since latest","hours_since_latest",0.30,72,6,hib=False,evidence="recency of latest article"),
    _s("stale","Stale coverage","stale_flag",0.20,1,0,hib=False,evidence="no fresh news flag"),
-   _s("latest_sent","Latest article sentiment","latest_sentiment",0.15,-1,1,evidence="most recent article tone"),
+   _s("latest_sent","Latest article sentiment","latest_sentiment",0.15,0.0,1.0,evidence="most recent article tone"),
  ]),
  "narrative": ("Narrative Momentum", 0.20, [
    _s("emerging","Emerging topics","emerging_topics",0.35,0,3,evidence="new themes appearing"),
