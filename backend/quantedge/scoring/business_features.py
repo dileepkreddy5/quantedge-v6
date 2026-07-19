@@ -33,6 +33,14 @@ def compute_business_features(merged, fin_features, wacc=None, peer_data=None):
     f={}
     if not merged or len(merged)<8: return f
     wacc=wacc or 0.09
+    # derive fields not directly present
+    for q in merged:
+        oi=q.get("operating_income"); da=q.get("depreciation_amortization")
+        q["_ebitda_derived"]=(oi+da) if (oi is not None and da is not None) else None
+        ltd=q.get("long_term_debt") or 0; std=q.get("short_term_debt") or q.get("short_term_debt2") or 0
+        q["_total_debt"]=(ltd+std) if (q.get("long_term_debt") is not None or q.get("short_term_debt") is not None) else None
+        oe=q.get("operating_expenses"); rd=q.get("rd")
+        q["_sga_derived"]=(oe-rd) if (oe is not None and rd is not None) else oe
     def S(k,n=24): return [q.get(k) for q in merged[-n:]]
     def ttm(k,steps=16):
         out=[]
@@ -43,14 +51,14 @@ def compute_business_features(merged, fin_features, wacc=None, peer_data=None):
 
     rev_t=ttm("revenue"); ni_t=ttm("net_income"); op_t=ttm("operating_income")
     cogs_t=ttm("cost_of_revenue"); gp_t=[rev_t[i]-cogs_t[i] for i in range(min(len(rev_t),len(cogs_t)))]
-    ocf_t=ttm("operating_cash_flow"); capex_t=ttm("capex"); ebitda_t=ttm("ebitda")
-    eq=S("equity"); ni=S("net_income"); assets=S("total_assets")
+    ocf_t=ttm("operating_cash_flow"); capex_t=ttm("capex"); ebitda_t=ttm("_ebitda_derived")
+    eq=S("equity"); ni=S("net_income"); assets=S("assets")
     roic=fin_features.get("roic_ex_goodwill") or fin_features.get("roic")
 
     # 1. MOAT STRENGTH
     f["roic_level"]=roic
     f["roic_wacc_spread"]=(roic-wacc) if roic is not None else None
-    debt_s=S("total_debt")
+    debt_s=S("_total_debt")
     roic_hist=[]
     for i in range(len(op_t)):
         idx=min(len(eq)-1, i+3)
@@ -127,7 +135,7 @@ def compute_business_features(merged, fin_features, wacc=None, peer_data=None):
 
     # 6. MANAGEMENT & CAPITAL ALLOCATION
     f["buyback_yield"]=fin_features.get("buyback_yield")
-    sh=S("shares_outstanding"); shv=[x for x in sh if x is not None]
+    sh=S("diluted_shares"); shv=[x for x in sh if x is not None]
     if len(shv)>=8:
         f["buyback_consistency"]=1.0 if shv[-1]<shv[0] else 0.0
         f["share_count_cagr"]=_cagr(shv)
@@ -136,7 +144,7 @@ def compute_business_features(merged, fin_features, wacc=None, peer_data=None):
     f["reinvestment_quality"]=(fin_features.get("reinvestment_rate")*roic) if (fin_features.get("reinvestment_rate") is not None and roic is not None) else None
     gw=S("goodwill"); gwv=[x for x in gw if x is not None]
     f["ma_intensity"]=_cagr(gwv) if len(gwv)>=8 else None
-    sbc_t=ttm("stock_comp")
+    sbc_t=ttm("sbc")
     if sbc_t and rev_t: f["sbc_intensity"]=sbc_t[-1]/rev_t[-1] if rev_t[-1] else None
     div_t=ttm("dividends_paid")
     if div_t and ni_t and ni_t[-1]: f["total_payout_ratio"]=abs(div_t[-1])/ni_t[-1]
@@ -174,16 +182,16 @@ def compute_business_features(merged, fin_features, wacc=None, peer_data=None):
         f["earnings_cyclicality"]=_stdev(eg)
     f["revenue_volatility"]=_stdev(growths)
     f["asset_intensity"]=fin_features.get("capex_intensity")
-    rd_t=ttm("rd_expense")
+    rd_t=ttm("rd")
     if rd_t and rev_t: f["rd_intensity"]=rd_t[-1]/rev_t[-1] if rev_t[-1] else None
-    f["leverage_stability"]=_stability(S("total_debt"))
+    f["leverage_stability"]=_stability(S("_total_debt"))
     f["customer_concentration_risk"]=None
 
     # 10. INTANGIBLE MOAT
     f["rd_intensity_moat"]=f.get("rd_intensity")
     if rd_t and len(rev_t)>=5 and rd_t[-1]:
         f["rd_productivity"]=(rev_t[-1]-rev_t[-5])/rd_t[-1]
-    sga_t=ttm("sga_expense")
+    sga_t=ttm("_sga_derived")
     if sga_t and rev_t: f["brand_proxy"]=sga_t[-1]/rev_t[-1] if rev_t[-1] else None
     f["switching_costs"]=None; f["network_effects"]=None
     return f
