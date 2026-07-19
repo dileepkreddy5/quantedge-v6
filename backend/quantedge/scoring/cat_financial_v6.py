@@ -23,6 +23,10 @@ CATEGORIES = {
    _s("operating_margin_trend","Operating margin trend","operating_margin_trend",0.25,0.0,0.01,evidence="slope of operating margin"),
    _s("cogs_ratio","COGS efficiency","cogs_ratio",0.25,0.70,0.35,hib=False,evidence="cost of revenue / revenue"),
    _s("rd_intensity","R&D intensity","rd_intensity",0.20,0.03,0.15,evidence="R&D / revenue (innovation investment)"),
+   _s("deferred_rev_to_revenue","Deferred revenue / revenue","deferred_rev_to_revenue",0.20,0.05,0.20,evidence="recurring/contracted revenue base"),
+   _s("deferred_rev_growth","Deferred revenue growth","deferred_rev_growth",0.15,0.0,0.15,evidence="growth in contracted future revenue"),
+   _s("segment_revenue","Segment revenue mix","segment_revenue_diversification",0.0,0.4,0.7,status="needs_source",evidence="segment concentration (10-K segment data — pending)"),
+   _s("rpo","Remaining performance obligations","rpo_coverage",0.0,0.5,1.5,status="needs_source",evidence="RPO / annual revenue (backlog — pending)"),
  ]),
  "cash_flow": ("Cash Flow Intelligence", 2.50, [
    _s("fcf_margin","Free cash flow margin","fcf_margin",0.45,0.05,0.25,evidence="(OCF - capex) / revenue"),
@@ -40,6 +44,10 @@ CATEGORIES = {
    _s("current_ratio","Current ratio","current_ratio",0.35,1.2,2.0,cap=3.0,cap_score=80,evidence="current assets / current liabilities"),
    _s("cash_ratio","Cash ratio","cash_ratio",0.35,0.3,0.8,evidence="cash / current liabilities"),
    _s("dso","Days sales outstanding","dso",0.35,60,30,hib=False,evidence="receivables collection days"),
+   _s("net_debt","Net debt","net_debt",0.30,0,-50e9,hib=False,evidence="total debt - cash (negative = net cash)"),
+   _s("retained_earnings_ratio","Retained earnings / assets","retained_earnings_ratio",0.30,0.2,0.5,evidence="self-funded capital base"),
+   _s("book_value_per_share","Book value / share","book_value_per_share",0.0,0,0,status="reference",evidence="equity / diluted shares (valuation input)"),
+   _s("tangible_bvps","Tangible book value / share","tangible_bvps",0.0,0,0,status="reference",evidence="(equity - goodwill - intangibles) / shares"),
  ]),
  "profitability": ("Profitability Intelligence", 2.00, [
    _s("roic","Return on invested capital","roic",0.45,0.08,0.20,peer_key="roic",floor=0.0,floor_score=25,evidence="NOPAT / invested capital"),
@@ -48,6 +56,9 @@ CATEGORIES = {
    _s("roe","Return on equity","roe",0.30,0.10,0.25,peer_key="roe",evidence="net income / equity (DuPont)"),
    _s("roa","Return on assets","roa",0.25,0.03,0.12,evidence="net income / assets"),
    _s("roic_stability","ROIC stability","roic_stability",0.20,0.6,0.9,evidence="1 - CoV of ROIC (moat durability)"),
+   _s("ev_ebitda","EV / EBITDA","ev_ebitda",0.0,0,0,status="reference",evidence="enterprise value / EBITDA (scored in Valuation)"),
+   _s("ev_revenue","EV / Revenue","ev_revenue",0.0,0,0,status="reference",evidence="EV / revenue (scored in Valuation)"),
+   _s("price_to_book","Price / book","price_to_book",0.0,0,0,status="reference",evidence="price / book value (scored in Valuation)"),
  ]),
  "capital_allocation": ("Capital Allocation Intelligence", 1.80, [
    _s("reinvestment_rate","Reinvestment rate","reinvestment_rate",0.35,0.2,0.5,evidence="capex / operating cash flow"),
@@ -61,6 +72,8 @@ CATEGORIES = {
    _s("piotroski_f","Piotroski F-score","piotroski_f",0.45,4,8,evidence="9-point fundamental quality"),
    _s("net_debt_to_ebitda","Net debt / EBITDA","net_debt_to_ebitda",0.35,2.5,0.5,hib=False,evidence="(debt - cash) / EBITDA"),
    _s("debt_to_ebitda","Debt / EBITDA","debt_to_ebitda",0.25,3.0,1.0,hib=False,evidence="leverage vs earnings"),
+   _s("interest_coverage","Interest coverage","interest_coverage",0.35,4,12,cap=40,cap_score=98,evidence="EBIT / interest expense"),
+   _s("adj_debt_to_ebitda","Adj. debt / EBITDA","adj_debt_to_ebitda",0.25,3.5,1.5,hib=False,evidence="(debt + leases) / EBITDA"),
  ]),
  "liquidity_solvency": ("Liquidity & Solvency Intelligence", 1.20, [
    _s("quick_ratio","Quick ratio","quick_ratio",0.35,1.0,1.5,evidence="(current assets - inventory) / current liab"),
@@ -83,6 +96,8 @@ CATEGORIES = {
    _s("revenue_cagr_3y","Revenue 3y CAGR","revenue_cagr_3y",0.25,0.05,0.15,evidence="3-year revenue CAGR"),
    _s("earnings_cagr_3y","Earnings 3y CAGR","earnings_cagr_3y",0.25,0.05,0.15,evidence="3-year net income CAGR"),
    _s("revenue_stability","Revenue stability","revenue_stability",0.20,0.6,0.9,evidence="consistency of revenue growth"),
+   _s("revenue_cagr_5y","Revenue 5y CAGR","revenue_cagr_5y",0.20,0.05,0.15,evidence="5-year revenue CAGR (durability)"),
+   _s("earnings_cagr_5y","Earnings 5y CAGR","earnings_cagr_5y",0.20,0.05,0.18,evidence="5-year earnings CAGR"),
  ]),
  "efficiency": ("Efficiency Intelligence", 0.60, [
    _s("dio","Days inventory","dio",0.30,90,30,hib=False,evidence="inventory days"),

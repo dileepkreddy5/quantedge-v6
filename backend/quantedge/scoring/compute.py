@@ -49,6 +49,16 @@ def score_signal(value: Optional[float], spec: Dict[str, Any],
                  peer_values: Optional[List[float]] = None) -> Dict[str, Any]:
     v = _finite(value)
     hib = spec.get("higher_is_better", True)
+    status = spec.get("status", "live")
+    # 'reference' = computed & displayed but NOT scored (owned by another module,
+    # e.g. EV multiples belong to Valuation) — prevents double-counting.
+    if status == "reference":
+        return {"value": v, "score": None, "method": "reference",
+                "reason": "display-only; scored in its owning module"}
+    # 'needs_source' = honest placeholder, no data yet
+    if status == "needs_source":
+        return {"value": None, "score": None, "method": "needs_source",
+                "reason": "data source pending"}
     if v is None:
         return {"value": None, "score": None, "method": "missing",
                 "reason": "input unavailable"}

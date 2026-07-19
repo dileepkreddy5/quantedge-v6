@@ -108,4 +108,59 @@ def compute_financial_features(merged, market_cap=None, wacc=None):
     pf=piotroski_f_score(cur,prev,ttm); f["piotroski_f"]=pf["f_score"]; f["piotroski_components"]=pf["components"]
     az=altman_z(cur,ttm,market_cap or 0); f["altman_z"]=az.get("z_score"); f["altman_zone"]=az.get("zone")
     bm=beneish_m_score(cur,prev); f["beneish_m"]=bm.get("m_score"); f["beneish_flag"]=bm.get("flag")
+    f.update(_compute_deepening(m, f, market_cap=market_cap))
+    return f
+
+
+def _compute_deepening(m, feats, market_cap=None):
+    """Tab-3 deepening: EV multiples, book value, interest coverage, deferred-rev
+    quality, 5y CAGRs, net debt, adjusted leverage. All real, missing->None."""
+    f = {}
+    cur = m[-1]
+    def ttm(k):
+        vals=[q[k] for q in m[-4:] if q.get(k) is not None]
+        return sum(vals) if len(vals)==4 else None
+    def ttm_at(k,i):
+        vals=[m[j][k] for j in range(i-3,i+1) if m[j].get(k) is not None]
+        return sum(vals) if len(vals)==4 else None
+    ebitda=feats.get("ebitda")
+    debt=_f(cur.get("long_term_debt")) or 0
+    std=_f(cur.get("short_term_debt")) or 0
+    cash=_f(cur.get("cash")) or 0
+    total_debt=debt+std
+    eq=_f(cur.get("equity")); assets=_f(cur.get("assets"))
+    gw=_f(cur.get("goodwill")) or 0; intang=_f(cur.get("intangibles")) or 0
+    shares=_f(cur.get("diluted_shares"))
+    rev=ttm("revenue"); oi=ttm("operating_income"); int_exp=ttm("interest_expense")
+    fcf=feats.get("fcf_margin") and rev and feats["fcf_margin"]*rev
+    f["net_debt"]=total_debt-cash
+    if market_cap:
+        ev=market_cap+total_debt-cash
+        f["enterprise_value"]=ev
+        f["ev_ebitda"]=_safe_div(ev,ebitda)
+        f["ev_revenue"]=_safe_div(ev,rev)
+        f["ev_fcf"]=_safe_div(ev,fcf)
+    if shares and eq is not None:
+        f["book_value_per_share"]=eq/shares
+        f["tangible_bvps"]=(eq-gw-intang)/shares
+        if market_cap:
+            price=market_cap/shares
+            f["price_to_book"]=_safe_div(price, eq/shares)
+            tbv=eq-gw-intang
+            f["price_to_tangible_book"]=_safe_div(price, tbv/shares) if tbv>0 else None
+    if oi is not None and int_exp and int_exp!=0:
+        f["interest_coverage"]=oi/abs(int_exp)
+    lease=_f(cur.get("operating_lease_total")) or _f(cur.get("operating_lease_liab")) or 0
+    if ebitda: f["adj_debt_to_ebitda"]=_safe_div(total_debt+lease, ebitda)
+    dr=_f(cur.get("deferred_revenue"))
+    if dr is not None and rev: f["deferred_rev_to_revenue"]=dr/rev
+    dr_series=[q.get("deferred_revenue") for q in m if q.get("deferred_revenue") is not None]
+    if len(dr_series)>=5 and dr_series[-5] and dr_series[-5]>0:
+        f["deferred_rev_growth"]=dr_series[-1]/dr_series[-5]-1.0
+    rev_s=[ttm_at("revenue",i) for i in range(3,len(m))]; rev_s=[x for x in rev_s if x is not None]
+    ni_s=[ttm_at("net_income",i) for i in range(3,len(m))]; ni_s=[x for x in ni_s if x is not None]
+    if len(rev_s)>=20: f["revenue_cagr_5y"]=_cagr(rev_s[-20],rev_s[-1],5)
+    if len(ni_s)>=20: f["earnings_cagr_5y"]=_cagr(ni_s[-20],ni_s[-1],5)
+    re=_f(cur.get("retained_earnings"))
+    if re is not None and assets: f["retained_earnings_ratio"]=re/assets
     return f

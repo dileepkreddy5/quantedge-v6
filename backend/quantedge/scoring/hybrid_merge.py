@@ -60,8 +60,16 @@ def merge_quarters(polygon_quarters: List[Any], edgar: Dict[str, List[dict]]) ->
         }
         for metric in ["capex","dividends_paid","buybacks","receivables","goodwill",
                        "intangibles","sbc","interest_expense","rd","inventory",
-                       "accounts_payable","operating_lease_liab"]:
+                       "accounts_payable","operating_lease_liab","deferred_revenue",
+                       "retained_earnings","short_term_debt2","operating_lease_total"]:
             row[metric] = _nearest_edgar_val(edgar.get(metric, []), pe)
+        # interest expense: prefer the fuller InterestExpense tag when present
+        ie_full = _nearest_edgar_val(edgar.get("interest_expense_full", []), pe)
+        if ie_full is not None:
+            row["interest_expense"] = ie_full
+        # short-term debt: use the supplemental tag if base is absent
+        if row.get("short_term_debt") is None:
+            row["short_term_debt"] = row.get("short_term_debt2")
         da = _nearest_edgar_val(edgar.get("depreciation_amortization", []), pe)
         if da is None:
             dep = _nearest_edgar_val(edgar.get("depreciation", []), pe)

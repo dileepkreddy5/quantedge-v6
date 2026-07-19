@@ -32,6 +32,18 @@ function fmt(id: string, v: number | null): string {
   if (id === 'piotroski_f') return v.toFixed(0) + '/9';
   if (id === 'altman_z' || id === 'beneish_m') return v.toFixed(2);
   if (id === 'share_count_trend') return (v * 100).toFixed(2) + '%/q';
+  const dollarsB = ['net_debt','enterprise_value'];
+  if (dollarsB.includes(id)) {
+    if (Math.abs(v) >= 1e12) return '$' + (v/1e12).toFixed(2) + 'T';
+    if (Math.abs(v) >= 1e9) return '$' + (v/1e9).toFixed(1) + 'B';
+    return '$' + (v/1e6).toFixed(0) + 'M';
+  }
+  const perShare = ['book_value_per_share','tangible_bvps'];
+  if (perShare.includes(id)) return '$' + v.toFixed(2);
+  if (id === 'interest_coverage') return v.toFixed(1) + '×';
+  if (id === 'deferred_rev_to_revenue' || id === 'deferred_rev_growth' ||
+      id === 'revenue_cagr_5y' || id === 'earnings_cagr_5y' || id === 'retained_earnings_ratio') return (v*100).toFixed(1) + '%';
+  if (id === 'ev_ebitda' || id === 'ev_revenue' || id === 'price_to_book' || id === 'adj_debt_to_ebitda') return v.toFixed(2) + '×';
   return v.toFixed(3);
 }
 interface Sig { id: string; label: string; weight: number; status: string; evidence: string;
@@ -143,19 +155,27 @@ export default function FinancialIntelligencePanel({ ticker }: { ticker: string 
             </div>
             {isOpen(cat.id) && (
               <div style={{ background: '#141414', padding: 10 }}>
-                {cat.signals.map(s => (
-                  <div key={s.id} style={{ marginBottom: 9 }}>
+                {cat.signals.map(s => {
+                  const isRef = s.method === 'reference';
+                  const isPending = s.method === 'needs_source';
+                  return (
+                  <div key={s.id} style={{ marginBottom: 9, opacity: isPending ? 0.5 : 1 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-                      <span style={{ color: '#cdbfae' }}>{s.label}</span>
-                      <span style={{ color: heat(s.score), fontWeight: 600 }}>
-                        {fmt(s.id, s.raw_value)} · {s.score?.toFixed(0) ?? '—'}</span>
+                      <span style={{ color: '#cdbfae' }}>{s.label}
+                        {isRef && <span style={{ fontSize: 9, color: '#7a86c0', marginLeft: 6, border: '1px solid #3a4060', borderRadius: 4, padding: '1px 4px' }}>REF</span>}
+                        {isPending && <span style={{ fontSize: 9, color: '#8a7519', marginLeft: 6, border: '1px solid #4a4020', borderRadius: 4, padding: '1px 4px' }}>SOON</span>}
+                      </span>
+                      <span style={{ color: isRef ? '#9db0d8' : heat(s.score), fontWeight: 600 }}>
+                        {isPending ? 'pending' : fmt(s.id, s.raw_value)}{!isRef && !isPending ? ' · ' + (s.score?.toFixed(0) ?? '—') : ''}</span>
                     </div>
+                    {!isRef && !isPending && (
                     <div style={{ height: 5, background: '#242424', borderRadius: 3, marginTop: 3, overflow: 'hidden' }}>
                       <div style={{ height: '100%', width: `${s.score ?? 0}%`, background: heat(s.score) }} />
-                    </div>
+                    </div>)}
                     <div style={{ fontSize: 10, color: '#6f665b', marginTop: 2 }}>{s.evidence}</div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

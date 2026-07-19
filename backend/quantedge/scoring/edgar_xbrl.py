@@ -43,6 +43,11 @@ CONCEPTS = {
     "short_term_debt": ["ShortTermBorrowings", "DebtCurrent"],
     "inventory": ["InventoryNet"],
     "accounts_payable": ["AccountsPayableCurrent", "AccountsPayableTradeCurrent"],
+    "deferred_revenue": ["ContractWithCustomerLiabilityCurrent", "ContractWithCustomerLiability", "DeferredRevenueCurrent"],
+    "retained_earnings": ["RetainedEarningsAccumulatedDeficit"],
+    "short_term_debt2": ["ShortTermBorrowings", "DebtCurrent", "LongTermDebtCurrent"],
+    "interest_expense_full": ["InterestExpense", "InterestExpenseNonoperating", "InterestAndDebtExpense"],
+    "operating_lease_total": ["OperatingLeaseLiability"],
 }
 
 def _days(start: Optional[str], end: Optional[str]) -> Optional[int]:

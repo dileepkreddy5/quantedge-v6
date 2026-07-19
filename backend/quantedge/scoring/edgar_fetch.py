@@ -11,9 +11,10 @@ from quantedge.scoring.edgar_xbrl import (
 _CIK_CACHE: Dict[str, int] = {}
 _CONCEPT_CACHE: Dict[str, dict] = {}
 FLOW = {"capex","dividends_paid","buybacks","depreciation_amortization",
-        "depreciation","amortization","sbc","interest_expense","sga","rd"}
+        "depreciation","amortization","sbc","interest_expense","interest_expense_full","sga","rd"}
 STOCK = {"receivables","goodwill","intangibles","operating_lease_liab",
-         "short_term_debt","inventory","accounts_payable"}
+         "short_term_debt","inventory","accounts_payable","deferred_revenue",
+         "retained_earnings","short_term_debt2","operating_lease_total"}
 
 async def _ticker_to_cik(ticker: str, client: httpx.AsyncClient) -> Optional[int]:
     t = ticker.upper().strip()
