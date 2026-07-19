@@ -12,6 +12,7 @@ def _s(id,label,field,weight,good,great,hib=True,status="live",floor=None,floor_
 
 CATEGORIES = {
  "dcf": ("DCF Valuation", 2.00, [
+   _s("pv_explicit","Explicit-period value %","pv_explicit_pct",0.25,0.25,0.50,evidence="value from forecast vs terminal (higher=less speculative)"),
    _s("dcf_mos","Margin of safety (DCF)","margin_of_safety",0.40,0.0,0.30,floor=-0.5,floor_score=15,evidence="(fair - price)/fair, weighted DCF"),
    _s("dcf_upside","Upside to weighted DCF","dcf_weighted_upside",0.40,0.0,0.30,evidence="weighted DCF fair value vs price"),
    _s("dcf_scenarios","% DCF scenarios above price","dcf_scenarios_above_price",0.40,0.3,0.7,evidence="fraction of WACCxTG grid where fair>price"),
@@ -19,6 +20,7 @@ CATEGORIES = {
    _s("dcf_p2f","Price / fair value","price_to_fair",0.50,1.0,0.7,hib=False,evidence="1.0 = fair, <1 = discount"),
  ]),
  "intrinsic": ("Intrinsic Value", 2.00, [
+   _s("owner_earnings_yield","Owner-earnings yield","owner_earnings_yield",0.30,0.03,0.07,evidence="Buffett owner earnings / market cap"),
    _s("consensus_upside","Intrinsic consensus upside","consensus_upside",0.55,0.0,0.30,evidence="upside vs avg of all intrinsic models"),
    _s("epv_upside","EPV upside","epv_upside",0.40,0.0,0.20,evidence="Earnings Power Value vs price"),
    _s("graham_upside","Graham upside","graham_upside",0.35,0.0,0.20,evidence="Graham number vs price"),
@@ -26,6 +28,9 @@ CATEGORIES = {
    _s("ddm_upside","DDM upside (payers)","ddm_upside",0.35,0.0,0.15,evidence="dividend discount model vs price"),
  ]),
  "relative_multiples": ("Relative Valuation", 1.50, [
+   _s("ps_ratio","P/S","ps_ratio",0.15,8,3,hib=False,evidence="price / sales"),
+   _s("pcf_ratio","P/CF","pcf_ratio",0.15,25,12,hib=False,evidence="price / operating cash flow"),
+   _s("ev_fcf","EV/FCF","ev_fcf",0.15,35,18,hib=False,evidence="enterprise value / free cash flow"),
    _s("pe","P/E","mult_pe",0.30,25,12,hib=False,floor=60,floor_score=10,evidence="price / earnings"),
    _s("peg","PEG","mult_peg",0.30,2.0,1.0,hib=False,evidence="P/E / growth"),
    _s("ev_ebitda","EV/EBITDA","mult_ev_ebitda",0.30,18,10,hib=False,evidence="enterprise value / EBITDA"),
@@ -34,21 +39,31 @@ CATEGORIES = {
    _s("p_fcf","P/FCF","mult_p_fcf",0.20,30,15,hib=False,evidence="price / free cash flow"),
  ]),
  "earnings_based": ("Earnings-Based Value", 1.20, [
+   _s("fcf_yield_real","FCF yield","fcf_yield",0.20,0.03,0.07,evidence="free cash flow / market cap"),
+   _s("shareholder_yield","Shareholder yield","shareholder_yield",0.18,0.02,0.06,evidence="(buybacks+dividends)/market cap"),
+   _s("cash_return","Cash return on price","cash_return_on_price",0.15,0.04,0.09,evidence="operating cash flow / market cap"),
    _s("pb","P/B","mult_pb",0.35,6,2,hib=False,evidence="price / book value"),
    _s("earnings_yield","Earnings yield","mult_pe",0.35,25,12,hib=False,evidence="inverse P/E"),
    _s("ev_ic","EV/Invested Capital","mult_ev_ic",0.30,8,3,hib=False,evidence="EV / invested capital"),
    _s("pe_history","P/E vs own history","pe_vs_history",0.20,1.2,0.8,hib=False,evidence="current P/E / 1.5yr avg (<1=cheap)"),
  ]),
  "reverse_dcf": ("Market Expectations", 1.00, [
+   _s("exp_feasibility","Expectations feasibility","expectations_feasibility",0.25,0.4,0.8,evidence="is implied growth achievable vs history"),
+   _s("implied_vs_hist","Implied vs historical growth","implied_vs_historical_growth",0.20,0.10,-0.02,hib=False,evidence="how much MORE than history is priced in"),
    _s("implied_growth","Reverse-DCF implied growth","reverse_dcf_implied_growth",0.60,0.15,0.05,hib=False,cap=0.35,cap_score=10,evidence="growth the price assumes; lower=less demanding"),
    _s("expectation_gap","Expectation demand","reverse_dcf_implied_growth",0.40,0.15,0.05,hib=False,evidence="how much growth is priced in"),
  ]),
  "margin_of_safety": ("Margin of Safety", 1.00, [
+   _s("risk_reward","Risk/reward ratio","risk_reward_ratio",0.25,1.0,2.0,evidence="upside to bull / downside to bear"),
    _s("mos_primary","Primary MoS","margin_of_safety",0.50,0.0,0.35,floor=-0.5,floor_score=10,evidence="downside protection vs fair value"),
    _s("mos_consensus","Consensus MoS","consensus_upside",0.30,0.0,0.30,evidence="upside across all models"),
    _s("scenario_safety","Scenario robustness","dcf_scenarios_above_price",0.20,0.3,0.7,evidence="% of DCF scenarios with margin"),
  ]),
  "quality_price": ("Quality at a Price", 0.60, [
+   _s("greenblatt_ey","Greenblatt earnings yield","greenblatt_earnings_yield",0.25,0.05,0.10,evidence="EBIT/EV (magic formula)"),
+   _s("roic_to_ev","ROIC-to-EV","roic_to_ev",0.20,0.04,0.09,evidence="return on enterprise value"),
+   _s("fcf_to_ev","FCF-to-EV","fcf_to_ev",0.20,0.03,0.07,evidence="free cash flow / enterprise value"),
+   _s("quality_value","Quality-value composite","quality_value_composite",0.25,0.15,0.30,evidence="ROIC + earnings yield (Greenblatt)"),
    _s("price_to_fair2","Price to fair","price_to_fair",0.60,1.0,0.75,hib=False,evidence="how far above/below fair"),
    _s("fcf_yield","FCF yield","mult_p_fcf",0.40,30,15,hib=False,evidence="inverse P/FCF"),
  ]),

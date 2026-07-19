@@ -14,6 +14,7 @@ from ml.fundamentals.quality_engine import fetch_quarterly_financials, estimate_
 from quantedge.scoring.edgar_fetch import fetch_edgar_supplement
 from quantedge.scoring.hybrid_merge import merge_quarters
 from quantedge.scoring.financial_features import compute_financial_features
+from quantedge.scoring.valuation_deepening import compute_valuation_deepening
 from quantedge.scoring.valuation_features import compute_valuation_features, compute_capm_beta
 from quantedge.scoring.compute import score_signal
 from quantedge.scoring.cat_valuation_v6 import CATEGORIES, valuation_rating
@@ -143,6 +144,11 @@ async def compute_valuation_intelligence(ticker: str, api_key: str) -> Dict[str,
     deep = compute_valuation_deep(merged, fin_features, val_features, price, market_cap,
                                   wacc_dict.get("mid"), price_history=price_history)
     val_features.update(deep)
+    try:
+        _deep=compute_valuation_deepening(val_features, fin_features if "fin_features" in dir() else {})
+        val_features.update(_deep)
+    except Exception as _e:
+        pass
     tree=score_valuation(val_features)
     n_scored=sum(c["n_scored"] for c in tree["categories"])
     n_total=sum(c["n_signals"] for c in tree["categories"])
