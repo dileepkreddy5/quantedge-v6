@@ -110,7 +110,7 @@ async def _price_volume_si(ticker: str, api_key: str):
                 bars=(r.json() or {}).get("results",[])
                 closes=[b["c"] for b in bars]; volumes=[b.get("v",0) for b in bars]
             # short interest (latest few records)
-            rs=await c.get(f"{_POLY}/stocks/v1/short-interest?ticker={ticker}&limit=6&order=desc&sort=settlement_date&apiKey={api_key}")
+            rs=await c.get(f"{_POLY}/stocks/v1/short-interest?ticker={ticker}&limit=12&sort=settlement_date.desc&apiKey={api_key}")
             if rs.status_code==200:
                 si_records=(rs.json() or {}).get("results",[])
     except Exception as e:
