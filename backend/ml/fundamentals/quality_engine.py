@@ -55,17 +55,16 @@ class QuarterlyFinancials:
     tax_expense: Optional[float] = None
     pretax_income: Optional[float] = None
     cost_of_revenue: Optional[float] = None
-    sga_expense: Optional[float] = None
     rd_expense: Optional[float] = None
-    interest_expense: Optional[float] = None
+    operating_expenses: Optional[float] = None
+    costs_and_expenses: Optional[float] = None
+    nonoperating_income: Optional[float] = None
+    income_after_tax: Optional[float] = None
     diluted_shares: Optional[float] = None
     basic_shares: Optional[float] = None
     inventory: Optional[float] = None
-    accounts_receivable: Optional[float] = None
     accounts_payable: Optional[float] = None
-    goodwill: Optional[float] = None
-    intangible_assets: Optional[float] = None
-    dividends_paid: Optional[float] = None
+    fixed_assets: Optional[float] = None
     financing_cash_flow: Optional[float] = None
 
     @property
@@ -251,19 +250,18 @@ async def fetch_quarterly_financials(
             operating_cash_flow=_safe(cashflow, "net_cash_flow_from_operating_activities"),
             capex=_safe(cashflow, "payments_to_acquire_property_plant_and_equipment"),
             tax_expense=_safe(income, "income_tax_expense_benefit"),
-            pretax_income=_safe(income, "income_loss_from_continuing_operations_before_income_tax_expense_benefit"),
+            pretax_income=_safe(income, "income_loss_from_continuing_operations_before_tax"),
             cost_of_revenue=_safe(income, "cost_of_revenue"),
-            sga_expense=_safe(income, "selling_general_and_administrative_expenses"),
             rd_expense=_safe(income, "research_and_development"),
-            interest_expense=_safe(income, "interest_expense_operating"),
+            operating_expenses=_safe(income, "operating_expenses"),
+            costs_and_expenses=_safe(income, "costs_and_expenses"),
+            nonoperating_income=_safe(income, "nonoperating_income_loss"),
+            income_after_tax=_safe(income, "income_loss_from_continuing_operations_after_tax"),
             diluted_shares=_safe(income, "diluted_average_shares"),
             basic_shares=_safe(income, "basic_average_shares"),
             inventory=_safe(balance, "inventory"),
-            accounts_receivable=_safe(balance, "accounts_receivable"),
             accounts_payable=_safe(balance, "accounts_payable"),
-            goodwill=_safe(balance, "goodwill"),
-            intangible_assets=_safe(balance, "intangible_assets"),
-            dividends_paid=_safe(cashflow, "payments_of_dividends"),
+            fixed_assets=_safe(balance, "fixed_assets"),
             financing_cash_flow=_safe(cashflow, "net_cash_flow_from_financing_activities"),
         )
         quarters.append(q)
