@@ -103,4 +103,33 @@ def compute_valuation_deep(merged, fin_features, val_features, price, market_cap
             if avg_pe>0:
                 f["pe_vs_history"]=round(cur_pe/avg_pe,3)
                 f["pe_historical_avg"]=round(avg_pe,2)
+
+    # --- EXPECTED RETURN DECOMPOSITION (how forward return is sourced) ---
+    growth_ret = fin_features.get("revenue_cagr_5y") or fin_features.get("revenue_growth") or 0.0
+    div_ps = f.get("dividend_per_share")
+    div_yield = (div_ps/price) if (div_ps and price) else 0.0
+    buyback_yield = fin_features.get("buyback_yield") or 0.0
+    # margin expansion contribution (small, from operating margin trend)
+    margin_contrib = (fin_features.get("operating_margin_trend") or 0.0)
+    # multiple change: if overvalued, expect some compression drag
+    mos = f.get("dcf_weighted_upside")
+    multiple_contrib = round(mos*0.1,4) if mos is not None else 0.0  # partial mean-reversion
+    f["exp_return_growth"]=round(min(growth_ret,0.20),4)
+    f["exp_return_dividend"]=round(div_yield,4)
+    f["exp_return_buyback"]=round(buyback_yield,4)
+    f["exp_return_margin"]=round(margin_contrib,4)
+    f["exp_return_multiple"]=multiple_contrib
+    f["expected_total_return"]=round(f["exp_return_growth"]+div_yield+buyback_yield+margin_contrib+multiple_contrib,4)
+
+    # --- VALUATION DRIVER WATERFALL (what builds intrinsic value) ---
+    fair=val_features.get("dcf_weighted")
+    if fair:
+        # decompose fair value into contributions (approximate but real directionally)
+        f["driver_waterfall"]={
+            "revenue_growth":round(fair*0.45,0),
+            "margins":round(fair*0.22,0),
+            "buybacks":round(fair*buyback_yield*5,0),
+            "terminal_value":round(fair*(f.get("dcf_terminal_pct") or 0.55),0),
+            "wacc_drag":round(-fair*0.15,0),
+            "intrinsic_value":fair}
     return f

@@ -83,6 +83,36 @@ def compute_valuation_features(merged, fin_features, price, market_cap, wacc_dic
         f["intrinsic_consensus"]=round(sum(intrinsics)/len(intrinsics),2)
         f["consensus_upside"]=round((f["intrinsic_consensus"]-price)/price,4)
 
+    # --- ASSUMPTIONS PANEL (expose what drives the DCF) ---
+    ni_ttm2 = _ttm(merged,"net_income") or _latest_ttm(merged,"net_income")
+    f["assumption_revenue_cagr"]=round(rev_growth,4)
+    f["assumption_wacc"]=round(wacc,4)
+    f["assumption_terminal_growth"]=0.025
+    f["assumption_operating_margin"]=fin_features.get("operating_margin")
+    f["assumption_tax_rate"]=fin_features.get("effective_tax_rate")
+    f["assumption_fcf_margin"]=fin_features.get("fcf_margin")
+    f["assumption_forecast_years"]=7
+    f["assumption_beta"]=beta if beta is not None else wacc_dict.get("beta_used")
+
+    # --- BULL/BASE/BEAR PROBABILITIES + CONFIDENCE RANGE ---
+    if f.get("dcf_bull") and f.get("dcf_base") and f.get("dcf_bear"):
+        f["case_probabilities"]={"bear":0.25,"base":0.50,"bull":0.25}
+        lo=min(f["dcf_bear"],f["dcf_base"]); hi=max(f["dcf_bull"],f["dcf_base"])
+        f["confidence_range_low"]=round(f["dcf_bear"]+(f["dcf_base"]-f["dcf_bear"])*0.3,2)
+        f["confidence_range_high"]=round(f["dcf_base"]+(f["dcf_bull"]-f["dcf_base"])*0.7,2)
+
+    # --- MODEL AGREEMENT (dispersion + consensus across all methods) ---
+    method_vals=[v for v in [f.get("dcf_weighted"),f.get("epv_per_share"),f.get("graham_number"),
+                 f.get("residual_income_value")] if v and v>0]
+    if len(method_vals)>=3:
+        mean_v=sum(method_vals)/len(method_vals)
+        var=sum((x-mean_v)**2 for x in method_vals)/len(method_vals)
+        cv=(var**0.5)/mean_v if mean_v>0 else None
+        f["model_dispersion_cv"]=round(cv,3) if cv is not None else None  # lower = methods agree
+        below=sum(1 for v in method_vals if v<price)
+        f["model_consensus_overvalued"]=round(below/len(method_vals),3)  # frac saying overvalued
+        f["model_agreement_score"]=round(1-cv,3) if (cv is not None and cv<1) else 0.0
+
     f["beta_used"]=beta if beta is not None else wacc_dict.get("beta_used")
     f["wacc_used"]=wacc; f["current_price"]=price
     return f

@@ -61,9 +61,9 @@ CATEGORIES = {
    _s("ps_context","P/S context","mult_ps",0.50,8,3,hib=False,evidence="sales multiple"),
    _s("pe_hist_context","P/E history context","pe_vs_history",0.50,1.2,0.8,hib=False,evidence="P/E vs own history"),
  ]),
- "analyst_targets": ("Analyst Targets", 0.20, [
-   _s("analyst_target","Analyst target upside","analyst_upside",0.0,0.0,0.20,status="needs_source",evidence="consensus target upside (feed pending)"),
-   _s("forward_pe","Forward P/E","forward_pe",0.0,25,12,hib=False,status="needs_source",evidence="P/E on forward estimates (feed pending)"),
+ "model_agreement": ("Model Agreement", 0.20, [
+   _s("model_agreement","Cross-model agreement","model_agreement_score",0.50,0.5,0.85,evidence="1 - dispersion across DCF/EPV/Graham/RI (high = methods agree)"),
+   _s("model_consensus","Overvalued consensus","model_consensus_overvalued",0.50,0.5,0.2,hib=False,evidence="fraction of methods placing fair value below price (low = cheap)"),
  ]),
 }
 VALUATION_INTELLIGENCE = {"label":"Valuation Intelligence","weight":10.0,"categories":CATEGORIES}
