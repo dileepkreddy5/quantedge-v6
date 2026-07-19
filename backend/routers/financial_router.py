@@ -104,7 +104,7 @@ async def get_financial(ticker: str, http_request: Request,
     feats=compute_financial_features(merged,market_cap=market_cap,wacc=wacc)
 
     peers={}
-    pool=getattr(http_request.app.state,"db_pool",None)
+    pool=getattr(http_request.app.state,"db",None)
     if pool is not None:
         try:
             from services.peer_store import PeerStore

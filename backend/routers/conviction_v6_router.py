@@ -55,7 +55,7 @@ async def get_conviction(ticker: str, http_request: Request,
         return {"score": d.get("score"), "confidence": d.get("confidence"), "coverage": d.get("coverage")}
     async def _market_scorer(ticker: str):
         from routers.market_router import compute_market_intelligence
-        pool=getattr(http_request.app.state,"db_pool",None)
+        pool=getattr(http_request.app.state,"db",None)
         d = await compute_market_intelligence(ticker, api_key, pool)
         if not d.get("available"): return None
         return {"score": d.get("score"), "confidence": d.get("confidence"), "coverage": d.get("coverage")}

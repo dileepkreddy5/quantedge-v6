@@ -97,6 +97,6 @@ async def compute_market_intelligence(ticker: str, api_key: str, pool=None) -> D
 async def get_market(ticker: str, http_request: Request,
                      current_user: Optional[CognitoUser]=Depends(get_optional_user)):
     api_key=getattr(settings,"POLYGON_API_KEY","") or ""
-    pool=getattr(http_request.app.state,"db_pool",None)
+    pool=getattr(http_request.app.state,"db",None)
     result=await compute_market_intelligence(ticker, api_key, pool)
     return {"data":_san(result)}
