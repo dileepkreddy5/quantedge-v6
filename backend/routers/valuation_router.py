@@ -145,7 +145,15 @@ async def compute_valuation_intelligence(ticker: str, api_key: str) -> Dict[str,
                                   wacc_dict.get("mid"), price_history=price_history)
     val_features.update(deep)
     try:
-        _deep=compute_valuation_deepening(val_features, fin_features if "fin_features" in dir() else {})
+        def _ttm(k):
+            vals=[q.get(k) for q in merged[-4:]]
+            return sum(v for v in vals if v is not None) if all(v is not None for v in vals) else None
+        _raw_ttm={"revenue":_ttm("revenue"),"net_income":_ttm("net_income"),
+                  "operating_income":_ttm("operating_income"),"operating_cash_flow":_ttm("operating_cash_flow"),
+                  "free_cash_flow":_ttm("free_cash_flow"),"buybacks":_ttm("buybacks"),
+                  "dividends_paid":_ttm("dividends_paid"),
+                  "ebitda":(_ttm("operating_income") or 0)+(_ttm("depreciation_amortization") or 0)}
+        _deep=compute_valuation_deepening(val_features, fin_features, raw_ttm=_raw_ttm)
         val_features.update(_deep)
     except Exception as _e:
         pass

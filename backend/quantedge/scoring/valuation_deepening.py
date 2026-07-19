@@ -10,14 +10,17 @@ def _safe_div(a,b):
     a=_f(a); b=_f(b)
     return a/b if (a is not None and b not in (None,0)) else None
 
-def compute_valuation_deepening(vf, fin_features, price_history=None):
+def compute_valuation_deepening(vf, fin_features, raw_ttm=None, price_history=None):
     f={}
+    raw_ttm=raw_ttm or {}
     price=_f(vf.get("current_price")); ev=_f(vf.get("enterprise_value")); shares=_f(vf.get("diluted_shares"))
     mcap=(price*shares) if (price and shares) else None
-    rev=_f(vf.get("revenue")); ni=_f(vf.get("net_income")); ebitda=_f(vf.get("ebitda"))
-    fcf=_f(fin_features.get("free_cash_flow")) or _f(fin_features.get("fcf"))
-    ebit=_f(fin_features.get("operating_income")) or _f(fin_features.get("ebit"))
-    ocf=_f(fin_features.get("operating_cash_flow"))
+    rev=_f(vf.get("revenue")) or _f(raw_ttm.get("revenue"))
+    ni=_f(vf.get("net_income")) or _f(raw_ttm.get("net_income"))
+    ebitda=_f(vf.get("ebitda")) or _f(raw_ttm.get("ebitda"))
+    fcf=_f(raw_ttm.get("free_cash_flow")) or _f(raw_ttm.get("fcf"))
+    ebit=_f(raw_ttm.get("operating_income"))
+    ocf=_f(raw_ttm.get("operating_cash_flow"))
 
     f["ps_ratio"]=_safe_div(mcap,rev); f["pcf_ratio"]=_safe_div(mcap,ocf)
     f["ev_sales"]=_safe_div(ev,rev); f["ev_ebit"]=_safe_div(ev,ebit); f["ev_fcf"]=_safe_div(ev,fcf)
@@ -27,7 +30,7 @@ def compute_valuation_deepening(vf, fin_features, price_history=None):
 
     f["earnings_yield"]=_safe_div(ni,mcap); f["fcf_yield"]=_safe_div(fcf,mcap)
     f["ebit_ev_yield"]=_safe_div(ebit,ev)
-    buybacks=_f(fin_features.get("buybacks")); divs=_f(fin_features.get("dividends_paid"))
+    buybacks=_f(raw_ttm.get("buybacks")); divs=_f(raw_ttm.get("dividends_paid"))
     if mcap and (buybacks or divs): f["shareholder_yield"]=(abs(buybacks or 0)+abs(divs or 0))/mcap
     f["cash_return_on_price"]=_safe_div(ocf,mcap)
 
