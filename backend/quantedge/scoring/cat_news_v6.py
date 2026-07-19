@@ -7,17 +7,17 @@ def _s(id,label,field,weight,good,great,hib=True,status="live",evidence=""):
 
 CATEGORIES = {
  "sentiment_level": ("Sentiment Level", 2.80, [
-   _s("net_sentiment","Net sentiment","net_sentiment",0.22,0.10,0.50,evidence="(positive-negative)/total articles"),
+   _s("net_sentiment","Net sentiment","net_sentiment",0.22,0.10,0.55,evidence="(positive-negative)/total articles"),
    _s("positive_ratio","Positive article share","positive_ratio",0.15,0.4,0.7,evidence="share of bullish coverage"),
-   _s("negative_ratio","Negative article share","negative_ratio",0.15,0.2,0.05,hib=False,evidence="share of bearish coverage"),
-   _s("sentiment_mean","Mean sentiment score","sentiment_score_mean",0.18,0.10,0.50,evidence="average sentiment (-1 to +1)"),
-   _s("sentiment_dispersion","Sentiment dispersion","sentiment_dispersion",0.10,0.9,0.5,hib=False,evidence="disagreement in coverage (lower=clearer)"),
-   _s("bull_bear_ratio","Bull/bear ratio","bullish_bearish_ratio",0.12,1.5,4.0,evidence="positive vs negative articles"),
-   _s("strong_sentiment","Non-neutral share","strong_sentiment_share",0.08,0.3,0.6,evidence="conviction in coverage"),
+   _s("negative_ratio","Negative article share","negative_ratio",0.15,0.15,0.03,hib=False,evidence="share of bearish coverage"),
+   _s("sentiment_mean","Mean sentiment score","sentiment_score_mean",0.18,0.10,0.55,evidence="average sentiment (-1 to +1)"),
+   _s("sentiment_dispersion","Sentiment dispersion","sentiment_dispersion",0.10,0.7,0.35,hib=False,evidence="disagreement in coverage (lower=clearer)"),
+   _s("bull_bear_ratio","Bull/bear ratio","bullish_bearish_ratio",0.12,2.0,5.0,evidence="positive vs negative articles"),
+   _s("strong_sentiment","Non-neutral share","strong_sentiment_share",0.08,0.5,0.85,evidence="conviction in coverage"),
  ]),
  "sentiment_trend": ("Sentiment Trend", 1.80, [
-   _s("sentiment_7d","7-day sentiment","sentiment_7d",0.22,0.05,0.45,evidence="recent-week sentiment"),
-   _s("sentiment_30d","30-day sentiment","sentiment_30d",0.18,0.05,0.45,evidence="month sentiment"),
+   _s("sentiment_7d","7-day sentiment","sentiment_7d",0.22,0.10,0.50,evidence="recent-week sentiment"),
+   _s("sentiment_30d","30-day sentiment","sentiment_30d",0.18,0.10,0.50,evidence="month sentiment"),
    _s("sentiment_trend","Sentiment trend","sentiment_trend",0.25,-0.1,0.15,evidence="7d vs prior weeks (improving?)"),
    _s("recent_vs_base","Recent vs baseline","recent_vs_baseline_sentiment",0.18,-0.1,0.1,evidence="7d vs 30d shift"),
    _s("sentiment_accel","Sentiment acceleration","sentiment_acceleration",0.17,-0.1,0.1,evidence="latest vs prior articles"),
@@ -47,11 +47,10 @@ CATEGORIES = {
    _s("competitive_topic","Competitive coverage","competitive_mentions",0.08,2,0,hib=False,evidence="rivalry pressure (lower=better)"),
  ]),
  "event_detection": ("Event Detection", 1.40, [
-   _s("upgrade","Analyst upgrade","upgrade_flag",0.25,0,1,evidence="upgrade detected"),
-   _s("downgrade","Analyst downgrade","downgrade_flag",0.25,1,0,hib=False,evidence="downgrade detected"),
-   _s("lawsuit","Lawsuit/litigation","lawsuit_flag",0.20,1,0,hib=False,evidence="legal action detected"),
-   _s("guidance_change","Guidance change","guidance_change_flag",0.15,0,1,evidence="guidance revision"),
-   _s("product_launch","Product launch","product_launch_flag",0.15,0,1,evidence="launch/unveiling"),
+   _s("event_balance","Positive vs negative events","event_balance",0.55,-0.5,1.0,evidence="upgrades/launches minus downgrades/lawsuits"),
+   _s("upgrade","Analyst upgrade present","upgrade_flag",0.15,0,1,evidence="upgrade detected (bonus if present)"),
+   _s("product_launch","Product launch present","product_launch_flag",0.15,0,1,evidence="launch detected (bonus if present)"),
+   _s("neg_event","Negative event present","neg_event_flag",0.15,1,0,hib=False,evidence="downgrade/lawsuit present (penalty)"),
  ]),
  "divergence": ("Sentiment-Price Divergence", 0.90, [
    _s("contrarian","Contrarian signal","contrarian_signal",0.40,-0.5,1.0,evidence="positive news + falling price = potential upside"),
@@ -70,10 +69,9 @@ CATEGORIES = {
    _s("topic_conc","Topic concentration","topic_concentration",0.30,0.6,0.2,hib=False,evidence="single-theme reliance (lower=broader)"),
  ]),
  "risk_signals": ("News Risk Signals", 0.90, [
-   _s("fraud_flag","Fraud/litigation flag","fraud_litigation_flag",0.35,1,0,hib=False,evidence="fraud/litigation in negative reasoning"),
-   _s("disclosure_flag","Disclosure-risk flag","disclosure_risk_flag",0.30,1,0,hib=False,evidence="disclosure concerns"),
-   _s("red_flags","Red-flag count","red_flag_count",0.20,2,0,hib=False,evidence="total risk flags"),
-   _s("neg_reasoning","Negative reasoning count","negative_reasoning_count",0.15,10,0,hib=False,evidence="substantiated negative articles"),
+   _s("risk_severity","Risk severity","risk_severity",0.50,0.3,0.0,hib=False,evidence="weighted fraud/disclosure/negative signal (0=clean)"),
+   _s("fraud_flag","Fraud/litigation flag","fraud_litigation_flag",0.25,1,0,hib=False,evidence="fraud/litigation present"),
+   _s("neg_reasoning_ratio","Negative-reasoning share","negative_reasoning_ratio",0.25,0.3,0.05,hib=False,evidence="share of articles with substantiated negatives"),
  ]),
 }
 NEWS_INTELLIGENCE = {"label":"News Intelligence","weight":10.0,"categories":CATEGORIES}

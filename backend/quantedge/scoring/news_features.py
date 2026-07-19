@@ -89,6 +89,11 @@ def compute_news_features(articles, ticker, price_return_30d=None):
     f["guidance_change_flag"]=flag(["raises guidance","cuts guidance"])
     f["product_launch_flag"]=flag(["launches","unveils"])
     f["material_event_score"]=(f["lawsuit_flag"]+f["downgrade_flag"]+f["upgrade_flag"]+f["guidance_change_flag"])/4
+    # event balance: positive events (upgrade, launch, guidance-up) minus negative (downgrade, lawsuit)
+    pos_ev=f["upgrade_flag"]+f["product_launch_flag"]+f["guidance_change_flag"]
+    neg_ev=f["downgrade_flag"]+f["lawsuit_flag"]
+    f["event_balance"]=(pos_ev-neg_ev)/max(pos_ev+neg_ev,1)  # -1..+1, 0 if no events
+    f["neg_event_flag"]=1.0 if neg_ev>0 else 0.0
 
     if price_return_30d is not None:
         f["price_return_30d"]=price_return_30d; ns=f["net_sentiment"]
@@ -116,6 +121,10 @@ def compute_news_features(articles, ticker, price_return_30d=None):
     f["disclosure_risk_flag"]=1.0 if any(t in neg_reasons for t in ["disclosure","undisclosed","misled","material"]) else 0.0
     f["negative_reasoning_count"]=sum(1 for a in arts if a["sval"]<0 and a["reason"])
     f["red_flag_count"]=f["fraud_litigation_flag"]+f["disclosure_risk_flag"]
+    # risk severity: weighted blend of fraud/disclosure/negative density (0=clean, higher=worse)
+    neg_ratio=(sum(1 for a in arts if a["sval"]<0 and a["reason"])/n) if n else 0
+    f["negative_reasoning_ratio"]=neg_ratio
+    f["risk_severity"]=min(1.0, 0.5*f["fraud_litigation_flag"]+0.3*f["disclosure_risk_flag"]+0.4*neg_ratio)
 
     # company name hints for relevance (ticker + first word of any title that repeats)
     def relevance(a):
