@@ -51,11 +51,36 @@ class QuarterlyFinancials:
     cash: Optional[float] = None
     operating_cash_flow: Optional[float] = None
     capex: Optional[float] = None
+    tax_expense: Optional[float] = None
+    pretax_income: Optional[float] = None
+
+    @property
+    def effective_tax_rate(self) -> float:
+        if (self.tax_expense is not None and self.pretax_income
+                and self.pretax_income > 0):
+            rate = self.tax_expense / self.pretax_income
+            if 0.0 <= rate <= 0.60:
+                return min(max(rate, 0.0), 0.35)
+        return 0.21
+
+    @property
+    def nopat(self) -> Optional[float]:
+        if self.operating_income is None:
+            return None
+        return self.operating_income * (1.0 - self.effective_tax_rate)
+
+    @property
+    def invested_capital(self) -> Optional[float]:
+        eq = self.total_equity or 0.0
+        debt = self.long_term_debt or 0.0
+        cash = self.cash or 0.0
+        ic = eq + debt - cash
+        return ic if ic > 0 else None
 
     @property
     def free_cash_flow(self) -> Optional[float]:
         if self.operating_cash_flow is not None and self.capex is not None:
-            return self.operating_cash_flow + self.capex
+            return self.operating_cash_flow - abs(self.capex)
         return None
 
     @property
@@ -90,12 +115,11 @@ class QuarterlyFinancials:
 
     @property
     def roic(self) -> Optional[float]:
-        if self.operating_income is None:
+        nopat = self.nopat
+        ic = self.invested_capital
+        if nopat is None or ic is None:
             return None
-        invested = (self.total_equity or 0) + (self.long_term_debt or 0)
-        if invested <= 0:
-            return None
-        return self.operating_income / invested
+        return nopat / ic
 
     @property
     def roe(self) -> Optional[float]:
@@ -197,7 +221,9 @@ async def fetch_quarterly_financials(
             long_term_debt=_safe(balance, "long_term_debt"),
             cash=_safe(balance, "cash"),
             operating_cash_flow=_safe(cashflow, "net_cash_flow_from_operating_activities"),
-            capex=_safe(cashflow, "net_cash_flow_from_investing_activities"),
+            capex=_safe(cashflow, "payments_to_acquire_property_plant_and_equipment"),
+            tax_expense=_safe(income, "income_tax_expense_benefit"),
+            pretax_income=_safe(income, "income_loss_from_continuing_operations_before_income_tax_expense_benefit"),
         )
         quarters.append(q)
     quarters.reverse()
@@ -398,10 +424,44 @@ def score_from_percentile(
         return float(np.clip(50 + 50 * frac, 0, 100))
 
 
+def estimate_wacc(beta: Optional[float] = None, risk_free: float = 0.042,
+                  equity_risk_premium: float = 0.05) -> Dict[str, float]:
+    b = beta if (beta is not None and 0.0 < beta < 4.0) else 1.0
+    mid = risk_free + b * equity_risk_premium
+    return {"low": mid - 0.015, "mid": mid, "high": mid + 0.015, "beta_used": b}
+
+
+def compute_value_creation_spread(quarters: List[QuarterlyFinancials],
+                                  beta: Optional[float] = None) -> Dict[str, float]:
+    roics = _safe_series([q.roic for q in quarters])
+    wacc = estimate_wacc(beta=beta)
+    if len(roics) < 4:
+        return {"roic_mean": np.nan, "wacc": wacc["high"], "spread": np.nan,
+                "creates_value": False, "n": len(roics), "beta_used": wacc["beta_used"]}
+    roic_mean = float(roics.tail(20).mean())
+    spread = roic_mean - wacc["high"]
+    return {"roic_mean": roic_mean, "wacc": wacc["high"], "wacc_mid": wacc["mid"],
+            "spread": spread, "creates_value": bool(spread > 0),
+            "n": int(len(roics)), "beta_used": wacc["beta_used"]}
+
+
+def score_spread(spread: float) -> float:
+    if spread is None or (isinstance(spread, float) and np.isnan(spread)):
+        return 50.0
+    if spread <= 0:
+        return float(np.clip(25.0 + spread * 200.0, 0.0, 40.0))
+    if spread <= 0.05:
+        return float(40.0 + (spread / 0.05) * 25.0)
+    if spread <= 0.15:
+        return float(65.0 + ((spread - 0.05) / 0.10) * 25.0)
+    return float(np.clip(90.0 + (spread - 0.15) * 66.0, 90.0, 100.0))
+
+
 def build_scorecard(
     ticker: str,
     quarters: List[QuarterlyFinancials],
     market_cap: Optional[float] = None,
+    beta: Optional[float] = None,
 ) -> QualityScorecard:
     if not quarters:
         return QualityScorecard(
@@ -419,8 +479,10 @@ def build_scorecard(
     f_score = compute_piotroski_f_score(quarters)
     z_score = compute_altman_z_score(quarters, market_cap)
     accruals = compute_accrual_ratio(quarters)
+    spread = compute_value_creation_spread(quarters, beta=beta)
 
     sub_scores = {
+        "value_creation": score_spread(spread.get("spread", np.nan)),
         "roic": score_from_percentile(roic.get("mean", np.nan), good=0.08, great=0.20, higher_is_better=True),
         "margin_stability": score_from_percentile(margin.get("cov", np.nan), good=0.15, great=0.05, higher_is_better=False),
         "fcf_conversion": score_from_percentile(fcf.get("mean", np.nan), good=0.8, great=1.2, higher_is_better=True),
@@ -432,12 +494,17 @@ def build_scorecard(
     }
 
     weights = {
-        "roic": 0.20, "margin_stability": 0.10, "fcf_conversion": 0.15,
-        "revenue_growth": 0.10, "debt_trajectory": 0.10, "piotroski": 0.15,
-        "altman_z": 0.10, "earnings_quality": 0.10,
+        "value_creation": 0.25, "roic": 0.10, "margin_stability": 0.10,
+        "fcf_conversion": 0.15, "revenue_growth": 0.08, "debt_trajectory": 0.07,
+        "piotroski": 0.10, "altman_z": 0.05, "earnings_quality": 0.10,
     }
     past_score = sum(sub_scores[k] * w for k, w in weights.items())
     past_score = float(np.clip(past_score, 0, 100))
+
+    if spread.get("creates_value") is False and not (
+        isinstance(spread.get("spread"), float) and np.isnan(spread["spread"])
+    ):
+        past_score = min(past_score, 45.0)
 
     strengths, weaknesses = [], []
     for k, v in sub_scores.items():
@@ -460,6 +527,10 @@ def build_scorecard(
         metrics={
             "roic_mean_5y": round(roic.get("mean", 0) or 0, 4),
             "roic_trend": round(roic.get("slope", 0) or 0, 6),
+            "wacc_estimate": round(spread.get("wacc", 0) or 0, 4),
+            "value_creation_spread": round(spread.get("spread", 0) or 0, 4),
+            "creates_value": bool(spread.get("creates_value", False)),
+            "beta_used": round(spread.get("beta_used", 0) or 0, 3),
             "gross_margin_mean": round(margin.get("mean", 0) or 0, 4),
             "gross_margin_cov": round(margin.get("cov", 0) or 0, 4),
             "fcf_conversion": round(fcf.get("mean", 0) or 0, 4),
@@ -489,6 +560,7 @@ class QualityEngine:
         ticker: str,
         market_cap: Optional[float] = None,
         n_quarters: int = 40,
+        beta: Optional[float] = None,
     ) -> QualityScorecard:
         if not self.api_key:
             return QualityScorecard(
@@ -497,7 +569,7 @@ class QualityEngine:
                 data_quality="insufficient",
             )
         quarters = await fetch_quarterly_financials(ticker, self.api_key, limit=n_quarters)
-        return build_scorecard(ticker, quarters, market_cap)
+        return build_scorecard(ticker, quarters, market_cap, beta=beta)
 
 
 async def _test(ticker: str = "AAPL"):
