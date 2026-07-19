@@ -10,8 +10,8 @@ from quantedge.scoring.edgar_xbrl import (
 
 _CIK_CACHE: Dict[str, int] = {}
 _CONCEPT_CACHE: Dict[str, dict] = {}
-FLOW = {"capex","dividends_paid","buybacks","depreciation_amortization","sbc",
-        "interest_expense","sga","rd"}
+FLOW = {"capex","dividends_paid","buybacks","depreciation_amortization",
+        "depreciation","amortization","sbc","interest_expense","sga","rd"}
 STOCK = {"receivables","goodwill","intangibles","operating_lease_liab",
          "short_term_debt","inventory","accounts_payable"}
 

@@ -33,6 +33,8 @@ CONCEPTS = {
     "depreciation_amortization": ["DepreciationDepletionAndAmortization",
                                   "DepreciationAmortizationAndAccretionNet",
                                   "DepreciationAndAmortization"],
+    "depreciation": ["Depreciation", "DepreciationNonproduction"],
+    "amortization": ["AmortizationOfIntangibleAssets"],
     "sbc": ["ShareBasedCompensation", "AllocatedShareBasedCompensationExpense"],
     "interest_expense": ["InterestExpense", "InterestExpenseDebt"],
     "sga": ["SellingGeneralAndAdministrativeExpense"],
