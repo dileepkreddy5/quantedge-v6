@@ -28,11 +28,13 @@ export default function MarketPanel({ ticker }:{ ticker:string }){
   const [d,setD]=useState<MktData|null>(null);
   const [loading,setLoading]=useState(false);
   const [err,setErr]=useState('');
+  const [expanded,setExpanded]=useState<Record<string,boolean>>({});
+  const [allOpen,setAllOpen]=useState(true);
   useEffect(()=>{
     if(!ticker)return;
     setLoading(true);setErr('');setD(null);
     api.get(`/api/v6/market/${ticker}`)
-      .then(r=>{const x=r.data?.data;if(!x?.available)setErr(x?.reason||'No market data');else setD(x);})
+      .then(r=>{const x=r.data?.data;if(!x?.available)setErr(x?.reason||'No market data');else{setD(x);const init:Record<string,boolean>={};(x.tree?.categories||[]).forEach((c:any)=>init[c.id]=true);setExpanded(init);}})
       .catch(e=>setErr(e?.message||'Request failed'))
       .finally(()=>setLoading(false));
   },[ticker]);
@@ -193,17 +195,46 @@ export default function MarketPanel({ ticker }:{ ticker:string }){
       </div>
 
       {/* 6 CATEGORY SCORES */}
-      <div style={{fontSize:12,color:'#9d8b7a',letterSpacing:1,marginBottom:8}}>MARKET INTELLIGENCE COMPONENTS · peer-relative + technical</div>
-      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(170px,1fr))',gap:8}}>
-        {d.tree.categories.map(cat=>(
-          <div key={cat.id} style={{background:heat(cat.score),borderRadius:8,padding:'10px 12px'}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-              <span style={{fontSize:11,fontWeight:600,color:'#fff'}}>{cat.label}</span>
-              <span style={{fontSize:16,fontWeight:700,color:'#fff'}}>{cat.score?.toFixed(0)??'—'}</span>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+        <span style={{fontSize:12,color:'#9d8b7a',letterSpacing:1}}>MARKET INTELLIGENCE COMPONENTS · {d.tree.categories.reduce((a,c)=>a+c.n_signals,0)} SIGNALS</span>
+        <button onClick={()=>{const v=!allOpen;setAllOpen(v);const m:Record<string,boolean>={};d.tree.categories.forEach(c=>m[c.id]=v);setExpanded(m);}}
+          style={{background:'#181818',border:'1px solid #2a2a2a',color:'#9d8b7a',borderRadius:8,padding:'5px 12px',fontSize:11,cursor:'pointer'}}>
+          {allOpen?'Collapse all':'Expand all'}</button>
+      </div>
+      <div style={{display:'flex',flexDirection:'column',gap:8}}>
+        {d.tree.categories.map(cat=>{
+          const open=expanded[cat.id];
+          return (
+            <div key={cat.id} style={{background:'#141414',border:'1px solid #2a2a2a',borderRadius:10,overflow:'hidden'}}>
+              <div onClick={()=>setExpanded(p=>({...p,[cat.id]:!p[cat.id]}))}
+                style={{display:'flex',alignItems:'center',gap:12,padding:'10px 14px',cursor:'pointer',borderLeft:`4px solid ${heat(cat.score)}`}}>
+                <span style={{fontSize:11,color:'#7a7266',width:12}}>{open?'▾':'▸'}</span>
+                <span style={{fontSize:13,fontWeight:600,color:'#e8ddd0',flex:1}}>{cat.label}</span>
+                <span style={{fontSize:10,color:'#7a7266'}}>wt {cat.weight.toFixed(2)} · {cat.n_scored}/{cat.n_signals}</span>
+                <span style={{fontSize:18,fontWeight:700,color:heat(cat.score),width:36,textAlign:'right'}}>{cat.score?.toFixed(0)??'—'}</span>
+              </div>
+              {open && (
+                <div style={{padding:'4px 14px 12px 30px'}}>
+                  {cat.signals.map((s:any)=>{
+                    const pending=s.status==='needs_source'||s.score==null;
+                    const rv=s.raw_value;
+                    const fmt=rv==null?'—':Math.abs(rv)>=1000000?(rv/1e6).toFixed(0)+'M':(Number.isInteger(rv)?rv.toString():(Math.abs(rv)<1&&Math.abs(rv)>0?rv.toFixed(3):rv.toFixed(2)));
+                    return (
+                      <div key={s.id} title={s.evidence} style={{display:'flex',alignItems:'center',gap:10,padding:'5px 0',borderBottom:'1px solid #1e1e1e',opacity:pending?0.5:1}}>
+                        <span style={{fontSize:12,color:'#cdbfae',flex:1}}>{s.label}</span>
+                        <span style={{fontSize:12,color:'#9d8b7a',width:72,textAlign:'right'}}>{pending?'pending':fmt}</span>
+                        <div style={{width:80,height:6,background:'#242424',borderRadius:3,overflow:'hidden'}}>
+                          {!pending && <div style={{height:'100%',width:`${s.score}%`,background:heat(s.score)}}/>}
+                        </div>
+                        <span style={{fontSize:11,fontWeight:600,color:pending?'#555':heat(s.score),width:26,textAlign:'right'}}>{pending?'—':s.score.toFixed(0)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-            <div style={{fontSize:9,color:'#fff',opacity:0.6,marginTop:2}}>wt {cat.weight.toFixed(2)} · {cat.n_scored}/{cat.n_signals}</div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
