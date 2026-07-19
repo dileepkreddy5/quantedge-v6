@@ -8,7 +8,7 @@ from typing import Optional, Dict, List, Any, Callable
 
 MODULE_REGISTRY = [
     {"id":"financial",     "label":"Financial Intelligence",     "weight":18, "status":"live"},
-    {"id":"business",      "label":"Business Intelligence",      "weight":12, "status":"pending"},
+    {"id":"business",      "label":"Business Intelligence",      "weight":12, "status":"live"},
     {"id":"valuation",     "label":"Valuation Intelligence",     "weight":10, "status":"live"},
     {"id":"news",          "label":"News Intelligence",          "weight":10, "status":"pending"},
     {"id":"competitive",   "label":"Competitive Intelligence",   "weight":8,  "status":"pending"},

@@ -47,6 +47,7 @@ from routers.conviction_router import router as conviction_router
 from routers.financial_router import router as financial_router
 from routers.valuation_router import router as valuation_router
 from routers.market_router import router as market_router
+from routers.business_router import router as business_router
 from routers.conviction_v6_router import router as conviction_v6_router
 from routers.research_router import router as research_router
 from routers.scan_router import router as scan_router
@@ -473,6 +474,7 @@ app.include_router(conviction_router,    prefix="/api/v6",             tags=["Co
 app.include_router(financial_router,      prefix="/api/v6",             tags=["Financial"])
 app.include_router(valuation_router,      prefix="/api/v6",             tags=["Valuation"])
 app.include_router(market_router,         prefix="/api/v6",             tags=["Market"])
+app.include_router(business_router,       prefix="/api/v6",             tags=["Business"])
 app.include_router(conviction_v6_router,   prefix="/api/v7",             tags=["Conviction"])
 app.include_router(research_router,      prefix="/api/v6",             tags=["Research"])
 app.include_router(scan_router,          prefix="/api/v6",             tags=["Scan"])
