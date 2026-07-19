@@ -32,6 +32,7 @@ import PeerPanel from '../components/ui/PeerPanel';
 import FinancialIntelligencePanel from '../components/ui/FinancialIntelligencePanel';
 import ConvictionBadge from '../components/ui/ConvictionBadge';
 import ValuationPanel from '../components/ui/ValuationPanel';
+import MarketPanel from '../components/ui/MarketPanel';
 
 const TABS = [
   { id: 'overview',     label: '⬡ OVERVIEW' },
@@ -46,6 +47,7 @@ const TABS = [
   { id: 'fundamental', label: '📋 FUNDAMENTALS' },
   { id: 'financial',   label: '💎 FINANCIAL' },
   { id: 'valuation',   label: '⚖️ VALUATION' },
+  { id: 'market',      label: '📈 MARKET' },
   { id: 'wallstreet',  label: '🏦 WALL ST.' },
   { id: 'portfolio',   label: '⚖ PORTFOLIO' },
   { id: 'performance', label: '📈 PERFORMANCE' },
@@ -398,6 +400,7 @@ export default function Dashboard() {
               {activeTab === 'fundamental' && <FundamentalsPanel data={data} />}
               {activeTab === 'financial'   && <FinancialIntelligencePanel ticker={ticker} />}
               {activeTab === 'valuation'   && <ValuationPanel ticker={ticker} />}
+              {activeTab === 'market'      && <MarketPanel ticker={ticker} />}
               {activeTab === 'watchlist'   && <Watchlist onAnalyze={runAnalysis} />}
               {activeTab === 'wallstreet'  && <WallStreetPanel data={data} />}
               {activeTab === 'portfolio'   && <PortfolioPanel data={data} />}
