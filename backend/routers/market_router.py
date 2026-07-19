@@ -159,6 +159,11 @@ async def compute_market_intelligence(ticker: str, api_key: str, pool=None) -> D
         deep["trading_risk"]=trading_risk(closes)
         deep["volume"]=volume_liquidity(closes, volumes)
     deep["short_interest"]=short_interest_signals(si_records)
+    if len(closes)>=60:
+        from quantedge.scoring.market_deep import volatility_detail, advanced_risk, volume_detail
+        deep["volatility"]={**(deep.get("volatility") or {}), **volatility_detail(closes)}
+        deep["trading_risk"]={**(deep.get("trading_risk") or {}), **advanced_risk(closes)}
+        deep["volume"]={**(deep.get("volume") or {}), **volume_detail(closes, volumes)}
     tree=score_market(me_factors, peer_list, deep_data=deep)
     bench=await _benchmarks_and_position(ticker, api_key)
     # Sector breadth from peer factors (real, from the bucket)

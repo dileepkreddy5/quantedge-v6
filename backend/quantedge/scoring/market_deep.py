@@ -86,3 +86,53 @@ def short_interest_signals(records, avg_vol=None):
     elif dtc and dtc>3: out["squeeze_risk"]="moderate"
     else: out["squeeze_risk"]="low"
     return out
+
+# ===== DEEPENING: advanced risk, volatility detail, volume detail =====
+def volatility_detail(closes):
+    import statistics as st
+    out={}
+    if len(closes)<60: return out
+    rets=[(closes[i]/closes[i-1]-1) for i in range(1,len(closes))]
+    downs=[r for r in rets if r<0]; ups=[r for r in rets if r>0]
+    out["downside_vol"]=round(st.pstdev(downs)*math.sqrt(252),4) if len(downs)>2 else None
+    up_vol=st.pstdev(ups)*math.sqrt(252) if len(ups)>2 else None
+    dv=out["downside_vol"]
+    out["up_down_vol_ratio"]=round(up_vol/dv,3) if (up_vol and dv) else None
+    if len(rets)>=90:
+        vs=[st.pstdev(rets[i-21:i])*math.sqrt(252) for i in range(21,len(rets))]
+        out["vol_of_vol"]=round(st.pstdev(vs)/st.mean(vs),3) if st.mean(vs)>0 else None
+    return out
+
+def advanced_risk(closes):
+    out={}
+    if len(closes)<60: return out
+    peak=closes[0]; dds=[]
+    for p in closes:
+        if p>peak: peak=p
+        dds.append((p-peak)/peak)
+    out["ulcer_index"]=round(math.sqrt(sum(d*d for d in dds)/len(dds)),4)
+    out["pain_index"]=round(abs(sum(dds)/len(dds)),4)
+    rets=[(closes[i]/closes[i-1]-1) for i in range(1,len(closes))]
+    total_ret=closes[-1]/closes[0]-1; max_dd=abs(min(dds))
+    out["recovery_factor"]=round(total_ret/max_dd,3) if max_dd>0 else None
+    srt=sorted(rets); n=len(srt)
+    p95=srt[int(0.95*n)]; p5=srt[int(0.05*n)]
+    out["tail_ratio"]=round(abs(p95/p5),3) if p5!=0 else None
+    return out
+
+def volume_detail(closes, volumes):
+    out={}
+    if len(volumes)<40 or len(closes)!=len(volumes): return out
+    up_v=sum(volumes[i] for i in range(len(closes)-20,len(closes)) if closes[i]>closes[i-1])
+    tot_v=sum(volumes[-20:])
+    out["up_volume_ratio"]=round(up_v/tot_v,3) if tot_v>0 else None
+    r10=sum(volumes[-10:])/10; p30=sum(volumes[-40:-10])/30
+    out["volume_trend"]=round(r10/p30-1,3) if p30>0 else None
+    out["accumulation_days"]=sum(1 for i in range(len(closes)-20,len(closes)) if closes[i]>closes[i-1] and volumes[i]>volumes[i-1])
+    pos_mf=0; neg_mf=0
+    for i in range(len(closes)-14,len(closes)):
+        mf=closes[i]*volumes[i]
+        if closes[i]>closes[i-1]: pos_mf+=mf
+        else: neg_mf+=mf
+    out["mfi_proxy"]=round(100-100/(1+pos_mf/neg_mf),1) if neg_mf>0 else None
+    return out
