@@ -115,14 +115,25 @@ def compute_news_features(articles, ticker, price_return_30d=None):
     f["negative_reasoning_count"]=sum(1 for a in arts if a["sval"]<0 and a["reason"])
     f["red_flag_count"]=f["fraud_litigation_flag"]+f["disclosure_risk_flag"]
 
+    # company name hints for relevance (ticker + first word of any title that repeats)
+    def relevance(a):
+        txt=(a["title"]+" "+a["desc"]).lower()
+        # is the ticker or company clearly the SUBJECT (in title, not just mentioned)?
+        return 2 if ticker.lower() in a["title"].lower() else (1 if ticker.lower() in txt else 0)
     def importance(a):
-        s=0
-        if any(t in a["pub"].lower() for t in TIER1): s+=2
+        s=relevance(a)*3  # relevance is the biggest factor
+        if any(t in a["pub"].lower() for t in TIER1): s+=1
         if abs(a["sval"])>0: s+=1
-        if any(t in (a["title"]+a["desc"]).lower() for t in ["earnings","lawsuit","upgrade","downgrade","guidance","launches","acquisition"]): s+=2
+        if any(t in (a["title"]+a["desc"]).lower() for t in ["earnings","lawsuit","upgrade","downgrade","guidance","launches","acquisition","deliveries","results"]): s+=2
         s+=max(0,3-(now-a["dt"]).days*0.3)
         return s
-    ranked=sorted(arts, key=importance, reverse=True)[:10]
+    # prefer ticker-relevant articles; dedupe by publisher to avoid all-one-source
+    ranked_all=sorted(arts, key=importance, reverse=True)
+    seen_pub=Counter(); ranked=[]
+    for a in ranked_all:
+        if seen_pub[a["pub"]]>=4: continue  # max 4 per publisher in brief
+        ranked.append(a); seen_pub[a["pub"]]+=1
+        if len(ranked)>=10: break
     for a in ranked:
         tag={1:"positive",-1:"negative",0:"neutral"}[a["sval"]]
         brief.append({"headline":a["title"],"sentiment":tag,"publisher":a["pub"],
