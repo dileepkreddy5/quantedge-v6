@@ -1,177 +1,99 @@
-"""
-QuantEdge v6.0 — Per-Stock News Router (v2: Finnhub events + AI briefing)
-"""
-
+"""News Intelligence endpoint — GET /api/v6/news/{ticker}.
+Fetches English Polygon news + insights, computes ~49 signals + 10-point brief,
+scores the catalog. Reusable for conviction aggregator."""
 from __future__ import annotations
-
-import json
-import asyncio
-from datetime import datetime, timezone
-from typing import Optional, List, Dict
-
+import math, datetime as dt
+from typing import Optional, Dict, Any, List
 import httpx
-from fastapi import APIRouter, HTTPException, Request, Depends, Query
+from fastapi import APIRouter, HTTPException, Request, Depends
 from loguru import logger
 
-from core.config import settings
-from data.feeds.market_data import SentimentDataFeed
-from data.feeds.finnhub_feed import FinnhubFeed
+from quantedge.scoring.news_features import compute_news_features
+from quantedge.scoring.compute import score_signal
+from quantedge.scoring.cat_news_v6 import CATEGORIES, news_rating
 from auth.cognito_auth import get_optional_user, CognitoUser
+from core.config import settings
 
 router = APIRouter()
+_POLY="https://api.polygon.io"
 
-NEWS_CACHE_TTL = 1800  # 30 min
+def _san(o):
+    if isinstance(o,float): return o if math.isfinite(o) else None
+    if isinstance(o,dict): return {k:_san(v) for k,v in o.items()}
+    if isinstance(o,(list,tuple)): return [_san(v) for v in o]
+    return o
 
+def _roll(children):
+    scored=[c for c in children if c.get("score") is not None]
+    tw=sum(c["weight"] for c in children); aw=sum(c["weight"] for c in scored)
+    if not scored or tw==0: return None,0.0
+    return round(sum(c["score"]*c["weight"] for c in scored)/aw,1), round(aw/tw,3)
 
-def _relative_time(iso: str) -> str:
-    if not iso:
-        return ""
+def score_news(features):
+    cats=[]
+    for cid,(label,wt,sigs) in CATEGORIES.items():
+        scored=[]
+        for spec in sigs:
+            val=features.get(spec["field"])
+            res=score_signal(val,spec,None)
+            scored.append({"id":spec["id"],"label":spec["label"],"weight":spec["weight"],
+                           "status":spec["status"],"evidence":spec["evidence"],"raw_value":val,**res})
+        cs,cc=_roll(scored)
+        cats.append({"id":cid,"label":label,"weight":wt,"score":cs,"confidence":cc,
+                     "n_signals":len(sigs),"n_scored":sum(1 for s in scored if s["score"] is not None),
+                     "signals":scored})
+    ns,nc=_roll(cats)
+    return {"label":"News Intelligence","weight":10.0,"score":ns,"confidence":nc,"categories":cats}
+
+async def _fetch_news(ticker, api_key, limit=100):
+    async with httpx.AsyncClient(timeout=20) as c:
+        url=f"{_POLY}/v2/reference/news?ticker={ticker}&limit={limit}&order=desc&sort=published_utc&apiKey={api_key}"
+        r=await c.get(url)
+        return (r.json() or {}).get("results",[]) if r.status_code==200 else []
+
+async def _price_return_30d(ticker, api_key):
     try:
-        dt = datetime.fromisoformat(iso.replace("Z", "+00:00"))
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        secs = (datetime.now(timezone.utc) - dt).total_seconds()
-        if secs < 0:
-            return "just now"
-        if secs < 3600:
-            return f"{int(secs // 60)}m ago"
-        if secs < 86400:
-            return f"{int(secs // 3600)}h ago"
-        days = int(secs // 86400)
-        return f"{days}d ago" if days < 30 else f"{days // 30}mo ago"
-    except Exception:
-        return ""
+        end=dt.date.today(); start=end-dt.timedelta(days=45)
+        async with httpx.AsyncClient(timeout=12) as c:
+            u=f"{_POLY}/v2/aggs/ticker/{ticker}/range/1/day/{start.isoformat()}/{end.isoformat()}?adjusted=true&sort=asc&limit=60&apiKey={api_key}"
+            r=await c.get(u)
+            if r.status_code==200:
+                bars=(r.json() or {}).get("results",[])
+                if len(bars)>=20: return bars[-1]["c"]/bars[0]["c"]-1
+    except Exception: pass
+    return None
 
-
-def _normalize(articles: List[Dict]) -> List[Dict]:
-    out = []
-    for a in articles:
-        iso = a.get("timestamp", "") or a.get("published_utc", "") or a.get("published", "")
-        out.append({
-            "title": a.get("title", "") or "",
-            "one_liner": (a.get("description", "") or "")[:160],
-            "source": a.get("publisher", "") or a.get("source", "") or "",
-            "url": a.get("article_url", "") or a.get("url", "") or "",
-            "published": iso,
-            "relative_time": _relative_time(iso),
-        })
-    return out
-
-
-async def _ai_key_points(ticker: str, facts: List[str], articles: List[Dict]) -> List[str]:
-    key = getattr(settings, "ANTHROPIC_API_KEY", None)
-    if not key:
-        return []
-
-    facts_block = "\n".join(f"- {f}" for f in facts) if facts else "- (no structured data available)"
-    news_block = "\n".join(
-        f"- {a['title']}: {a['one_liner']}" for a in articles[:15]
-    ) if articles else "- (no recent articles)"
-
-    prompt = (
-        f"You are an equity research analyst preparing a morning briefing on {ticker}.\n\n"
-        f"VERIFIED DATA (you may state these as fact):\n{facts_block}\n\n"
-        f"RECENT NEWS HEADLINES (extract only what is stated; do NOT invent analyst "
-        f"names, price targets, numbers, or dates not present here):\n{news_block}\n\n"
-        f"Write up to 10 concise bullet points covering the most material developments "
-        f"for this company right now: upcoming catalysts (earnings), analyst stance, and "
-        f"key announcements (product, M&A, R&D, guidance) that appear above. Each bullet "
-        f"one short sentence, under 20 words. Order by importance. Do not fabricate. "
-        f"Return ONLY a JSON array of strings."
-    )
-    try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(
-                "https://api.anthropic.com/v1/messages",
-                headers={
-                    "content-type": "application/json",
-                    "x-api-key": key,
-                    "anthropic-version": "2023-06-01",
-                },
-                json={
-                    "model": "claude-sonnet-4-6",
-                    "max_tokens": 700,
-                    "messages": [{"role": "user", "content": prompt}],
-                },
-            )
-            data = resp.json()
-            raw = "".join(b["text"] for b in data.get("content", []) if b.get("type") == "text")
-            s, e = raw.find("["), raw.rfind("]")
-            if s >= 0:
-                pts = json.loads(raw[s:e + 1])
-                return [str(p) for p in pts if isinstance(p, str)][:10]
-    except Exception as ex:
-        logger.warning(f"AI key points failed for {ticker}: {ex}")
-    return []
-
-
-async def build_briefing(ticker: str, redis, limit: int = 10) -> Dict:
-    ticker = ticker.upper().strip()
-
-    news_feed = SentimentDataFeed()
-    if hasattr(news_feed, "inject_redis"):
-        news_feed.inject_redis(redis)
-    finnhub = FinnhubFeed(api_key=getattr(settings, "FINNHUB_API_KEY", ""), redis_client=redis)
-
-    raw_news, events = await asyncio.gather(
-        news_feed.get_news(ticker=ticker, limit=30),
-        finnhub.get_events(ticker),
-        return_exceptions=True,
-    )
-    if isinstance(raw_news, Exception):
-        raw_news = []
-    if isinstance(events, Exception):
-        events = {}
-
-    articles = _normalize(raw_news or [])[:limit]
-    facts = FinnhubFeed.events_to_facts(events or {})
-    key_points = await _ai_key_points(ticker, facts, articles)
-
-    ai_available = bool(key_points)
-    if not key_points:
-        key_points = facts
-
-    return {
-        "ticker": ticker,
-        "key_points": key_points,
-        "ai_synthesized": ai_available,
-        "events": events or {},
-        "articles": articles,
-        "summary": {"count": len(articles)},
-        "generated_at": datetime.now(timezone.utc).isoformat(),
-    }
-
+async def compute_news_intelligence(ticker: str, api_key: str) -> Dict[str,Any]:
+    ticker=ticker.upper().strip()
+    articles=await _fetch_news(ticker, api_key)
+    if not articles:
+        return {"ticker":ticker,"available":False,"reason":"no news coverage found"}
+    pr30=await _price_return_30d(ticker, api_key)
+    feats=compute_news_features(articles, ticker, price_return_30d=pr30)
+    if feats.get("available") is False:
+        return {"ticker":ticker,"available":False,"reason":"no English-language coverage with insights"}
+    tree=score_news(feats)
+    n_scored=sum(c["n_scored"] for c in tree["categories"])
+    n_total=sum(c["n_signals"] for c in tree["categories"])
+    return {"ticker":ticker,"available":True,"intelligence":"news",
+            "score":tree["score"],"confidence":tree["confidence"],
+            "news_rating":news_rating(tree["score"]),
+            "weight_in_conviction":10.0,
+            "coverage":{"scored":n_scored,"total":n_total},
+            "article_count":feats.get("_article_count"),
+            "sentiment_dist":feats.get("_sentiment_dist"),
+            "brief":feats.get("_brief"),
+            "recent_headlines":feats.get("_recent_headlines"),
+            "tree":tree,
+            "key_metrics":{k:feats.get(k) for k in
+                ["net_sentiment","positive_ratio","negative_ratio","sentiment_trend",
+                 "article_count_7d","tier1_source_share","contrarian_signal","fraud_litigation_flag",
+                 "price_return_30d","news_velocity"]}}
 
 @router.get("/news/{ticker}")
-async def get_news(
-    ticker: str,
-    http_request: Request,
-    limit: int = Query(10, ge=1, le=20),
-    current_user: Optional[CognitoUser] = Depends(get_optional_user),
-):
-    ticker = ticker.upper().strip()
-    if not ticker.replace("-", "").replace(".", "").isalnum() or len(ticker) > 10:
-        raise HTTPException(422, "Invalid ticker")
-
-    redis = http_request.app.state.redis
-    cache_key = f"news:briefing:v2:{ticker}:{limit}"
-
-    try:
-        cached = await redis.get(cache_key)
-        if cached:
-            return {"data": json.loads(cached), "cached": True}
-    except Exception:
-        pass
-
-    try:
-        payload = await build_briefing(ticker, redis, limit=limit)
-    except Exception as e:
-        logger.warning(f"Briefing build error for {ticker}: {e}")
-        raise HTTPException(502, "Could not build news briefing")
-
-    try:
-        await redis.setex(cache_key, NEWS_CACHE_TTL, json.dumps(payload))
-    except Exception:
-        pass
-
-    return {"data": payload, "cached": False}
+async def get_news(ticker: str, http_request: Request,
+                   current_user: Optional[CognitoUser]=Depends(get_optional_user)):
+    api_key=getattr(settings,"POLYGON_API_KEY","") or ""
+    if not api_key: raise HTTPException(503,"data source unavailable")
+    result=await compute_news_intelligence(ticker, api_key)
+    return {"data":_san(result)}
