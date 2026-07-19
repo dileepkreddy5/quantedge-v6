@@ -48,9 +48,11 @@ def compute_valuation_features(merged, fin_features, price, market_cap, wacc_dic
 
     if fcf_ttm and fcf_ttm>0:
         base_g = max(0.02, min(0.20, rev_growth))
-        bull = dcf_valuation(fcf_ttm, base_g*1.4, wacc_dict.get("low",wacc-0.015), 0.03, shares, net_debt)
+        # Bull/base/bear vary growth + WACC, but bull doesn't stack all-optimistic
+        # (that produces absurd valuations). Terminal-growth spread guarded in dcf_valuation.
+        bull = dcf_valuation(fcf_ttm, min(base_g*1.3,0.25), wacc_dict.get("low",wacc-0.01), 0.028, shares, net_debt)
         base = dcf_valuation(fcf_ttm, base_g, wacc, 0.025, shares, net_debt)
-        bear = dcf_valuation(fcf_ttm, base_g*0.6, wacc_dict.get("high",wacc+0.015), 0.02, shares, net_debt)
+        bear = dcf_valuation(fcf_ttm, base_g*0.6, wacc_dict.get("high",wacc+0.01), 0.02, shares, net_debt)
         f["dcf_bull"]=bull.get("intrinsic_per_share")
         f["dcf_base"]=base.get("intrinsic_per_share")
         f["dcf_bear"]=bear.get("intrinsic_per_share")

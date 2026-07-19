@@ -26,7 +26,9 @@ def dcf_sensitivity_matrix(fcf_base, growth, shares, net_debt, price,
 
 def ddm_valuation(dividend_ps, growth, wacc):
     d,g,r=_f(dividend_ps),_f(growth),_f(wacc)
-    if None in (d,g,r) or d<=0 or r<=g: return None
+    if None in (d,g,r) or d<=0: return None
+    g = min(g, r - 0.02)  # cap dividend growth >=2% below WACC (prevents inflation)
+    if r<=g: return None
     return round(d*(1+g)/(r-g),2)
 
 def extra_multiples(ev, revenue, fcf, invested_capital, ebit):
