@@ -13,8 +13,11 @@ def _safe_div(a,b):
 def compute_valuation_deepening(vf, fin_features, raw_ttm=None, price_history=None):
     f={}
     raw_ttm=raw_ttm or {}
-    price=_f(vf.get("current_price")); ev=_f(vf.get("enterprise_value")); shares=_f(vf.get("diluted_shares"))
-    mcap=(price*shares) if (price and shares) else None
+    price=_f(vf.get("current_price"))
+    shares=_f(vf.get("diluted_shares")) or _f(raw_ttm.get("diluted_shares"))
+    mcap=_f(vf.get("market_cap")) or ((price*shares) if (price and shares) else None)
+    net_debt=_f(vf.get("net_debt")) or _f(raw_ttm.get("net_debt")) or 0
+    ev=_f(vf.get("enterprise_value")) or ((mcap+net_debt) if mcap is not None else None)
     rev=_f(vf.get("revenue")) or _f(raw_ttm.get("revenue"))
     ni=_f(vf.get("net_income")) or _f(raw_ttm.get("net_income"))
     ebitda=_f(vf.get("ebitda")) or _f(raw_ttm.get("ebitda"))

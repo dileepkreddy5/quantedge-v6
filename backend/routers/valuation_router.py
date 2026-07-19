@@ -152,7 +152,10 @@ async def compute_valuation_intelligence(ticker: str, api_key: str) -> Dict[str,
                   "operating_income":_ttm("operating_income"),"operating_cash_flow":_ttm("operating_cash_flow"),
                   "free_cash_flow":_ttm("free_cash_flow"),"buybacks":_ttm("buybacks"),
                   "dividends_paid":_ttm("dividends_paid"),
-                  "ebitda":(_ttm("operating_income") or 0)+(_ttm("depreciation_amortization") or 0)}
+                  "ebitda":(_ttm("operating_income") or 0)+(_ttm("depreciation_amortization") or 0),
+                  "diluted_shares":merged[-1].get("diluted_shares"),
+                  "net_debt":val_features.get("net_debt"),
+                  "market_cap":market_cap}
         _deep=compute_valuation_deepening(val_features, fin_features, raw_ttm=_raw_ttm)
         val_features.update(_deep)
     except Exception as _e:
