@@ -19,6 +19,36 @@ from core.config import settings
 
 router = APIRouter()
 
+import httpx as _httpx
+_POLY = "https://api.polygon.io"
+
+async def _get_market_cap(ticker: str, api_key: str):
+    """Market cap: Polygon\'s field if present, else shares x latest price.
+    Real primitives only — never faked."""
+    try:
+        async with _httpx.AsyncClient(timeout=12) as c:
+            r = await c.get(f"{_POLY}/v3/reference/tickers/{ticker}?apiKey={api_key}")
+            if r.status_code != 200:
+                return None
+            res = (r.json() or {}).get("results", {}) or {}
+            mc = res.get("market_cap")
+            if mc:
+                return float(mc)
+            shares = (res.get("weighted_shares_outstanding")
+                      or res.get("share_class_shares_outstanding"))
+            if not shares:
+                return None
+            pr = await c.get(f"{_POLY}/v2/aggs/ticker/{ticker}/prev?apiKey={api_key}")
+            if pr.status_code != 200:
+                return None
+            results = (pr.json() or {}).get("results", [])
+            if not results:
+                return None
+            close = results[0].get("c")
+            return float(shares) * float(close) if close else None
+    except Exception:
+        return None
+
 def _san(o):
     if isinstance(o, float): return o if math.isfinite(o) else None
     if isinstance(o, dict): return {k: _san(v) for k, v in o.items()}
@@ -69,12 +99,7 @@ async def get_financial(ticker: str, http_request: Request,
         logger.info(f"financial: edgar unavailable {ticker}: {e}"); ed={}
     merged=merge_quarters(pq,ed)
 
-    market_cap=None
-    try:
-        from services.market_data import get_market_cap
-        market_cap=await get_market_cap(ticker)
-    except Exception:
-        pass
+    market_cap = await _get_market_cap(ticker, api_key)
     wacc=estimate_wacc(beta=None)["mid"]
     feats=compute_financial_features(merged,market_cap=market_cap,wacc=wacc)
 
