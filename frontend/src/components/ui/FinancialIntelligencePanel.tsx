@@ -114,7 +114,7 @@ export default function FinancialIntelligencePanel({ ticker }: { ticker: string 
     { k: 'ROIC−WACC', v: fmt('roic_wacc_spread', km.roic_wacc_spread) },
     { k: 'Owner Earnings', v: bn(km.owner_earnings) },
     { k: 'FCF Margin', v: fmt('fcf_margin', km.fcf_margin) },
-    { k: 'Cash Cycle', v: fmt('cash_conversion_cycle', km.cash_conversion_cycle) },
+    { k: 'Cash Cycle', v: km.cash_conversion_cycle == null ? 'n/a' : fmt('cash_conversion_cycle', km.cash_conversion_cycle) },
     { k: 'Shareholder Yield', v: fmt('shareholder_yield', km.shareholder_yield) },
   ];
   const badges = [
