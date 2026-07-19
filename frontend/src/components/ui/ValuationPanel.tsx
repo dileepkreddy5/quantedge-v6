@@ -10,6 +10,11 @@ interface ValData {
   key_metrics:Record<string,number|null>;
   sensitivity:{waccs:number[];terminal_growths:number[];grid:(number|null)[][];pct_scenarios_above_price:number|null}|null;
   value_range:{current_price:number;methods:Record<string,number|null>}|null;
+  assumptions:Record<string,number|null>|null;
+  cases:{bear:number|null;base:number|null;bull:number|null;probabilities:Record<string,number>|null;confidence_low:number|null;confidence_high:number|null}|null;
+  expected_return:Record<string,number|null>|null;
+  model_agreement:{dispersion_cv:number|null;consensus_overvalued:number|null;agreement_score:number|null}|null;
+  driver_waterfall:Record<string,number>|null;
   reason?:string;
 }
 
@@ -90,6 +95,81 @@ export default function ValuationPanel({ ticker }:{ ticker:string }){
         </div>
         <div style={{marginTop:14,fontSize:11,color:'#7a7266',marginLeft:-110}}>
           <span style={{color:'#1d9e75'}}>green</span> = above price (upside) · <span style={{color:'#a35a1d'}}>amber</span> = below price · <span style={{color:'#c0392b'}}>red line</span> = current price</div>
+      </div>
+
+      {/* ASSUMPTIONS PANEL */}
+      {d.assumptions && (
+        <div style={{background:'#141414',border:'1px solid #2a2a2a',borderRadius:12,padding:16,marginBottom:14}}>
+          <div style={{fontSize:12,color:'#9d8b7a',letterSpacing:1,marginBottom:12}}>DCF ASSUMPTIONS — what drives fair value</div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(120px,1fr))',gap:10}}>
+            {[['Revenue CAGR',d.assumptions.assumption_revenue_cagr,'%'],
+              ['WACC',d.assumptions.assumption_wacc,'%'],
+              ['Terminal Growth',d.assumptions.assumption_terminal_growth,'%'],
+              ['Operating Margin',d.assumptions.assumption_operating_margin,'%'],
+              ['Tax Rate',d.assumptions.assumption_tax_rate,'%'],
+              ['FCF Margin',d.assumptions.assumption_fcf_margin,'%'],
+              ['Beta',d.assumptions.assumption_beta,'x'],
+              ['Forecast Horizon',d.assumptions.assumption_forecast_years,'yr']].map(([k,v,u])=>(
+              <div key={k as string}>
+                <div style={{fontSize:10,color:'#7a7266'}}>{k}</div>
+                <div style={{fontSize:16,fontWeight:600,color:'#cdbfae'}}>
+                  {v==null?'—':u==='%'?((v as number)*100).toFixed(1)+'%':u==='x'?(v as number).toFixed(2):(v as number)+' yr'}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* CASES + EXPECTED RETURN + MODEL AGREEMENT */}
+      <div style={{display:'grid',gridTemplateColumns:'1.2fr 1fr 0.8fr',gap:14,marginBottom:14}}>
+        {d.cases && (
+          <div style={{background:'#141414',border:'1px solid #2a2a2a',borderRadius:12,padding:16}}>
+            <div style={{fontSize:12,color:'#9d8b7a',letterSpacing:1,marginBottom:12}}>SCENARIO FAIR VALUES</div>
+            {[['Bear',d.cases.bear,d.cases.probabilities?.bear,'#a35a1d'],
+              ['Base',d.cases.base,d.cases.probabilities?.base,'#1d9e75'],
+              ['Bull',d.cases.bull,d.cases.probabilities?.bull,'#0f9d6e']].map(([k,v,p,c])=>(
+              <div key={k as string} style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+                <span style={{fontSize:12,color:'#cdbfae',width:44}}>{k}</span>
+                <span style={{fontSize:10,color:'#7a7266'}}>{p!=null?((p as number)*100).toFixed(0)+'%':''}</span>
+                <span style={{fontSize:16,fontWeight:700,color:c as string}}>{v==null?'—':'$'+(v as number).toFixed(0)}</span>
+              </div>
+            ))}
+            {d.cases.confidence_low!=null && (
+              <div style={{marginTop:8,paddingTop:8,borderTop:'1px solid #222',fontSize:11,color:'#9d8b7a'}}>
+                Confidence range: <span style={{color:'#daa520'}}>${d.cases.confidence_low?.toFixed(0)}–${d.cases.confidence_high?.toFixed(0)}</span></div>
+            )}
+          </div>
+        )}
+        {d.expected_return && (
+          <div style={{background:'#141414',border:'1px solid #2a2a2a',borderRadius:12,padding:16}}>
+            <div style={{fontSize:12,color:'#9d8b7a',letterSpacing:1,marginBottom:6}}>EXPECTED RETURN</div>
+            <div style={{fontSize:26,fontWeight:700,color:(d.expected_return.expected_total_return??0)>=0?'#1d9e75':'#c0705a',marginBottom:10}}>
+              {((d.expected_return.expected_total_return??0)*100).toFixed(1)}%<span style={{fontSize:11,color:'#7a7266'}}> /yr</span></div>
+            {[['Revenue growth',d.expected_return.exp_return_growth,'#1d9e75'],
+              ['Dividend',d.expected_return.exp_return_dividend,'#3a9e75'],
+              ['Buyback',d.expected_return.exp_return_buyback,'#5a9e6a'],
+              ['Margin',d.expected_return.exp_return_margin,'#8a9e55'],
+              ['Multiple change',d.expected_return.exp_return_multiple,'#a35a1d']].map(([k,v,c])=>(
+              <div key={k as string} style={{display:'flex',justifyContent:'space-between',fontSize:11,marginBottom:4}}>
+                <span style={{color:'#9d8b7a'}}>{k}</span>
+                <span style={{color:c as string,fontWeight:600}}>{v==null?'—':((v as number)>=0?'+':'')+((v as number)*100).toFixed(1)+'%'}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {d.model_agreement && (
+          <div style={{background:'#141414',border:'1px solid #2a2a2a',borderRadius:12,padding:16}}>
+            <div style={{fontSize:12,color:'#9d8b7a',letterSpacing:1,marginBottom:10}}>MODEL AGREEMENT</div>
+            <div style={{fontSize:26,fontWeight:700,color:'#daa520'}}>
+              {d.model_agreement.agreement_score!=null?(d.model_agreement.agreement_score*100).toFixed(0)+'%':'—'}</div>
+            <div style={{fontSize:10,color:'#7a7266',marginBottom:10}}>method concordance</div>
+            {d.model_agreement.consensus_overvalued!=null && (
+              <div style={{fontSize:11,color:'#cdbfae'}}>
+                <span style={{color:d.model_agreement.consensus_overvalued>=0.6?'#c0705a':'#1d9e75',fontWeight:600}}>
+                  {(d.model_agreement.consensus_overvalued*100).toFixed(0)}%</span> of methods say overvalued</div>
+            )}
+          </div>
+        )}
       </div>
 
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:18}}>
