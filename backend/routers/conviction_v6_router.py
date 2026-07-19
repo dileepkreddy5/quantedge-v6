@@ -1,0 +1,57 @@
+"""Conviction v6 endpoint — the MASTER aggregator. Unifies all live intelligence
+modules into ONE consolidated conviction score via the extensible registry.
+Currently live: Financial (18%). Each future tab plugs in by adding a scorer +
+flipping its registry status. Deterministic; results briefly cached.
+"""
+from __future__ import annotations
+import math, time
+from typing import Optional, Dict, Any
+from fastapi import APIRouter, HTTPException, Request, Depends
+from loguru import logger
+
+from quantedge.scoring.conviction_agg import aggregate_conviction, MODULE_REGISTRY
+from auth.cognito_auth import get_optional_user, CognitoUser
+from core.config import settings
+
+router = APIRouter()
+
+_CACHE: Dict[str, Any] = {}
+_TTL = 900  # 15 min, matching platform cache window
+
+def _san(o):
+    if isinstance(o, float): return o if math.isfinite(o) else None
+    if isinstance(o, dict): return {k: _san(v) for k, v in o.items()}
+    if isinstance(o, (list, tuple)): return [_san(v) for v in o]
+    return o
+
+async def _financial_scorer_factory(http_request: Request, api_key: str, user):
+    """Returns an async scorer(ticker) -> {score, confidence, coverage} that reuses
+    the Financial Intelligence pipeline (one source of truth)."""
+    from routers.financial_router import get_financial
+    async def scorer(ticker: str):
+        res = await get_financial(ticker, http_request, user)
+        d = res.get("data", {})
+        if not d.get("available"): return None
+        return {"score": d.get("score"), "confidence": d.get("confidence"),
+                "coverage": d.get("coverage")}
+    return scorer
+
+@router.get("/conviction/{ticker}")
+async def get_conviction(ticker: str, http_request: Request,
+                         current_user: Optional[CognitoUser] = Depends(get_optional_user)):
+    ticker = ticker.upper().strip()
+    now = time.time()
+    if ticker in _CACHE and now - _CACHE[ticker]["t"] < _TTL:
+        return {"data": _CACHE[ticker]["v"], "cached": True}
+
+    api_key = getattr(settings, "POLYGON_API_KEY", "") or ""
+    if not api_key:
+        raise HTTPException(503, "data source unavailable")
+
+    scorers = {
+        "financial": await _financial_scorer_factory(http_request, api_key, current_user),
+    }
+    result = await aggregate_conviction(ticker, scorers)
+    result = _san(result)
+    _CACHE[ticker] = {"t": now, "v": result}
+    return {"data": result, "cached": False}
