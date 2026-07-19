@@ -1,6 +1,20 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../auth/authStore';
 
+const EXPLAIN: Record<string,string> = {
+  Piotroski: '9-point financial-health test. 7-9 = strong (profitable, improving, low-debt); 0-3 = weak.',
+  'Altman Z': 'Bankruptcy-risk gauge. Above 3 = safe, below 1.8 = distress. Higher is safer.',
+  'Beneish M': 'Earnings-manipulation detector. Below -1.78 = clean books; above = worth scrutiny.',
+  'ROIC (ex-GW)': 'Return on capital actually deployed, excluding acquisition goodwill. Above ~10% is good; higher = compounds capital efficiently.',
+  'ROIC−WACC': 'How much the firm earns above its cost of capital. Positive = creating value; bigger is better.',
+  'Owner Earnings': "Buffett's measure of true owner cash: profit + depreciation − maintenance capex.",
+  'FCF Margin': 'Share of revenue that becomes free cash. Above ~10% is strong — cash left after running the business.',
+  'Cash Cycle': 'Days to turn operations into cash. Negative = suppliers fund your operations (a strength).',
+  'Shareholder Yield': 'Dividends + buybacks as % of market cap — total cash returned to shareholders.',
+};
+
+
+
 function heat(score: number | null): string {
   if (score == null) return '#2a2a2a';
   if (score >= 85) return '#0f6e56';
@@ -123,15 +137,15 @@ export default function FinancialIntelligencePanel({ ticker }: { ticker: string 
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
           {badges.map(b => (
-            <div key={b.k} style={{ background: b.c, color: '#fff', padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, textAlign: 'center' }}>
-              <div style={{ opacity: 0.85, fontSize: 10 }}>{b.k}</div>{b.v}</div>
+            <div key={b.k} title={EXPLAIN[b.k] || ''} style={{ background: b.c, color: '#fff', padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, textAlign: 'center', cursor: 'help' }}>
+              <div style={{ opacity: 0.85, fontSize: 10 }}>{b.k} ⓘ</div>{b.v}</div>
           ))}
         </div>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(130px,1fr))', gap: 10, marginBottom: 22 }}>
         {cards.map(c => (
-          <div key={c.k} style={{ background: '#181818', border: '1px solid #2a2a2a', borderRadius: 10, padding: '12px 14px' }}>
-            <div style={{ fontSize: 11, color: '#9d8b7a', marginBottom: 4 }}>{c.k}</div>
+          <div key={c.k} title={EXPLAIN[c.k] || ''} style={{ background: '#181818', border: '1px solid #2a2a2a', borderRadius: 10, padding: '12px 14px', cursor: EXPLAIN[c.k] ? 'help' : 'default' }}>
+            <div style={{ fontSize: 11, color: '#9d8b7a', marginBottom: 4 }}>{c.k}{EXPLAIN[c.k] ? ' ⓘ' : ''}</div>
             <div style={{ fontSize: 20, fontWeight: 600, color: '#daa520' }}>{c.v}</div>
           </div>
         ))}
