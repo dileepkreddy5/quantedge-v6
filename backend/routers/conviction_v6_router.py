@@ -53,9 +53,16 @@ async def get_conviction(ticker: str, http_request: Request,
         d = await compute_valuation_intelligence(ticker, api_key)
         if not d.get("available"): return None
         return {"score": d.get("score"), "confidence": d.get("confidence"), "coverage": d.get("coverage")}
+    async def _market_scorer(ticker: str):
+        from routers.market_router import compute_market_intelligence
+        pool=getattr(http_request.app.state,"db_pool",None)
+        d = await compute_market_intelligence(ticker, api_key, pool)
+        if not d.get("available"): return None
+        return {"score": d.get("score"), "confidence": d.get("confidence"), "coverage": d.get("coverage")}
     scorers = {
         "financial": await _financial_scorer_factory(http_request, api_key, current_user),
         "valuation": _valuation_scorer,
+        "market": _market_scorer,
     }
     result = await aggregate_conviction(ticker, scorers)
     result = _san(result)
