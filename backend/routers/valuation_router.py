@@ -71,6 +71,36 @@ async def _get_beta_and_history(ticker: str, api_key: str):
     except Exception:
         return None, []
 
+def _valuation_reasons(features, rating):
+    """Rule-based explanation of the verdict from real signals (no LLM)."""
+    r=[]
+    pe=features.get("mult_pe")
+    if pe and pe>25: r.append(f"Premium P/E ({pe:.0f}x)")
+    mos=features.get("margin_of_safety")
+    if mos is not None and mos<0: r.append(f"Negative margin of safety ({mos*100:.0f}%)")
+    ig=features.get("reverse_dcf_implied_growth")
+    if ig and ig>0.12: r.append(f"High implied growth priced in ({ig*100:.0f}%)")
+    con=features.get("model_consensus_overvalued")
+    if con and con>=0.75: r.append(f"{con*100:.0f}% of models below current price")
+    sc=features.get("dcf_scenarios_above_price")
+    if sc is not None and sc<0.3: r.append(f"Only {sc*100:.0f}% of DCF scenarios justify price")
+    ph=features.get("pe_vs_history")
+    if ph and ph>1.1: r.append(f"P/E {ph:.0%} of its own historical average" if ph<1 else f"P/E above its historical average")
+    if not r: r.append("Valuation broadly in line with fundamentals")
+    return r
+
+def _model_confidence(features):
+    """Per-model confidence based on data completeness + method reliability weights."""
+    # base reliability weights (DCF most trusted for going concerns, NAV least)
+    base={"DCF":0.92,"Residual Income":0.84,"EPV":0.77,"Relative":0.88,"Graham":0.55,"DDM":0.70,"NAV":0.35}
+    present={"DCF":features.get("dcf_weighted"),"Residual Income":features.get("residual_income_value"),
+             "EPV":features.get("epv_per_share"),"Relative":features.get("mult_pe"),
+             "Graham":features.get("graham_number"),"DDM":features.get("ddm_value"),
+             "NAV":features.get("nav_per_share")}
+    out=[{"model":k,"confidence":round(base[k],2)} for k,v in present.items() if v is not None]
+    overall=round(sum(x["confidence"] for x in out)/len(out),2) if out else None
+    return {"models":out,"overall":overall}
+
 def score_valuation(features):
     cats=[]
     for cid,(label,wt,sigs) in CATEGORIES.items():
@@ -145,6 +175,9 @@ async def compute_valuation_intelligence(ticker: str, api_key: str) -> Dict[str,
                 "consensus_overvalued":val_features.get("model_consensus_overvalued"),
                 "agreement_score":val_features.get("model_agreement_score")},
             "driver_waterfall":val_features.get("driver_waterfall"),
+            "reasons":_valuation_reasons(val_features, valuation_rating(tree["score"])),
+            "model_confidence":_model_confidence(val_features),
+            "time_horizon_years":7,
             "value_range":{"current_price":price,
                 "methods":{"dcf_bear":val_features.get("dcf_bear"),"dcf_base":val_features.get("dcf_base"),
                     "dcf_bull":val_features.get("dcf_bull"),"epv":val_features.get("epv_per_share"),
