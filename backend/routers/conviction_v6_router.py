@@ -48,8 +48,14 @@ async def get_conviction(ticker: str, http_request: Request,
     if not api_key:
         raise HTTPException(503, "data source unavailable")
 
+    async def _valuation_scorer(ticker: str):
+        from routers.valuation_router import compute_valuation_intelligence
+        d = await compute_valuation_intelligence(ticker, api_key)
+        if not d.get("available"): return None
+        return {"score": d.get("score"), "confidence": d.get("confidence"), "coverage": d.get("coverage")}
     scorers = {
         "financial": await _financial_scorer_factory(http_request, api_key, current_user),
+        "valuation": _valuation_scorer,
     }
     result = await aggregate_conviction(ticker, scorers)
     result = _san(result)
