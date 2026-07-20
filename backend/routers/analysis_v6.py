@@ -1046,17 +1046,29 @@ class QuantEdgeAnalyzerV6:
                 if X_val is not None and y_val is not None and len(y_val) >= 10:
                     from scipy.stats import spearmanr
                     val_preds = None
-                    if 'xgb_model' in dir():
+                    # xgb_pred_21d != 0 means XGBoost trained successfully; use it.
+                    try:
                         val_preds = xgb_model.predict(X_val)
-                    elif 'lgb_model' in dir():
-                        val_preds = lgb_model.predict(X_val)
+                    except (NameError, AttributeError):
+                        try:
+                            val_preds = lgb_model.predict(X_val)
+                        except (NameError, AttributeError):
+                            val_preds = None
                     if val_preds is not None and len(val_preds) == len(y_val):
                         rho, _ = spearmanr(val_preds, y_val)
                         if np.isfinite(rho):
                             rank_ic_val = float(rho)
                             rank_ic_source = f"out-of-sample Spearman (n={len(y_val)})"
+                            logger.info(f"rank-IC (OOS Spearman) for {ticker}: {rank_ic_val:+.4f} on n={len(y_val)}")
+                        else:
+                            rank_ic_source = "non-finite (flat predictions)"
+                    else:
+                        rank_ic_source = "no validation predictions"
+                else:
+                    rank_ic_source = f"insufficient val data (n={len(y_val) if y_val is not None else 0})"
             except Exception as _e:
-                logger.info(f"rank-IC computation skipped: {_e}")
+                logger.info(f"rank-IC computation skipped: {type(_e).__name__}={_e}")
+                rank_ic_source = f"error: {type(_e).__name__}"
 
             return {
                 "lstm": lstm_preds if lstm_preds else {
