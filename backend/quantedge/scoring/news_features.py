@@ -23,16 +23,19 @@ def _sent_val(s):
 def compute_news_features(articles, ticker, price_return_30d=None):
     f={}; brief=[]
     now=datetime.now(timezone.utc)
+    SPAM=["tokenized","rtsla","rtoken","tokenised"]  # pure noise: "mentioned as one of 100 tokenized stocks"
     arts=[]
     for a in articles:
-        if not _is_english(a): continue
         ins=next((i for i in (a.get("insights") or []) if i.get("ticker")==ticker), None)
         sent=ins.get("sentiment") if ins else None
-        arts.append({"title":a.get("title",""),"desc":a.get("description",""),
+        title=a.get("title",""); reason=ins.get("sentiment_reasoning","") if ins else ""
+        # drop only pure tokenized-stock spam (adds no signal); KEEP foreign articles (valid sentiment)
+        if any(sp in (title+reason).lower() for sp in SPAM): continue
+        arts.append({"title":title,"desc":a.get("description",""),
             "pub":(a.get("publisher") or {}).get("name","") if isinstance(a.get("publisher"),dict) else "",
             "dt":_dt(a.get("published_utc","")),"kw":a.get("keywords") or [],
-            "sent":sent,"sval":_sent_val(sent),"reason":ins.get("sentiment_reasoning","") if ins else "",
-            "url":a.get("article_url","")})
+            "sent":sent,"sval":_sent_val(sent),"reason":reason,
+            "url":a.get("article_url",""),"is_en":_is_english(a)})
     arts=[a for a in arts if a["dt"] is not None]
     arts.sort(key=lambda x:x["dt"], reverse=True)
     n=len(arts)
@@ -148,8 +151,7 @@ def compute_news_features(articles, ticker, price_return_30d=None):
         s+=max(0,3-(now-a["dt"]).days*0.3)
         return s
     # prefer ticker-relevant articles; dedupe by publisher to avoid all-one-source
-    SPAM_B=["tokenized","rtsla","rtoken","tokenised"]
-    brief_pool=[a for a in arts if not any(sp in (a["title"]+a["reason"]).lower() for sp in SPAM_B)]
+    brief_pool=[a for a in arts if a.get("is_en")]  # readable brief = English titles only
     ranked_all=sorted(brief_pool, key=importance, reverse=True)
     seen_pub=Counter(); ranked=[]
     for a in ranked_all:
@@ -163,10 +165,10 @@ def compute_news_features(articles, ticker, price_return_30d=None):
     f["_brief"]=brief; f["_article_count"]=n
     f["_sentiment_dist"]={"positive":pos,"neutral":neu,"negative":neg}
     # feed: only articles genuinely about the company (rel_w full) or with real sentiment, drop tangential/spam
-    SPAM=["tokenized","rtsla","rtoken","tokenised","margin collateral"]
-    feed_arts=[a for a in arts if a["rel_w"]>=1.0 and not any(sp in (a["title"]+a["reason"]).lower() for sp in SPAM)]
-    if len(feed_arts)<8:  # backfill with other relevant if too few
-        feed_arts=feed_arts+[a for a in arts if a not in feed_arts and not any(sp in (a["title"]+a["reason"]).lower() for sp in SPAM)]
+    # feed shows English + relevant (foreign titles hidden here but their sentiment already counted above)
+    feed_arts=[a for a in arts if a.get("is_en") and a["rel_w"]>=1.0]
+    if len(feed_arts)<8:
+        feed_arts=feed_arts+[a for a in arts if a.get("is_en") and a not in feed_arts]
     f["_recent_headlines"]=[{"title":a["title"],"sentiment":a["sent"],"reason":a["reason"][:160],
                              "publisher":a["pub"],"date":a["dt"].strftime("%Y-%m-%d"),"url":a["url"]} for a in feed_arts[:15]]
     return f
