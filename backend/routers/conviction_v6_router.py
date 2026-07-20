@@ -59,6 +59,11 @@ async def get_conviction(ticker: str, http_request: Request,
         d = await compute_market_intelligence(ticker, api_key, pool)
         if not d.get("available"): return None
         return {"score": d.get("score"), "confidence": d.get("confidence"), "coverage": d.get("coverage")}
+    async def _iflow_scorer(ticker: str):
+        from routers.iflow_router import compute_iflow_intelligence
+        d = await compute_iflow_intelligence(ticker, api_key)
+        if not d.get("available"): return None
+        return {"score": d.get("score"), "confidence": d.get("confidence"), "coverage": d.get("coverage")}
     async def _altdata_scorer(ticker: str):
         from routers.altdata_router import compute_altdata_intelligence
         d = await compute_altdata_intelligence(ticker, api_key)
@@ -125,6 +130,7 @@ async def get_conviction(ticker: str, http_request: Request,
         "macro": _macro_scorer,
         "forecast": _forecast_scorer,
         "alt_data": _altdata_scorer,
+        "institutional": _iflow_scorer,
     }
     result = await aggregate_conviction(ticker, scorers)
     result = _san(result)
