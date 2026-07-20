@@ -43,7 +43,7 @@ def compute_risk_features(merged, price_closes=None, market_cap=None, beta=None)
     if ocf_ttm is not None: fscore+=1 if ocf_ttm>0 else 0; checks+=1
     if ocf_ttm is not None and ni_ttm is not None: fscore+=1 if ocf_ttm>ni_ttm else 0; checks+=1
     if checks>0: f["piotroski_partial"]=fscore
-    f["ebit_to_debt"]=_sd(ebit_ttm,total_debt) if total_debt>0 else None
+    f["ebit_to_debt"]=_sd(ebit_ttm,total_debt) if (total_debt is not None and total_debt>0) else None
     f["debt_to_assets"]=_sd(total_debt,assets)
 
     f["debt_to_equity"]=_sd(total_debt,eq)
@@ -58,7 +58,7 @@ def compute_risk_features(merged, price_closes=None, market_cap=None, beta=None)
     f["current_ratio"]=_sd(ca,cl)
     f["quick_ratio"]=_sd((ca-_f(q.get("inventory") or 0)) if ca else None, cl)
     f["cash_ratio"]=_sd(cash,cl)
-    f["cash_to_debt"]=_sd(cash,total_debt) if total_debt>0 else None
+    f["cash_to_debt"]=_sd(cash,total_debt) if (total_debt is not None and total_debt>0) else None
     if ocf_ttm is not None and cash is not None:
         q_burn=-ocf_ttm/4 if ocf_ttm<0 else None
         f["cash_runway_qtrs"]=round(cash/q_burn,1) if q_burn and q_burn>0 else None
