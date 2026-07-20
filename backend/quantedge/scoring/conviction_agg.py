@@ -12,7 +12,7 @@ MODULE_REGISTRY = [
     {"id":"valuation",     "label":"Valuation Intelligence",     "weight":10, "status":"live"},
     {"id":"news",          "label":"News Intelligence",          "weight":10, "status":"live"},
     {"id":"competitive",   "label":"Competitive Intelligence",   "weight":8,  "status":"live"},
-    {"id":"management",    "label":"Management Intelligence",    "weight":6,  "status":"pending"},
+    {"id":"management",    "label":"Management Intelligence",    "weight":6,  "status":"live"},
     {"id":"industry",      "label":"Industry Intelligence",      "weight":6,  "status":"live"},
     {"id":"risk",          "label":"Risk Intelligence",          "weight":6,  "status":"live"},
     {"id":"market",        "label":"Market Intelligence",        "weight":5,  "status":"live"},
