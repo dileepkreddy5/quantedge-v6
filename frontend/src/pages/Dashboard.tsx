@@ -36,7 +36,6 @@ import MacroPanel from '../components/ui/MacroPanel';
 import ForecastPanel from '../components/ui/ForecastPanel';
 import AltDataPanel from '../components/ui/AltDataPanel';
 import IFlowPanel from '../components/ui/IFlowPanel';
-import PeersScorePanel from '../components/ui/PeersScorePanel';
 import PeerPanel from '../components/ui/PeerPanel';
 import FinancialIntelligencePanel from '../components/ui/FinancialIntelligencePanel';
 import ConvictionBadge from '../components/ui/ConvictionBadge';
@@ -62,7 +61,6 @@ const TABS = [
   { id: 'forecast',    label: '🔮 FORECAST' },
   { id: 'altdata',     label: '📡 ALT-DATA' },
   { id: 'iflow',       label: '💸 INST FLOW' },
-  { id: 'peers_score', label: '🏅 PEERS' },
   { id: 'fundamental', label: '📋 FUNDAMENTALS' },
   { id: 'financial',   label: '💎 FINANCIAL' },
   { id: 'valuation',   label: '⚖️ VALUATION' },
@@ -425,7 +423,6 @@ export default function Dashboard() {
               {activeTab === 'forecast'    && <ForecastPanel ticker={ticker} />}
               {activeTab === 'altdata'     && <AltDataPanel ticker={ticker} />}
               {activeTab === 'iflow'       && <IFlowPanel ticker={ticker} />}
-              {activeTab === 'peers_score' && <PeersScorePanel ticker={ticker} />}
               {activeTab === 'fundamental' && <FundamentalsPanel data={data} />}
               {activeTab === 'financial'   && <FinancialIntelligencePanel ticker={ticker} />}
               {activeTab === 'valuation'   && <ValuationPanel ticker={ticker} />}

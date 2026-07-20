@@ -29,6 +29,7 @@ const PeerPanel: React.FC<Props> = ({ ticker: tickerProp, data: analysisData, on
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState(false);
   const [factorKey, setFactorKey] = useState('mom_3m');
+  const [scoreData, setScoreData] = useState<any>(null);
 
   const load = useCallback(async () => {
     if (!ticker) { setLoading(false); return; }
@@ -36,6 +37,10 @@ const PeerPanel: React.FC<Props> = ({ ticker: tickerProp, data: analysisData, on
     try {
       const res = await api.get(`/api/v6/peers/${ticker}`);
       setPd(res.data?.data || null);
+      try {
+        const sr = await api.get(`/api/v6/peers_score/${ticker}`);
+        if (sr.data?.data?.available) setScoreData(sr.data.data);
+      } catch { /* score is optional enhancement */ }
     } catch { setErr(true); }
     finally { setLoading(false); }
   }, [ticker]);
@@ -67,6 +72,34 @@ const PeerPanel: React.FC<Props> = ({ ticker: tickerProp, data: analysisData, on
         <span style={{ color: C.gold, fontWeight:700, fontSize:15 }}>{ticker} vs {pd.bucket.toUpperCase()} PEERS</span>
         <span style={{ color: C.textDim, fontSize:12 }}>{pd.peer_count} comparable companies</span>
       </div>
+      {scoreData && (() => {
+        const s = scoreData.score; const rating = scoreData.peers_rating || '';
+        const km = scoreData.key_metrics || {};
+        const rc = s==null?'#8a7560':s>=72?'#22c55e':s>=58?'#4ade80':s>=44?'#daa520':s>=30?'#f59e0b':'#ef4444';
+        const pctl = (v:number|null|undefined)=> v==null?'—':Math.round(v*100)+'th';
+        return (
+          <div style={{ display:'flex', alignItems:'center', gap:20, flexWrap:'wrap', background:'#140c08',
+                        border:`1px solid ${C.border}`, borderRadius:12, padding:'12px 18px', marginBottom:16 }}>
+            <div style={{ display:'flex', alignItems:'baseline', gap:6 }}>
+              <span style={{ fontSize:34, fontWeight:700, color:rc, lineHeight:1 }}>{s?.toFixed(0) ?? '—'}</span>
+              <span style={{ fontSize:13, color:C.textDim }}>/100</span>
+            </div>
+            <div style={{ minWidth:110 }}>
+              <div style={{ fontSize:16, fontWeight:700, color:rc }}>{rating}</div>
+              <div style={{ fontSize:10, color:C.textDim }}>overall peer standing</div>
+            </div>
+            <div style={{ display:'flex', gap:16, flexWrap:'wrap', flex:1, justifyContent:'flex-end' }}>
+              {[['Quality',km.quality_composite],['Profitability',km.profitability_composite],
+                ['Growth',km.revenue_growth_rank],['ROIC',km.roic_rank],['Valuation',km.pe_rank]].map(([l,v]:any)=>(
+                <div key={l} style={{ textAlign:'center' }}>
+                  <div style={{ fontSize:9, color:C.textDim, textTransform:'uppercase', letterSpacing:0.5 }}>{l}</div>
+                  <div style={{ fontSize:15, fontWeight:600, color: v==null?'#8a7560':v>=0.66?C.green:v>=0.33?C.gold:C.red }}>{pctl(v)}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
       <div style={{ fontSize:11, color:C.textDim, marginBottom:18, fontStyle:'italic' }}>
         Percentile = share of sector peers this stock ranks above on each factor. Higher is stronger. Contextual, not predictive.
       </div>
