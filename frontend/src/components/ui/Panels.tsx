@@ -4,7 +4,7 @@
 // Fundamentals, Scenarios, Signal, Watchlist panels
 // ============================================================
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { api, useAuthStore } from '../../auth/authStore';
 import toast from 'react-hot-toast';
 import { useResponsive } from '../../hooks/useResponsive';
@@ -1049,7 +1049,27 @@ export function WallStreetPanel({ data }: { data: any }) {
   const earnings = ar.earnings || {};
   const trend = ar.trend || [];
   const surpriseHistory = earnings.surprise_history || [];
+  const analytics = ar.analytics || {};
   const source = ar.source || "unavailable";
+
+  // Fetch conviction for QuantEdge-vs-Street (separate endpoint)
+  const wsTicker = (data.ticker || data.symbol || "").toUpperCase();
+  const [convData, setConvData] = useState<any>(null);
+  useEffect(() => {
+    if (!wsTicker) return;
+    api.get(`/api/v7/conviction/${wsTicker}`)
+      .then(r => { const c = r.data?.data; if (c) setConvData(c); })
+      .catch(() => {});
+  }, [wsTicker]);
+
+  // QuantEdge vs Street divergence
+  const ourConviction = convData?.conviction_score ?? null;
+  const ourVerdict = convData?.verdict ?? null;
+  const streetScore5 = consensus.score;  // 0-5 scale
+  const streetPct = streetScore5 != null ? (streetScore5 / 5) * 100 : null;
+  const divergence = (ourConviction != null && streetPct != null) ? Math.round(ourConviction - streetPct) : null;
+  const pct1 = (v: number | null | undefined) => v == null ? "—" : (v * 100).toFixed(0) + "%";
+  const arrow = (v: number | null | undefined, good = true) => v == null ? "" : (v > 0 ? (good ? "▲" : "▲") : v < 0 ? "▼" : "■");
 
   const daysToEarnings = earnings.days_to;
   const earningsUrgency = daysToEarnings != null && daysToEarnings <= 14
@@ -1139,6 +1159,70 @@ export function WallStreetPanel({ data }: { data: any }) {
           <span style={{ color: "#ff8090" }}>▼ {consensus.downgrades_30d || 0} consensus down</span>
           <span>vs prev month</span>
         </div>
+
+        {/* ── ANALYST SIGNAL ANALYTICS (computed) ── */}
+        {(analytics.beat_rate != null || analytics.revision_momentum != null) && (
+          <>
+            <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: "#daa520", letterSpacing: 2, margin: "6px 0 8px" }}>ANALYST SIGNAL ANALYTICS</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
+              <div style={{ background: "#1a0f0a", borderRadius: 6, padding: "8px 10px" }}>
+                <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: "#9d8b7a", marginBottom: 3 }}>EARNINGS BEAT RATE</div>
+                <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 15, fontWeight: 700, color: (analytics.beat_rate ?? 0) >= 0.6 ? "#40dda0" : (analytics.beat_rate ?? 0) >= 0.4 ? "#e8b84b" : "#ff8090" }}>
+                  {analytics.beat_rate != null ? `${Math.round(analytics.beat_rate * analytics.n_quarters)} of ${analytics.n_quarters}` : "—"}
+                  <span style={{ fontSize: 10, color: "#8a7560", marginLeft: 6 }}>{pct1(analytics.beat_rate)}</span>
+                </div>
+              </div>
+              <div style={{ background: "#1a0f0a", borderRadius: 6, padding: "8px 10px" }}>
+                <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: "#9d8b7a", marginBottom: 3 }}>AVG SURPRISE</div>
+                <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 15, fontWeight: 700, color: (analytics.avg_surprise_pct ?? 0) > 0 ? "#40dda0" : "#ff8090" }}>
+                  {analytics.avg_surprise_pct != null ? `${analytics.avg_surprise_pct > 0 ? "+" : ""}${analytics.avg_surprise_pct}%` : "—"}
+                  {analytics.surprise_trend != null && (
+                    <span style={{ fontSize: 9, color: analytics.surprise_trend >= 0 ? "#40dda0" : "#ff8090", marginLeft: 6 }}>
+                      {arrow(analytics.surprise_trend)} {analytics.surprise_trend >= 0 ? "improving" : "cooling"}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div style={{ background: "#1a0f0a", borderRadius: 6, padding: "8px 10px" }}>
+                <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: "#9d8b7a", marginBottom: 3 }}>REVISION MOMENTUM</div>
+                <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 13, fontWeight: 700, color: analytics.revision_direction === "improving" ? "#40dda0" : analytics.revision_direction === "deteriorating" ? "#ff8090" : "#e8b84b" }}>
+                  {analytics.revision_direction || "—"}
+                </div>
+                <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 7, color: "#8a7560" }}>Jegadeesh: changes &gt; levels</div>
+              </div>
+              <div style={{ background: "#1a0f0a", borderRadius: 6, padding: "8px 10px" }}>
+                <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: "#9d8b7a", marginBottom: 3 }}>BULL SHARE · CONVICTION</div>
+                <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 13, fontWeight: 700, color: "#d4c4b0" }}>
+                  {pct1(analytics.bull_share)} <span style={{ fontSize: 9, color: "#8a7560" }}>· HHI {analytics.rating_conviction ?? "—"}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* QuantEdge vs Street */}
+            {divergence != null && (
+              <div style={{ background: "#140c08", border: "1px solid #3a2920", borderRadius: 8, padding: "10px 12px", marginBottom: 12 }}>
+                <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: "#daa520", letterSpacing: 2, marginBottom: 8 }}>QUANTEDGE vs THE STREET</div>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                  <div style={{ textAlign: "center", flex: 1 }}>
+                    <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: "#9d8b7a" }}>QUANTEDGE</div>
+                    <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 20, color: "#daa520" }}>{ourConviction?.toFixed(0) ?? "—"}</div>
+                    <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: "#8a7560" }}>{ourVerdict || ""}</div>
+                  </div>
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 13, fontWeight: 700, color: Math.abs(divergence) <= 5 ? "#8a7560" : divergence > 0 ? "#40dda0" : "#ff8090" }}>
+                      {Math.abs(divergence) <= 5 ? "≈ ALIGNED" : divergence > 0 ? `+${divergence} MORE BULLISH` : `${divergence} MORE BEARISH`}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "center", flex: 1 }}>
+                    <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: "#9d8b7a" }}>STREET</div>
+                    <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 20, color: consensus.color || "#40dda0" }}>{streetPct?.toFixed(0) ?? "—"}</div>
+                    <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: "#8a7560" }}>{consensus.label || ""}</div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
+        )}
 
         <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: "#8a7560", marginTop: 12, lineHeight: 1.6 }}>
           Individual analyst names and price targets require paid Finnhub plan.<br/>
