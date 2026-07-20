@@ -68,12 +68,15 @@ def compute_forecast_features(merged, closes, fin_features):
     if len(rev)>=5 and len(oi)>=5:
         d_rev=rev[-1]-rev[-4] if len(rev)>=4 else None
         d_oi=oi[-1]-oi[-4] if len(oi)>=4 else None
-        if d_rev and d_rev!=0 and d_oi is not None:
-            f["incremental_op_margin"]=d_oi/d_rev  # each new $ revenue -> $ operating income
+        if d_rev and abs(d_rev)>0.02*abs(rev[-1]) and d_oi is not None:
+            im=d_oi/d_rev
+            if -1.5<=im<=3.0: f["incremental_op_margin"]=im  # cap at sane bounds
         # operating leverage ratio: %ΔOI / %Δrev
         if len(oi)>=4 and oi[-4] and oi[-4]>0 and rev[-4] and rev[-4]>0:
             pct_oi=oi[-1]/oi[-4]-1; pct_rev=rev[-1]/rev[-4]-1
-            if pct_rev!=0: f["operating_leverage"]=pct_oi/pct_rev
+            if abs(pct_rev)>0.02:
+                ol=pct_oi/pct_rev
+                if -3<=ol<=5: f["operating_leverage"]=ol
 
     # ========== MARGIN TRAJECTORY ==========
     op_margins=[oi[i]/rev[i] for i in range(min(len(oi),len(rev))) if rev[i] and rev[i]>0]
@@ -120,8 +123,9 @@ def compute_forecast_features(merged, closes, fin_features):
         # effective tax rate
         etr=0.21
         if tax and pre and pre[-1] and pre[-1]>0: etr=min(0.5,max(0.0,tax[-1]/pre[-1]))
-        if ic_old is not None and (ic_new-ic_old)!=0 and d_oi is not None:
-            f["roiic"]=d_oi*(1-etr)/(ic_new-ic_old)  # return on incremental invested capital
+        if ic_old is not None and abs(ic_new-ic_old)>0.03*abs(ic_new or 1) and d_oi is not None:
+            r=d_oi*(1-etr)/(ic_new-ic_old)
+            if -0.5<=r<=0.6: f["roiic"]=r  # cap at sane bounds (avoid tiny-denominator blowup)
     # intrinsic growth = ROIC * reinvestment rate (approx via retained/equity growth)
     roic=fin_features.get("roic")
     if roic is not None and len(eq)>=5:
