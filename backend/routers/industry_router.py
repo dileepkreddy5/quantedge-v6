@@ -8,7 +8,7 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request, Depends
 from loguru import logger
 
-from quantedge.scoring.industry_features import compute_industry_features, sic_to_sector_etf
+from quantedge.scoring.industry_features import compute_industry_features, sic_to_sector_etf, bucket_to_etf
 from quantedge.scoring.compute import score_signal
 from quantedge.scoring.cat_industry_v6 import CATEGORIES, industry_rating
 from services.peer_store import PeerStore
@@ -68,16 +68,22 @@ async def compute_industry_intelligence(ticker: str, api_key: str, pool=None) ->
     ticker=ticker.upper().strip()
     det=await _details(ticker, api_key)
     sic=det.get("sic_code")
-    etf,sector_name=sic_to_sector_etf(sic)
+    peer_bucket=None
+    if pool is not None:
+        try: peer_bucket=await PeerStore(pool).get_peers(ticker)
+        except Exception as e: logger.debug(f"peer bucket failed: {e}")
+    # prefer authoritative sector bucket (from scan) over SIC-range guessing
+    etf=None; sector_name=None
+    if peer_bucket and peer_bucket.get("available"):
+        be=bucket_to_etf(peer_bucket.get("bucket"))
+        if be: etf,sector_name=be
+    if etf is None:
+        etf,sector_name=sic_to_sector_etf(sic)
     stock=await _closes(ticker, api_key)
     sector=await _closes(etf, api_key) if etf else []
     spy=await _closes("SPY", api_key)
     if not stock or len(stock)<60:
         return {"ticker":ticker,"available":False,"reason":"insufficient price history"}
-    peer_bucket=None
-    if pool is not None:
-        try: peer_bucket=await PeerStore(pool).get_peers(ticker)
-        except Exception as e: logger.debug(f"peer bucket failed: {e}")
     feats=compute_industry_features(sic, stock, sector, spy,
         market_cap=det.get("market_cap"), employees=det.get("total_employees"),
         list_date=det.get("list_date"), peer_bucket=peer_bucket)

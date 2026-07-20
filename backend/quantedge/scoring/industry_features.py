@@ -4,6 +4,17 @@ maturity. From SIC + sector ETF prices + peer_stats bucket. Technical/relative =
 import math, statistics as st
 from datetime import datetime, date
 
+BUCKET_ETF={"Technology":("XLK","Technology"),"Financials":("XLF","Financials"),
+    "Financial":("XLF","Financials"),"Healthcare":("XLV","Healthcare"),"Health Care":("XLV","Healthcare"),
+    "Energy":("XLE","Energy"),"Industrials":("XLI","Industrials"),"Consumer Discretionary":("XLY","Consumer Discretionary"),
+    "Consumer Staples":("XLP","Consumer Staples"),"Utilities":("XLU","Utilities"),"Materials":("XLB","Materials"),
+    "Real Estate":("XLRE","Real Estate"),"Communication Services":("XLC","Communications"),
+    "Communications":("XLC","Communications")}
+
+def bucket_to_etf(bucket):
+    if not bucket: return None
+    return BUCKET_ETF.get(bucket)
+
 def sic_to_sector_etf(sic):
     if not sic: return "SPY","Unknown"
     try: s=int(sic)
@@ -13,6 +24,7 @@ def sic_to_sector_etf(sic):
     if 1500<=s<1800: return "XLI","Construction/Industrials"
     if 2000<=s<2400: return "XLP","Consumer Staples"
     if 2400<=s<2800: return "XLB","Materials"
+    if 2830<=s<2840: return "XLV","Pharmaceuticals"
     if 2800<=s<2900: return "XLB","Chemicals"
     if 2900<=s<3000: return "XLE","Petroleum"
     if 3570<=s<3580 or 3670<=s<3700: return "XLK","Technology/Hardware"
