@@ -38,13 +38,19 @@ def compute_news_features(articles, ticker, price_return_30d=None):
     arts.sort(key=lambda x:x["dt"], reverse=True)
     n=len(arts)
     if n==0: return {"available":False}
+    tkr=ticker.lower()
+    for a in arts:
+        a["rel_w"]=1.0 if (tkr in a["title"].lower()) else 0.5
     def within(days): return [a for a in arts if (now-a["dt"]).days<=days]
     a7=within(7); a30=within(30)
     sv=[a["sval"] for a in arts]; sv30=[a["sval"] for a in a30]
 
     pos=sum(1 for a in arts if a["sval"]>0); neg=sum(1 for a in arts if a["sval"]<0); neu=n-pos-neg
-    f["net_sentiment"]=(pos-neg)/n; f["positive_ratio"]=pos/n; f["negative_ratio"]=neg/n
-    f["sentiment_score_mean"]=sum(sv)/n
+    W=sum(a["rel_w"] for a in arts) or 1
+    wpos=sum(a["rel_w"] for a in arts if a["sval"]>0); wneg=sum(a["rel_w"] for a in arts if a["sval"]<0)
+    f["net_sentiment"]=(wpos-wneg)/W; f["positive_ratio"]=wpos/W; f["negative_ratio"]=wneg/W
+    f["sentiment_score_mean"]=sum(a["sval"]*a["rel_w"] for a in arts)/W
+    f["subject_article_count"]=sum(1 for a in arts if a["rel_w"]>=1.0)
     f["sentiment_dispersion"]=(sum((x-f["sentiment_score_mean"])**2 for x in sv)/n)**0.5
     f["bullish_bearish_ratio"]=pos/max(neg,1); f["strong_sentiment_share"]=(pos+neg)/n
 
