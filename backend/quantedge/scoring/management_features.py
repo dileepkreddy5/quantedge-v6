@@ -36,11 +36,25 @@ def compute_management_features(merged, fin_features, insider=None, market_cap=N
         f["total_payout_yield"]=_sd((bb or 0)+(div or 0),market_cap)
     f["payout_ratio"]=_sd((div or 0)+(bb or 0),fcf) if fcf and fcf>0 else None
     # ROIC trend (improving capital allocation)
-    roics=[]
-    for i in range(len(merged)-4,len(merged)):
-        if i<0: continue
     roic_now=fin_features.get("roic")
     if roic_now is not None: f["roic_level"]=roic_now
+    # ROIC trend: NOPAT/invested-capital over time (operating_income*0.79 / (equity+debt))
+    roic_series=[]
+    for x in merged[-8:]:
+        oi=_f(x.get("operating_income")); e=_f(x.get("equity"))
+        ltd=_f(x.get("long_term_debt")) or 0; std=_f(x.get("short_term_debt")) or 0
+        ic=(e+ltd+std) if e is not None else None
+        if oi is not None and ic and ic>0: roic_series.append(oi*4*0.79/ic)
+    if len(roic_series)>=6:
+        f["roic_trend"]=st.mean(roic_series[-3:])-st.mean(roic_series[:3])
+    # incremental ROIC: change in operating income / change in invested capital (return on NEW capital)
+    if len(merged)>=8:
+        oi_new=ttm("operating_income")
+        oi_old_vals=[_f(merged[i].get("operating_income")) for i in range(max(0,len(merged)-8),len(merged)-4)]
+        oi_old=sum(v for v in oi_old_vals if v is not None) if all(v is not None for v in oi_old_vals) else None
+        a_new=cur("assets"); a_old=_f(merged[-5].get("assets")) if len(merged)>=5 else None
+        if all(v is not None for v in [oi_new,oi_old,a_new,a_old]) and (a_new-a_old)!=0:
+            f["incremental_roic"]=(oi_new-oi_old)*0.79/(a_new-a_old)
     # dividend consistency (paid every quarter)
     divs=series("dividends_paid",8)
     if divs: f["dividend_consistency"]=sum(1 for d in divs if d and d>0)/len(divs)
@@ -91,9 +105,11 @@ def compute_management_features(merged, fin_features, insider=None, market_cap=N
     # ===== SHAREHOLDER ALIGNMENT =====
     # share count trend (buyback = shrinking = aligned; dilution = misaligned)
     shares=series("diluted_shares",8)
-    if len(shares)>=8:
-        old=st.mean(shares[:4]); new=st.mean(shares[4:])
-        f["share_count_change"]=(new/old-1) if old>0 else None  # negative=buyback=good
+    if len(shares)>=6:
+        _o=st.median(shares[:3]); _n=st.median(shares[-3:])
+        chg=(_n/_o-1) if _o>0 else None
+        # reject split artifacts (|change|>40% over 2yr is a data error, not real dilution/buyback)
+        f["share_count_change"]=chg if (chg is not None and abs(chg)<0.40) else None
     # SBC discipline
     sbc=ttm("sbc")
     if sbc is not None and rev and rev>0: f["sbc_intensity"]=sbc/rev
@@ -123,5 +139,26 @@ def compute_management_features(merged, fin_features, insider=None, market_cap=N
     if len(ltd_series)>=8 and assets:
         old=st.mean(ltd_series[:4]); new=st.mean(ltd_series[4:])
         f["debt_discipline"]=-(new/old-1) if old>0 else None  # negative debt growth = good (flip sign)
+
+    # ===== ADDED: buyback timing, accrual quality, R&D efficiency =====
+    # accrual quality (Sloan): low accruals = high earnings quality = mgmt integrity
+    if ni is not None and ocf is not None and assets:
+        f["accrual_quality"]=-((ni-ocf)/assets)  # negative accruals good -> flip so higher=better
+    # R&D efficiency: revenue growth per R&D dollar
+    rd=ttm("rd") if "rd" in (merged[-1] if merged else {}) else None
+    rd=ttm("rd")
+    if rd and rev and rd>0:
+        f["rd_intensity"]=rd/rev
+        rg=fin_features.get("revenue_growth")
+        if rg is not None: f["rd_efficiency"]=rg/(rd/rev) if (rd/rev)>0 else None
+    # insider recency-weighted (from insider dict if present)
+    if insider.get("available"):
+        f["insider_conviction"]=insider.get("buy_value_ratio")
+    # earnings quality: OCF consistently >= NI
+    ocf_ni=[]
+    for x in merged[-8:]:
+        _ni=_f(x.get("net_income")); _ocf=_f(x.get("operating_cash_flow"))
+        if _ni and _ocf and _ni!=0: ocf_ni.append(_ocf/_ni)
+    if len(ocf_ni)>=6: f["earnings_quality_consistency"]=sum(1 for r in ocf_ni if r>=0.9)/len(ocf_ni)
 
     return {k:v for k,v in f.items() if v is not None}
