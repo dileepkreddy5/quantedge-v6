@@ -12,7 +12,7 @@ BUCKET_ETF={"Technology":("XLK","Technology"),"Financials":("XLF","Financials"),
     "Communications":("XLC","Communications")}
 
 def bucket_to_etf(bucket):
-    if not bucket: return None
+    if not bucket or bucket=="Other": return None
     return BUCKET_ETF.get(bucket)
 
 def sic_to_sector_etf(sic):
