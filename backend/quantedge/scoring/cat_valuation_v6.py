@@ -30,7 +30,7 @@ CATEGORIES = {
  ]),
  "relative_multiples": ("Relative Valuation", 1.50, [
    _s("ps_ratio","P/S","ps_ratio",0.15,8,3,hib=False,peer_key="ps_ratio",evidence="price / sales (vs peers)"),
-   _s("pcf_ratio","P/CF","pcf_ratio",0.15,25,12,hib=False,peer_key="pcf_ratio",evidence="price / operating cash flow (vs peers)"),
+   _s("pcf_ratio","P/CF","pcf_ratio",0.15,25,12,hib=False,evidence="price / operating cash flow"),
    _s("ev_fcf","EV/FCF","ev_fcf",0.15,35,18,hib=False,evidence="enterprise value / free cash flow"),
    _s("pe","P/E","mult_pe",0.30,25,12,hib=False,floor=60,floor_score=10,peer_key="mult_pe",evidence="price / earnings (vs peers)"),
    _s("peg","PEG","mult_peg",0.30,2.0,1.0,hib=False,evidence="P/E / growth"),

@@ -170,7 +170,7 @@ async def compute_valuation_intelligence(ticker: str, api_key: str, pool=None) -
             from services.peer_store import PeerStore as _PS
             _pd=await _PS(_pool).get_peers(ticker)
             if _pd.get("available"):
-                _KM={"fund_pe":"mult_pe","fund_ps":"ps_ratio","fund_ocf_yield":"pcf_ratio"}
+                _KM={"fund_pe":"mult_pe","fund_ps":"ps_ratio"}
                 _fl={}
                 for _row in _pd.get("peers",[]):
                     _fac=_row.get("factors")
