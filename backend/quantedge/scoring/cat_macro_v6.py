@@ -34,15 +34,15 @@ CATEGORIES = {
    _s("momentum_tilt","Momentum tilt","momentum_tilt",0.35,0.0,0.5,evidence="momentum-factor loading"),
    _s("market_corr","Market correlation","market_correlation",0.30,0.9,0.5,hib=False,evidence="independence from market")]),
  "defensiveness":("Defensiveness & Resilience",0.15,[
-   _s("defensiveness","Defensiveness","defensiveness",0.40,0.3,0.7,evidence="low-beta defensive character"),
-   _s("macro_resilience","Macro resilience","macro_resilience",0.60,0.5,0.85,evidence="insulation from macro shocks")]),
+   _s("defensiveness","Defensiveness","defensiveness",0.40,0.2,0.6,evidence="low-beta defensive character"),
+   _s("macro_resilience","Macro resilience","macro_resilience",0.60,0.6,0.9,evidence="insulation from macro shocks")]),
 }
 MACRO_INTELLIGENCE={"label":"Macro Sensitivity","weight":3.0,"categories":CATEGORIES}
 
 def macro_rating(score):
     if score is None: return "Unrated"
-    if score>=68: return "Insulated"
-    if score>=54: return "Resilient"
-    if score>=42: return "Balanced"
+    if score>=76: return "Insulated"
+    if score>=62: return "Resilient"
+    if score>=48: return "Balanced"
     if score>=30: return "Exposed"
     return "Highly Exposed"
