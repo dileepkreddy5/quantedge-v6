@@ -151,10 +151,46 @@ class AnalystRatingsEngine:
         eps_est, eps_prev, eps_growth = self._next_eps_from_history(earnings)
         rev_est = rev_prev = rev_growth = None
 
+        # ── Computed analytics from real data (no new source) ──
+        _sh = [e for e in earnings[:8]]
+        _beats = [e for e in _sh if (e.get("surprisePercent") or 0) > 0]
+        _surprises = [e.get("surprisePercent") for e in _sh if e.get("surprisePercent") is not None]
+        _beat_rate = round(len(_beats)/len(_sh), 3) if _sh else None
+        _avg_surprise = round(sum(_surprises)/len(_surprises), 2) if _surprises else None
+        # surprise trend: recent 2 vs older 2 (positive = improving execution)
+        _surprise_trend = None
+        if len(_surprises) >= 4:
+            _surprise_trend = round((sum(_surprises[:2])/2) - (sum(_surprises[2:4])/2), 2)
+        # consensus revision momentum: net (strongBuy+buy) share change over trend window
+        _rev_mom = None; _rev_direction = "stable"
+        if len(recs) >= 2:
+            def _bull_share(r):
+                n = sum(int(r.get(k,0) or 0) for k in ["strongBuy","buy","hold","sell","strongSell"]) or 1
+                return (int(r.get("strongBuy",0) or 0) + int(r.get("buy",0) or 0)) / n
+            _now = _bull_share(recs[0]); _prev = _bull_share(recs[min(3, len(recs)-1)])
+            _rev_mom = round(_now - _prev, 3)
+            _rev_direction = "improving" if _rev_mom > 0.02 else ("deteriorating" if _rev_mom < -0.02 else "stable")
+        # rating dispersion / conviction: how concentrated (Herfindahl-style)
+        _disp = None
+        if n_analysts > 0:
+            _shares = [c/n_analysts for c in [strong_buy, buy, hold, sell, strong_sell]]
+            _hhi = sum(s*s for s in _shares)  # 1.0=all one rating (high conviction), 0.2=evenly split
+            _disp = round(_hhi, 3)
+        analytics = {
+            "beat_rate": _beat_rate,
+            "n_quarters": len(_sh),
+            "avg_surprise_pct": _avg_surprise,
+            "surprise_trend": _surprise_trend,
+            "revision_momentum": _rev_mom,
+            "revision_direction": _rev_direction,
+            "rating_conviction": _disp,
+            "bull_share": round((strong_buy + buy) / n_analysts, 3) if n_analysts > 0 else None,
+        }
         return {
             "ticker": ticker,
             "source": "finnhub",
             "ratings": [],  # Finnhub free tier does not expose individual rows
+            "analytics": analytics,
             "consensus": {
                 "label":          label,
                 "color":          color,
