@@ -1023,9 +1023,40 @@ class QuantEdgeAnalyzerV6:
             _xi = float(xgb_ic) if np.isfinite(xgb_ic) else 0.0
             _li = float(lgb_ic) if np.isfinite(lgb_ic) else 0.0
             mean_ic = (abs(_xi) + abs(_li)) / max(n_models, 1)
-            confidence = float(np.clip(mean_ic / 0.10, 0.0, 1.0))
+            # Honest confidence: blend train-IC skill with the REAL out-of-fold meta-confidence
+            # (Lopez de Prado meta-labeling, computed above). Train-IC alone overstates because
+            # it is in-sample; meta_conf_21d is genuine held-out skill. Cap at 0.90 — no model
+            # is ever perfectly confident. Also penalize by model disagreement.
+            ic_component = float(np.clip(mean_ic / 0.10, 0.0, 1.0))
+            meta_component = float(np.clip(meta_conf_21d, 0.0, 1.0))
+            disagreement = abs(xgb_pred_21d - lgb_pred_21d)
+            disagree_penalty = float(np.clip(1.0 - disagreement / 20.0, 0.5, 1.0))
+            # 60% real OOF meta-confidence, 40% in-sample IC, scaled by agreement
+            confidence = (0.60 * meta_component + 0.40 * ic_component) * disagree_penalty
+            confidence = float(np.clip(confidence, 0.0, 0.90))
             if not np.isfinite(confidence):
                 confidence = 0.0
+
+            # Real out-of-sample rank-IC (Spearman) on the validation slice.
+            # This is the honest predictive-skill metric — rank correlation between
+            # model predictions and realized returns on data the model did NOT train on.
+            rank_ic_val = 0.0
+            rank_ic_source = "unavailable"
+            try:
+                if X_val is not None and y_val is not None and len(y_val) >= 10:
+                    from scipy.stats import spearmanr
+                    val_preds = None
+                    if 'xgb_model' in dir():
+                        val_preds = xgb_model.predict(X_val)
+                    elif 'lgb_model' in dir():
+                        val_preds = lgb_model.predict(X_val)
+                    if val_preds is not None and len(val_preds) == len(y_val):
+                        rho, _ = spearmanr(val_preds, y_val)
+                        if np.isfinite(rho):
+                            rank_ic_val = float(rho)
+                            rank_ic_source = f"out-of-sample Spearman (n={len(y_val)})"
+            except Exception as _e:
+                logger.info(f"rank-IC computation skipped: {_e}")
 
             return {
                 "lstm": lstm_preds if lstm_preds else {
@@ -1067,8 +1098,10 @@ class QuantEdgeAnalyzerV6:
                     ),
                 },
                 "shap_top_drivers": shap_drivers,
-                "rank_ic_estimate": round(xgb_ic, 4),
+                "rank_ic_estimate": round(rank_ic_val, 4),
+                "rank_ic_source": rank_ic_source,
                 "ic_estimate": round((xgb_ic + lgb_ic) / max(n_models, 1), 4),
+                "ic_source": "in-sample train IC (Pearson)",
                 "quantile": {
                     "q10_1m": round(float(np.percentile(y, 10)) * 100, 4),
                     "q25_1m": round(float(np.percentile(y, 25)) * 100, 4),
