@@ -35,6 +35,15 @@ def sic_to_sector_etf(sic):
 
 CYCLICAL_SECTORS={"XLE","XLB","XLI","XLF","XLY","XLRE"}
 DEFENSIVE_SECTORS={"XLP","XLU","XLV"}
+def _parse_factors(obj):
+    """factors may be a JSON string (from JSONB) or already a dict."""
+    fac=obj.get("factors") if isinstance(obj,dict) else None
+    if isinstance(fac,str):
+        import json
+        try: return json.loads(fac)
+        except: return {}
+    return fac if isinstance(fac,dict) else {}
+
 def _rets(closes): return [(closes[i]/closes[i-1]-1) for i in range(1,len(closes))] if len(closes)>1 else []
 
 def compute_industry_features(sic, stock_closes, sector_closes, spy_closes,
@@ -82,11 +91,11 @@ def compute_industry_features(sic, stock_closes, sector_closes, spy_closes,
         f["sector_in_favor"]=1.0 if (f.get("sector_trend_3m",0)>0 and f.get("sector_vs_spy_3m",0)>0) else 0.0
 
     if peer_bucket and peer_bucket.get("available"):
-        me=peer_bucket.get("me",{}).get("factors",{}); peers=peer_bucket.get("peers",[])
+        me=_parse_factors(peer_bucket.get("me",{})); peers=peer_bucket.get("peers",[])
         def pctile(factor):
             mv=me.get(factor)
             if mv is None: return None
-            vals=[p.get("factors",{}).get(factor) for p in peers]; vals=[v for v in vals if v is not None]
+            vals=[_parse_factors(p).get(factor) for p in peers]; vals=[v for v in vals if v is not None]
             if len(vals)<5: return None
             return sum(1 for v in vals if v<mv)/len(vals)
         # percentile vs sector peers on ALL available factors (real, from peer_stats)
@@ -110,7 +119,7 @@ def compute_industry_features(sic, stock_closes, sector_closes, spy_closes,
             f["top_quartile_flags"]=sum(1 for p in _pcts if p>=0.75)/len(_pcts)  # share of factors top-quartile
             f["bottom_quartile_flags"]=sum(1 for p in _pcts if p<=0.25)/len(_pcts)
         # sector structure: dispersion of a key factor across peers (concentration)
-        mom_vals=[p.get("factors",{}).get("mom_3m") for p in peers]; mom_vals=[v for v in mom_vals if v is not None]
+        mom_vals=[_parse_factors(p).get("mom_3m") for p in peers]; mom_vals=[v for v in mom_vals if v is not None]
         if len(mom_vals)>=10:
             import statistics as _st
             f["sector_momentum_dispersion"]=_st.pstdev(mom_vals)
