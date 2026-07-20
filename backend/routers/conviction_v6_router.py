@@ -59,6 +59,11 @@ async def get_conviction(ticker: str, http_request: Request,
         d = await compute_market_intelligence(ticker, api_key, pool)
         if not d.get("available"): return None
         return {"score": d.get("score"), "confidence": d.get("confidence"), "coverage": d.get("coverage")}
+    async def _ownership_scorer(ticker: str):
+        from routers.ownership_router import compute_ownership_intelligence
+        d = await compute_ownership_intelligence(ticker, api_key)
+        if not d.get("available"): return None
+        return {"score": d.get("score"), "confidence": d.get("confidence"), "coverage": d.get("coverage")}
     async def _management_scorer(ticker: str):
         from routers.management_router import compute_management_intelligence
         d = await compute_management_intelligence(ticker, api_key)
@@ -101,6 +106,7 @@ async def get_conviction(ticker: str, http_request: Request,
         "industry": _industry_scorer,
         "competitive": _competitive_scorer,
         "management": _management_scorer,
+        "ownership": _ownership_scorer,
     }
     result = await aggregate_conviction(ticker, scorers)
     result = _san(result)

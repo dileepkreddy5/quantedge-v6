@@ -47,6 +47,7 @@ from routers.risk_router import router as risk_router
 from routers.industry_router import router as industry_router
 from routers.competitive_router import router as competitive_router
 from routers.management_router import router as management_router
+from routers.ownership_router import router as ownership_router
 from routers.conviction_router import router as conviction_router
 from routers.financial_router import router as financial_router
 from routers.valuation_router import router as valuation_router
@@ -478,6 +479,7 @@ app.include_router(risk_router, prefix="/api/v6", tags=["Risk"])
 app.include_router(industry_router, prefix="/api/v6", tags=["Industry"])
 app.include_router(competitive_router, prefix="/api/v6", tags=["Competitive"])
 app.include_router(management_router, prefix="/api/v6", tags=["Management"])
+app.include_router(ownership_router, prefix="/api/v6", tags=["Ownership"])
 app.include_router(conviction_router,    prefix="/api/v6",             tags=["Conviction"])
 app.include_router(financial_router,      prefix="/api/v6",             tags=["Financial"])
 app.include_router(valuation_router,      prefix="/api/v6",             tags=["Valuation"])
