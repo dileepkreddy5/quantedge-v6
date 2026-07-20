@@ -85,11 +85,17 @@ async def compute_risk_intelligence(ticker: str, api_key: str) -> Dict[str,Any]:
     if feats.get("available") is False:
         return {"ticker":ticker,"available":False,"reason":"could not compute risk metrics"}
     tree=score_risk(feats)
+    # extreme-valuation override: a debt-free co at 100x+ P/E still carries high investor risk
+    pe=feats.get("pe_ratio")
+    rating_score=tree["score"]
+    if pe is not None and rating_score is not None:
+        if pe>=100 and rating_score>72: rating_score=min(rating_score,70)   # cap below Low Risk
+        elif pe>=50 and rating_score>78: rating_score=min(rating_score,76)
     n_scored=sum(c["n_scored"] for c in tree["categories"])
     n_total=sum(c["n_signals"] for c in tree["categories"])
     return {"ticker":ticker,"available":True,"intelligence":"risk",
             "score":tree["score"],"confidence":tree["confidence"],
-            "risk_rating":risk_rating(tree["score"]),"weight_in_conviction":6.0,
+            "risk_rating":risk_rating(rating_score),"weight_in_conviction":6.0,
             "coverage":{"scored":n_scored,"total":n_total},"tree":tree,
             "key_metrics":{k:feats.get(k) for k in
                 ["altman_z","bankruptcy_prob","net_debt_to_ebitda","current_ratio",
