@@ -395,7 +395,7 @@ export default function Dashboard() {
               {activeTab === 'volatility'  && <VolatilityPanel data={data} />}
               {activeTab === 'regime'      && <RegimePanel data={data} />}
               {activeTab === 'sentiment'   && <SentimentPanel data={data} />}
-              {activeTab === 'news'        && <NewsPanel data={data} ticker={ticker} />}
+              {activeTab === 'news'        && <NewsPanel ticker={ticker} />}
               {activeTab === 'peers'       && <PeerPanel data={data} ticker={ticker} onAnalyze={runAnalysis} />}
               {activeTab === 'montecarlo'  && <MonteCarloPanel data={data} />}
               {activeTab === 'risk'        && <RiskPanel data={data} />}
