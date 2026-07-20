@@ -111,6 +111,28 @@ def compute_industry_features(sic, stock_closes, sector_closes, spy_closes,
             if len(vals)<5: return None
             return sum(1 for v in vals if v<mv)/len(vals)
         # percentile vs sector peers on ALL available factors (real, from peer_stats)
+        # fundamental percentiles vs sector (from enriched peer_stats fund_ factors)
+        f["pe_pctile_sector"]=pctile("fund_pe")
+        f["margin_pctile_sector"]=pctile("fund_net_margin")
+        f["roe_pctile_sector"]=pctile("fund_roe")
+        f["growth_pctile_sector"]=pctile("fund_revenue_growth")
+        f["gross_margin_pctile_sector"]=pctile("fund_gross_margin")
+        # relative valuation: stock P/E vs sector median (lower pctile = cheaper = better)
+        _me_pe=me.get("fund_pe")
+        if _me_pe is not None:
+            _peer_pes=[_parse_factors(p).get("fund_pe") for p in peers]
+            _peer_pes=[v for v in _peer_pes if v is not None and v>0]
+            if len(_peer_pes)>=5:
+                import statistics as _st2
+                _med_pe=_st2.median(_peer_pes)
+                if _med_pe>0: f["rel_pe_vs_sector"]=_me_pe/_med_pe  # <1 = cheaper than sector
+        _me_growth=me.get("fund_revenue_growth")
+        if _me_growth is not None:
+            _peer_g=[_parse_factors(p).get("fund_revenue_growth") for p in peers]
+            _peer_g=[v for v in _peer_g if v is not None]
+            if len(_peer_g)>=5:
+                import statistics as _st3
+                f["rel_growth_vs_sector"]=_me_growth-_st3.median(_peer_g)  # + = faster than sector
         f["momentum_pctile_sector"]=pctile("mom_3m")
         f["sharpe_pctile_sector"]=pctile("sharpe_3m")
         f["quality_pctile_sector"]=pctile("quality_piotroski")
