@@ -17,7 +17,7 @@ MODULE_REGISTRY = [
     {"id":"risk",          "label":"Risk Intelligence",          "weight":6,  "status":"live"},
     {"id":"market",        "label":"Market Intelligence",        "weight":5,  "status":"live"},
     {"id":"ownership",     "label":"Ownership Intelligence",     "weight":4,  "status":"live"},
-    {"id":"forecast",      "label":"Forecast Intelligence",      "weight":4,  "status":"pending"},
+    {"id":"forecast",      "label":"Forecast Intelligence",      "weight":4,  "status":"live"},
     {"id":"macro",         "label":"Macroeconomic Intelligence", "weight":3,  "status":"live"},
     {"id":"alt_data",      "label":"Alternative Data Intelligence","weight":3,"status":"pending"},
     {"id":"institutional", "label":"Institutional Flow Intelligence","weight":2,"status":"pending"},
