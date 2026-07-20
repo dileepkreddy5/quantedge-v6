@@ -22,8 +22,11 @@ def compute_risk_features(merged, price_closes=None, market_cap=None, beta=None)
     ca=cur("current_assets"); cl=cur("current_liabilities")
     ni_ttm=ttm("net_income"); rev_ttm=ttm("revenue"); ebit_ttm=ttm("operating_income")
     ocf_ttm=ttm("operating_cash_flow"); re=cur("retained_earnings")
-    ltd=cur("long_term_debt") or 0; std=cur("short_term_debt") or 0
-    total_debt=ltd+std if (cur("long_term_debt") is not None) else ltd
+    ltd_raw=cur("long_term_debt"); std_raw=cur("short_term_debt")
+    if ltd_raw is None and std_raw is None:
+        total_debt=None  # genuinely missing - do NOT treat as zero-debt (that would score as "safe")
+    else:
+        total_debt=(ltd_raw or 0)+(std_raw or 0)
     cash=cur("cash"); wc=(ca-cl) if (ca is not None and cl is not None) else None
     da_ttm=ttm("depreciation_amortization"); ebitda_ttm=(ebit_ttm+da_ttm) if (ebit_ttm and da_ttm) else None
 
@@ -44,12 +47,12 @@ def compute_risk_features(merged, price_closes=None, market_cap=None, beta=None)
     f["debt_to_assets"]=_sd(total_debt,assets)
 
     f["debt_to_equity"]=_sd(total_debt,eq)
-    f["net_debt_to_ebitda"]=_sd((total_debt-(cash or 0)),ebitda_ttm)
+    f["net_debt_to_ebitda"]=_sd((total_debt-(cash or 0)),ebitda_ttm) if total_debt is not None else None
     f["liabilities_to_equity"]=_sd(liab,eq)
     f["debt_to_ebitda"]=_sd(total_debt,ebitda_ttm)
     f["equity_ratio"]=_sd(eq,assets)
     ltd_y=_f(qy.get("long_term_debt")); assets_y=_f(qy.get("assets"))
-    if ltd_y is not None and assets_y and assets:
+    if ltd_y is not None and assets_y and assets and total_debt is not None:
         f["leverage_trend"]=(total_debt/assets)-(ltd_y/assets_y)
 
     f["current_ratio"]=_sd(ca,cl)
