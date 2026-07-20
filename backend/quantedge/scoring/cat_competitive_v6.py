@@ -63,8 +63,8 @@ COMPETITIVE_INTELLIGENCE={"label":"Competitive Intelligence","weight":8.0,"categ
 
 def competitive_rating(score):
     if score is None: return "Unrated"
-    if score>=75: return "Dominant"
-    if score>=60: return "Strong"
+    if score>=78: return "Dominant"
+    if score>=62: return "Strong"
     if score>=45: return "Competitive"
     if score>=30: return "Challenged"
     return "Weak"
