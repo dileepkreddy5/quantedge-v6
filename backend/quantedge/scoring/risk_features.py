@@ -13,11 +13,21 @@ def _sd(a,b):
 def compute_risk_features(merged, price_closes=None, market_cap=None, beta=None):
     f={}
     if not merged or len(merged)<4: return {"available":False}
-    q=merged[-1]; qy=merged[-5] if len(merged)>=5 else merged[0]
-    def cur(k): return _f(q.get(k))
+    # q = latest quarter with core data; qy = ~4 quarters before that
+    _real=[x for x in merged if _f(x.get("assets")) is not None]
+    q=_real[-1] if _real else merged[-1]
+    qy=_real[-5] if len(_real)>=5 else (_real[0] if _real else merged[0])
+    def cur(k):
+        # point-in-time: latest quarter that actually has this field (skip stub quarters)
+        for x in reversed(merged):
+            v=_f(x.get(k))
+            if v is not None: return v
+        return None
     def ttm(k):
-        vals=[_f(x.get(k)) for x in merged[-4:]]
-        return sum(v for v in vals if v is not None) if all(v is not None for v in vals) else None
+        # sum the most recent 4 quarters that HAVE data for this field (robust to stub latest quarter)
+        vals=[_f(x.get(k)) for x in merged]
+        vals=[v for v in vals if v is not None]
+        return sum(vals[-4:]) if len(vals)>=4 else (sum(vals) if vals else None)
     assets=cur("assets"); liab=cur("liabilities"); eq=cur("equity")
     ca=cur("current_assets"); cl=cur("current_liabilities")
     ni_ttm=ttm("net_income"); rev_ttm=ttm("revenue"); ebit_ttm=ttm("operating_income")
