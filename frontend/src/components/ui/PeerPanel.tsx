@@ -12,10 +12,11 @@ const C = {
 };
 
 interface FactorPct { key: string; label: string; value: number; percentile: number; peer_median: number; }
-interface PeerRow { ticker: string; name: string; market_cap: number | null; mom_3m: number | null; mom_6m: number | null; pct_above_ma200: number | null; is_me: boolean; }
+interface PeerRow { ticker: string; name: string; market_cap: number | null; mom_3m: number | null; mom_6m: number | null; pct_above_ma200: number | null; roic: number | null; net_margin: number | null; gross_margin: number | null; revenue_growth: number | null; pe: number | null; is_me: boolean; }
+interface FundFactor { key: string; label: string; value: number; percentile: number; peer_median: number; rank: number; of: number; }
 interface PeerData {
   available: boolean; reason?: string; ticker: string; name: string;
-  bucket: string; peer_count: number; factors: FactorPct[]; peers: PeerRow[];
+  bucket: string; peer_count: number; factors: FactorPct[]; fund_factors?: FundFactor[]; peers: PeerRow[];
 }
 
 const fmtCap = (c: number | null) => c ? (c >= 1e12 ? `$${(c/1e12).toFixed(1)}T` : c >= 1e9 ? `$${(c/1e9).toFixed(0)}B` : `$${(c/1e6).toFixed(0)}M`) : '—';
@@ -122,6 +123,39 @@ const PeerPanel: React.FC<Props> = ({ ticker: tickerProp, data: analysisData, on
         ))}
       </div>
 
+      {/* Fundamental percentile bars (quality / profitability / growth / valuation vs peers) */}
+      {pd.fund_factors && pd.fund_factors.length > 0 && (
+        <>
+          <div style={{ color:C.gold, fontWeight:700, fontSize:13, marginBottom:4, marginTop:4 }}>FUNDAMENTALS vs PEERS</div>
+          <div style={{ fontSize:11, color:C.textDim, marginBottom:12, fontStyle:'italic' }}>
+            How {ticker} ranks on quality, profitability, growth &amp; valuation across the sector.
+          </div>
+          <div style={{ display:'flex', flexDirection:'column', gap:10, marginBottom:24 }}>
+            {pd.fund_factors.map(f => {
+              const disp = f.label.includes('Margin')||f.label.includes('ROIC')||f.label.includes('ROE')||f.label.includes('Growth')
+                ? `${(f.value*100).toFixed(1)}%` : f.value.toFixed(1);
+              const medDisp = f.label.includes('Margin')||f.label.includes('ROIC')||f.label.includes('ROE')||f.label.includes('Growth')
+                ? `${(f.peer_median*100).toFixed(1)}%` : f.peer_median.toFixed(1);
+              return (
+                <div key={f.key} style={{ display:'flex', alignItems:'center', gap:12 }}>
+                  <div style={{ width:120, fontSize:12, color:C.text, textAlign:'right' }}>{f.label}</div>
+                  <div style={{ flex:1, position:'relative', height:22, background:'#120a07', borderRadius:5, overflow:'hidden' }}>
+                    <div style={{ position:'absolute', left:0, top:0, bottom:0, width:`${f.percentile}%`, background:`${pctColor(f.percentile)}33`, borderRight:`2px solid ${pctColor(f.percentile)}` }} />
+                    <div style={{ position:'absolute', left:8, top:0, bottom:0, display:'flex', alignItems:'center', fontSize:11, color:C.textDim }}>
+                      {disp} · median {medDisp}
+                    </div>
+                  </div>
+                  <div style={{ width:64, textAlign:'right', fontSize:10, color:C.textDim, fontFamily:"'Fira Code',monospace" }}>#{f.rank}/{f.of}</div>
+                  <div style={{ width:54, textAlign:'right', fontFamily:"'Fira Code',monospace", fontWeight:700, fontSize:14, color:pctColor(f.percentile) }}>
+                    {f.percentile}%
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+
       {/* Interactive distribution strip */}
       <div style={{ marginBottom:8, display:'flex', gap:6, flexWrap:'wrap', alignItems:'center' }}>
         <span style={{ fontSize:11, color:C.textDim, marginRight:4 }}>DISTRIBUTION:</span>
@@ -159,6 +193,10 @@ const PeerPanel: React.FC<Props> = ({ ticker: tickerProp, data: analysisData, on
               <th style={{ padding:'6px 8px' }}>TICKER</th><th style={{ padding:'6px 8px' }}>NAME</th>
               <th style={{ padding:'6px 8px', textAlign:'right' }}>MKT CAP</th>
               <th style={{ padding:'6px 8px', textAlign:'right' }}>{factorLabels[factorKey]}</th>
+              <th style={{ padding:'6px 8px', textAlign:'right' }}>ROIC</th>
+              <th style={{ padding:'6px 8px', textAlign:'right' }}>NET MGN</th>
+              <th style={{ padding:'6px 8px', textAlign:'right' }}>REV GR</th>
+              <th style={{ padding:'6px 8px', textAlign:'right' }}>P/E</th>
             </tr>
           </thead>
           <tbody>
@@ -173,6 +211,10 @@ const PeerPanel: React.FC<Props> = ({ ticker: tickerProp, data: analysisData, on
                   <td style={{ padding:'7px 8px', textAlign:'right', color:C.textDim }}>{fmtCap(p.market_cap)}</td>
                   <td style={{ padding:'7px 8px', textAlign:'right', fontFamily:"'Fira Code',monospace",
                     color: (v??0)>=0?C.green:C.red }}>{v!=null?`${v>0?'+':''}${Number(v).toFixed(1)}%`:'—'}</td>
+                  <td style={{ padding:'7px 8px', textAlign:'right', fontFamily:"'Fira Code',monospace", color: p.roic==null?C.textDim:(p.roic>=0.1?C.green:p.roic>=0?C.text:C.red) }}>{p.roic==null?'—':(p.roic*100).toFixed(0)+'%'}</td>
+                  <td style={{ padding:'7px 8px', textAlign:'right', fontFamily:"'Fira Code',monospace", color: p.net_margin==null?C.textDim:(p.net_margin>=0.1?C.green:p.net_margin>=0?C.text:C.red) }}>{p.net_margin==null?'—':(p.net_margin*100).toFixed(1)+'%'}</td>
+                  <td style={{ padding:'7px 8px', textAlign:'right', fontFamily:"'Fira Code',monospace", color: p.revenue_growth==null?C.textDim:(p.revenue_growth>=0.1?C.green:p.revenue_growth>=0?C.text:C.red) }}>{p.revenue_growth==null?'—':(p.revenue_growth>=0?'+':'')+(p.revenue_growth*100).toFixed(0)+'%'}</td>
+                  <td style={{ padding:'7px 8px', textAlign:'right', fontFamily:"'Fira Code',monospace", color: p.pe==null?C.textDim:(p.pe>0&&p.pe<20?C.green:p.pe>40?C.red:C.text) }}>{p.pe==null?'—':p.pe.toFixed(0)}</td>
                 </tr>
               );
             })}
