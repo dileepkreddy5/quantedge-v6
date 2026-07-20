@@ -121,7 +121,7 @@ def score_valuation(features, peers=None):
     vs,vc=_roll(cats)
     return {"label":"Valuation Intelligence","weight":10.0,"score":vs,"confidence":vc,"categories":cats}
 
-async def compute_valuation_intelligence(ticker: str, api_key: str) -> Dict[str, Any]:
+async def compute_valuation_intelligence(ticker: str, api_key: str, pool=None) -> Dict[str, Any]:
     """Reusable: fetch data, compute, score. Called by endpoint AND aggregator."""
     ticker=ticker.upper().strip()
     try:
@@ -163,7 +163,7 @@ async def compute_valuation_intelligence(ticker: str, api_key: str) -> Dict[str,
     except Exception as _e:
         pass
     peers={}
-    _pool=getattr(http_request.app.state,"db",None)
+    _pool=pool
     if _pool is not None:
         try:
             import json as _json
@@ -232,5 +232,6 @@ async def get_valuation(ticker: str, http_request: Request,
     api_key=getattr(settings,"POLYGON_API_KEY","") or ""
     if not api_key:
         raise HTTPException(503,"data source unavailable")
-    result=await compute_valuation_intelligence(ticker, api_key)
+    pool=getattr(http_request.app.state,'db',None)
+    result=await compute_valuation_intelligence(ticker, api_key, pool)
     return {"data":_san(result)}
