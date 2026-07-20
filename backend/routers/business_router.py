@@ -14,6 +14,7 @@ from quantedge.scoring.edgar_fetch import fetch_edgar_supplement
 from quantedge.scoring.hybrid_merge import merge_quarters
 from quantedge.scoring.financial_features import compute_financial_features
 from quantedge.scoring.business_features import compute_business_features
+from quantedge.scoring.peer_percentiles import compute_peer_percentiles
 from quantedge.scoring.compute import score_signal
 from quantedge.scoring.cat_business_v6 import CATEGORIES, moat_rating
 from auth.cognito_auth import get_optional_user, CognitoUser
@@ -50,7 +51,7 @@ def score_business(features):
     bs,bc=_roll(cats)
     return {"label":"Business Intelligence","weight":12.0,"score":bs,"confidence":bc,"categories":cats}
 
-async def compute_business_intelligence(ticker: str, api_key: str) -> Dict[str, Any]:
+async def compute_business_intelligence(ticker: str, api_key: str, pool=None) -> Dict[str, Any]:
     ticker=ticker.upper().strip()
     try:
         pq=await fetch_quarterly_financials(ticker,api_key,limit=24)
@@ -77,6 +78,25 @@ async def compute_business_intelligence(ticker: str, api_key: str) -> Dict[str, 
     fin_features=compute_financial_features(merged,market_cap=mcap,wacc=wacc)
     if mcap: fin_features["market_cap"]=mcap
     biz_features=compute_business_features(merged, fin_features, wacc=wacc)
+    # peer-relative percentiles (from enriched peer_stats) to activate Competitive Position signals
+    if biz_features and pool is not None:
+        try:
+            own={"roic":fin_features.get("roic") or biz_features.get("roic_current"),
+                 "gross_margin":fin_features.get("gross_margin") or biz_features.get("gross_margin_level"),
+                 "net_margin":fin_features.get("net_margin"),
+                 "revenue_growth":fin_features.get("revenue_growth"),
+                 "roe":fin_features.get("roe"),
+                 "market_cap":mcap}
+            pp=await compute_peer_percentiles(pool, ticker, own)
+            if pp.get("_available"):
+                # map helper outputs -> the catalog signal fields
+                if "roic_percentile_vs_peers" in pp: biz_features["roic_percentile_vs_peers"]=pp["roic_percentile_vs_peers"]
+                if "net_margin_percentile_vs_peers" in pp: biz_features["margin_percentile_vs_peers"]=pp["net_margin_percentile_vs_peers"]
+                if "revenue_growth_percentile_vs_peers" in pp: biz_features["growth_percentile_vs_peers"]=pp["revenue_growth_percentile_vs_peers"]
+                if "scale_rank" in pp: biz_features["scale_rank"]=pp["scale_rank"]
+                if "relative_growth_vs_industry" in pp: biz_features["relative_growth_vs_industry"]=pp["relative_growth_vs_industry"]
+        except Exception:
+            pass
     if not biz_features:
         return {"ticker":ticker,"available":False,"reason":"insufficient history for business analysis"}
     tree=score_business(biz_features)
@@ -99,5 +119,6 @@ async def get_business(ticker: str, http_request: Request,
     api_key=getattr(settings,"POLYGON_API_KEY","") or ""
     if not api_key:
         raise HTTPException(503,"data source unavailable")
-    result=await compute_business_intelligence(ticker, api_key)
+    pool=getattr(http_request.app.state,'db',None)
+    result=await compute_business_intelligence(ticker, api_key, pool)
     return {"data":_san(result)}
