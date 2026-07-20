@@ -61,7 +61,7 @@ async def get_conviction(ticker: str, http_request: Request,
         return {"score": d.get("score"), "confidence": d.get("confidence"), "coverage": d.get("coverage")}
     async def _industry_scorer(ticker: str):
         from routers.industry_router import compute_industry_intelligence
-        pool = getattr(request.app.state, "db", None) if "request" in dir() else None
+        pool = getattr(http_request.app.state, "db", None)
         d = await compute_industry_intelligence(ticker, api_key, pool)
         if not d.get("available"): return None
         return {"score": d.get("score"), "confidence": d.get("confidence"), "coverage": d.get("coverage")}
