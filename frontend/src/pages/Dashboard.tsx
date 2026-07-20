@@ -33,6 +33,7 @@ import CompetitivePanel from '../components/ui/CompetitivePanel';
 import ManagementPanel from '../components/ui/ManagementPanel';
 import OwnershipPanel from '../components/ui/OwnershipPanel';
 import MacroPanel from '../components/ui/MacroPanel';
+import ForecastPanel from '../components/ui/ForecastPanel';
 import PeerPanel from '../components/ui/PeerPanel';
 import FinancialIntelligencePanel from '../components/ui/FinancialIntelligencePanel';
 import ConvictionBadge from '../components/ui/ConvictionBadge';
@@ -55,6 +56,7 @@ const TABS = [
   { id: 'management',  label: '👔 MANAGEMENT' },
   { id: 'ownership',   label: '🏦 OWNERSHIP' },
   { id: 'macro',       label: '🌐 MACRO' },
+  { id: 'forecast',    label: '🔮 FORECAST' },
   { id: 'fundamental', label: '📋 FUNDAMENTALS' },
   { id: 'financial',   label: '💎 FINANCIAL' },
   { id: 'valuation',   label: '⚖️ VALUATION' },
@@ -414,6 +416,7 @@ export default function Dashboard() {
               {activeTab === 'management'  && <ManagementPanel ticker={ticker} />}
               {activeTab === 'ownership'   && <OwnershipPanel ticker={ticker} />}
               {activeTab === 'macro'       && <MacroPanel ticker={ticker} />}
+              {activeTab === 'forecast'    && <ForecastPanel ticker={ticker} />}
               {activeTab === 'fundamental' && <FundamentalsPanel data={data} />}
               {activeTab === 'financial'   && <FinancialIntelligencePanel ticker={ticker} />}
               {activeTab === 'valuation'   && <ValuationPanel ticker={ticker} />}
