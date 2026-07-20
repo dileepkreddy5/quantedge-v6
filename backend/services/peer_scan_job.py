@@ -20,6 +20,9 @@ from research.universe import UniverseBuilder
 from research.universe_scanner import UniverseScanner
 from services.peer_store import PeerStore
 from services.ascent_scan_job import _fetch_details
+from quantedge.fundamentals.edgar_bulk import company_facts_from_bulk
+from quantedge.fundamentals.peer_fundamentals import compute_peer_fundamentals
+from quantedge.fundamentals.universe_full import ticker_cik_map
 
 PEER_UNIVERSE_SIZE = 500
 
@@ -38,6 +41,13 @@ class PeerScanJob:
         meta = {e.ticker: e for e in entries}
         tickers = [e.ticker for e in entries]
 
+        # ticker->CIK map for reading fundamentals from the local bulk file (no API calls)
+        try:
+            cik_map = ticker_cik_map()
+        except Exception as e:
+            logger.warning(f"CIK map failed, fundamentals will be skipped: {e}")
+            cik_map = {}
+
         scanner = UniverseScanner(api_key=self.api_key)
         scan = await scanner.scan(tickers=tickers)
         raw = scan.get("raw_scores", {})
@@ -51,6 +61,17 @@ class PeerScanJob:
                     metrics = dict(payload.get("metrics", {}))
                     e = meta.get(tk)
                     details = await _fetch_details(tk, session, self.api_key)
+                    # enrich with fundamental factors from the local bulk companyfacts file
+                    _cik = cik_map.get(tk)
+                    _mcap_for_fund = details.get("market_cap")
+                    if _cik:
+                        try:
+                            _facts = company_facts_from_bulk(_cik)
+                            if _facts:
+                                _fund = compute_peer_fundamentals(_facts, market_cap=_mcap_for_fund)
+                                metrics.update(_fund)  # merge fundamental factors alongside technical
+                        except Exception as _fe:
+                            logger.debug(f"fundamentals failed for {tk}: {_fe}")
                     _name = details.get("name") or (getattr(e, "name", "") if e else "")
                     _sic = details.get("sector") or (getattr(e, "sector", "") if e else "")
                     _mcap = details.get("market_cap") if details.get("market_cap") is not None else (getattr(e, "market_cap", None) if e else None)
