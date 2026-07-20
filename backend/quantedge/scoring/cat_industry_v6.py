@@ -14,12 +14,12 @@ CATEGORIES = {
    _s("employees","Employee scale","employee_scale",0.25,5000,100000,evidence="workforce size"),
  ]),
  "sector_rel_perf": ("Sector-Relative Performance", 1.50, [
-   _s("rs_3m","RS vs sector (3m)","rs_sector_3m",0.25,0.0,0.15,evidence="outperformance vs sector ETF"),
+   _s("rs_3m","RS vs sector (3m)","rs_sector_3m",0.25,0.02,0.10,evidence="outperformance vs sector ETF"),
    _s("rs_6m","RS vs sector (6m)","rs_sector_6m",0.20,0.0,0.2,evidence="6-month relative strength"),
    _s("rs_1y","RS vs sector (1y)","rs_sector_1y",0.15,0.0,0.3,evidence="1-year relative strength"),
    _s("rs_1m","RS vs sector (1m)","rs_sector_1m",0.12,0.0,0.08,evidence="1-month relative strength"),
-   _s("up_capture","Up-capture vs sector","up_capture",0.15,0.9,1.3,evidence="gains vs sector in up moves"),
-   _s("down_capture","Down-capture vs sector","down_capture",0.13,1.1,0.7,hib=False,evidence="losses vs sector in down moves"),
+   _s("up_capture","Up-capture vs sector","up_capture",0.15,1.0,1.4,evidence="gains vs sector in up moves"),
+   _s("down_capture","Down-capture vs sector","down_capture",0.13,1.0,0.6,hib=False,evidence="losses vs sector in down moves"),
  ]),
  "sector_momentum": ("Sector Momentum & Cycle", 0.30, [
    _s("sec_trend_3m","Sector trend (3m)","sector_trend_3m",0.25,-0.05,0.1,evidence="sector ETF 3-month trend"),
@@ -48,7 +48,7 @@ CATEGORIES = {
  ]),
  "rs_leadership": ("RS Leadership", 0.90, [
    _s("is_leader","Sector leader","is_sector_leader",0.30,0,1,evidence="outperforming sector"),
-   _s("rs_mag","RS magnitude","rs_magnitude",0.25,0.0,0.15,evidence="size of outperformance"),
+   _s("rs_mag","RS magnitude","rs_magnitude",0.25,0.02,0.10,evidence="size of outperformance"),
    _s("lead_rank","Leadership rank","leadership_rank",0.25,0.5,0.85,evidence="momentum percentile in sector"),
    _s("beta_sector","Beta to sector","beta_to_sector",0.20,1.3,0.95,hib=False,evidence="sensitivity to sector moves"),
  ]),
