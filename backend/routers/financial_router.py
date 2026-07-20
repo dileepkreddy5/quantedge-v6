@@ -110,10 +110,22 @@ async def get_financial(ticker: str, http_request: Request,
             from services.peer_store import PeerStore
             pdata=await PeerStore(pool).get_peers(ticker)
             if pdata.get("available"):
+                import json as _json
+                # map enriched fund_ factor keys -> the peer_key names the catalog expects
+                KMAP={"fund_gross_margin":"gross_margin","fund_net_margin":"net_margin",
+                      "fund_roic_approx":"roic","fund_roe":"roe","fund_revenue_growth":"rev_growth",
+                      "fund_ocf_margin":"operating_margin","fund_asset_turnover":"asset_turnover"}
                 fl={}
                 for row in pdata.get("peers",[]):
-                    for k,v in (row.get("factors") or {}).items():
-                        fl.setdefault(k,[]).append(v)
+                    fac=row.get("factors")
+                    if isinstance(fac,str):
+                        try: fac=_json.loads(fac)
+                        except: fac={}
+                    if not isinstance(fac,dict): continue
+                    for fk,v in fac.items():
+                        if v is None: continue
+                        key=KMAP.get(fk, fk)  # remap fund_* -> catalog peer_key; pass others through
+                        fl.setdefault(key,[]).append(v)
                 peers=fl
         except Exception as e:
             logger.info(f"financial: peers unavailable {ticker}: {e}")
