@@ -102,13 +102,15 @@ def _model_confidence(features):
     overall=round(sum(x["confidence"] for x in out)/len(out),2) if out else None
     return {"models":out,"overall":overall}
 
-def score_valuation(features):
+def score_valuation(features, peers=None):
+    peers=peers or {}
     cats=[]
     for cid,(label,wt,sigs) in CATEGORIES.items():
         scored=[]
         for spec in sigs:
             val=features.get(spec["field"])
-            res=score_signal(val,spec,None)
+            pv=peers.get(spec.get('peer_key')) if spec.get('peer_key') else None
+            res=score_signal(val,spec,pv)
             scored.append({"id":spec["id"],"label":spec["label"],"weight":spec["weight"],
                            "status":spec["status"],"evidence":spec["evidence"],
                            "raw_value":val,**res})
@@ -160,7 +162,30 @@ async def compute_valuation_intelligence(ticker: str, api_key: str) -> Dict[str,
         val_features.update(_deep)
     except Exception as _e:
         pass
-    tree=score_valuation(val_features)
+    peers={}
+    _pool=getattr(http_request.app.state,"db",None)
+    if _pool is not None:
+        try:
+            import json as _json
+            from services.peer_store import PeerStore as _PS
+            _pd=await _PS(_pool).get_peers(ticker)
+            if _pd.get("available"):
+                _KM={"fund_pe":"mult_pe","fund_ps":"ps_ratio","fund_ocf_yield":"pcf_ratio"}
+                _fl={}
+                for _row in _pd.get("peers",[]):
+                    _fac=_row.get("factors")
+                    if isinstance(_fac,str):
+                        try: _fac=_json.loads(_fac)
+                        except: _fac={}
+                    if not isinstance(_fac,dict): continue
+                    for _k,_v in _fac.items():
+                        if _v is None: continue
+                        _peer_key=_KM.get(_k)
+                        if _peer_key: _fl.setdefault(_peer_key,[]).append(_v)
+                peers=_fl
+        except Exception as _e:
+            pass
+    tree=score_valuation(val_features, peers)
     n_scored=sum(c["n_scored"] for c in tree["categories"])
     n_total=sum(c["n_signals"] for c in tree["categories"])
     return {"ticker":ticker,"available":True,"intelligence":"valuation",
