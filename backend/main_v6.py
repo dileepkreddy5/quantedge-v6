@@ -53,6 +53,7 @@ from routers.forecast_router import router as forecast_router
 from routers.altdata_router import router as altdata_router
 from routers.iflow_router import router as iflow_router
 from routers.peers_score_router import router as peers_score_router
+from routers.ml_router import router as ml_router
 from routers.conviction_router import router as conviction_router
 from routers.financial_router import router as financial_router
 from routers.valuation_router import router as valuation_router
@@ -490,6 +491,7 @@ app.include_router(forecast_router, prefix="/api/v6", tags=["Forecast"])
 app.include_router(altdata_router, prefix="/api/v6", tags=["AltData"])
 app.include_router(iflow_router, prefix="/api/v6", tags=["InstitutionalFlow"])
 app.include_router(peers_score_router, prefix="/api/v6", tags=["PeersScore"])
+app.include_router(ml_router, prefix="/api/v6", tags=["MLModels"])
 app.include_router(conviction_router,    prefix="/api/v6",             tags=["Conviction"])
 app.include_router(financial_router,      prefix="/api/v6",             tags=["Financial"])
 app.include_router(valuation_router,      prefix="/api/v6",             tags=["Valuation"])

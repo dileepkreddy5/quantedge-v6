@@ -22,7 +22,7 @@ MODULE_REGISTRY = [
     {"id":"alt_data",      "label":"Alternative Data Intelligence","weight":3,"status":"live"},
     {"id":"institutional", "label":"Institutional Flow Intelligence","weight":2,"status":"live"},
     {"id":"peers",         "label":"Peers Intelligence",         "weight":2,  "status":"live"},
-    {"id":"ml_models",     "label":"ML Models Intelligence",     "weight":1,  "status":"pending"},
+    {"id":"ml_models",     "label":"ML Models Intelligence",     "weight":1,  "status":"live"},
 ]
 
 def verdict(score: Optional[float]) -> str:
