@@ -28,6 +28,7 @@ import Screener from './Screener';
 import OverviewV2 from './overview_v2/OverviewV2';
 import NewsPanel from '../components/ui/NewsPanel';
 import RiskPanel from '../components/ui/RiskPanel';
+import IndustryPanel from '../components/ui/IndustryPanel';
 import PeerPanel from '../components/ui/PeerPanel';
 import FinancialIntelligencePanel from '../components/ui/FinancialIntelligencePanel';
 import ConvictionBadge from '../components/ui/ConvictionBadge';
@@ -45,6 +46,7 @@ const TABS = [
   { id: 'peers',       label: '👥 PEERS' },
   { id: 'montecarlo',  label: '🎲 MONTE CARLO' },
   { id: 'risk',        label: '🛡 RISK' },
+  { id: 'industry',    label: '🏭 INDUSTRY' },
   { id: 'fundamental', label: '📋 FUNDAMENTALS' },
   { id: 'financial',   label: '💎 FINANCIAL' },
   { id: 'valuation',   label: '⚖️ VALUATION' },
@@ -399,6 +401,7 @@ export default function Dashboard() {
               {activeTab === 'peers'       && <PeerPanel data={data} ticker={ticker} onAnalyze={runAnalysis} />}
               {activeTab === 'montecarlo'  && <MonteCarloPanel data={data} />}
               {activeTab === 'risk'        && <RiskPanel ticker={ticker} />}
+              {activeTab === 'industry'    && <IndustryPanel ticker={ticker} />}
               {activeTab === 'fundamental' && <FundamentalsPanel data={data} />}
               {activeTab === 'financial'   && <FinancialIntelligencePanel ticker={ticker} />}
               {activeTab === 'valuation'   && <ValuationPanel ticker={ticker} />}
