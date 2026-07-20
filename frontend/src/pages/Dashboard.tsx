@@ -19,7 +19,6 @@ import {
   OptionsPanel,
   SentimentPanel,
   MonteCarloPanel,
-  RiskPanel,
   FundamentalsPanel,
   ScenarioPanel,
   Watchlist,
@@ -28,6 +27,7 @@ import PriceChart from '../components/charts/PriceChart';
 import Screener from './Screener';
 import OverviewV2 from './overview_v2/OverviewV2';
 import NewsPanel from '../components/ui/NewsPanel';
+import RiskPanel from '../components/ui/RiskPanel';
 import PeerPanel from '../components/ui/PeerPanel';
 import FinancialIntelligencePanel from '../components/ui/FinancialIntelligencePanel';
 import ConvictionBadge from '../components/ui/ConvictionBadge';
@@ -398,7 +398,7 @@ export default function Dashboard() {
               {activeTab === 'news'        && <NewsPanel ticker={ticker} />}
               {activeTab === 'peers'       && <PeerPanel data={data} ticker={ticker} onAnalyze={runAnalysis} />}
               {activeTab === 'montecarlo'  && <MonteCarloPanel data={data} />}
-              {activeTab === 'risk'        && <RiskPanel data={data} />}
+              {activeTab === 'risk'        && <RiskPanel ticker={ticker} />}
               {activeTab === 'fundamental' && <FundamentalsPanel data={data} />}
               {activeTab === 'financial'   && <FinancialIntelligencePanel ticker={ticker} />}
               {activeTab === 'valuation'   && <ValuationPanel ticker={ticker} />}
