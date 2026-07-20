@@ -59,6 +59,11 @@ async def get_conviction(ticker: str, http_request: Request,
         d = await compute_market_intelligence(ticker, api_key, pool)
         if not d.get("available"): return None
         return {"score": d.get("score"), "confidence": d.get("confidence"), "coverage": d.get("coverage")}
+    async def _risk_scorer(ticker: str):
+        from routers.risk_router import compute_risk_intelligence
+        d = await compute_risk_intelligence(ticker, api_key)
+        if not d.get("available"): return None
+        return {"score": d.get("score"), "confidence": d.get("confidence"), "coverage": d.get("coverage")}
     async def _news_scorer(ticker: str):
         from routers.news_router import compute_news_intelligence
         d = await compute_news_intelligence(ticker, api_key)
@@ -75,6 +80,7 @@ async def get_conviction(ticker: str, http_request: Request,
         "market": _market_scorer,
         "business": _business_scorer,
         "news": _news_scorer,
+        "risk": _risk_scorer,
     }
     result = await aggregate_conviction(ticker, scorers)
     result = _san(result)
