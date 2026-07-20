@@ -10,11 +10,10 @@ TIER1={"reuters","bloomberg","wall street journal","wsj","financial times","cnbc
        "associated press","barron's","forbes","marketwatch","the motley fool","seeking alpha","yahoo"}
 
 def _is_english(a):
-    t=(a.get("title") or "")+(a.get("description") or "")
+    t=a.get("title") or ""   # check TITLE only - descriptions/reasoning are always English
     if not t: return True
-    # english if the title is predominantly basic-latin characters
     latin=sum(1 for ch in t if ord(ch)<0x250 or ch.isspace())
-    return (latin/len(t))>0.85 if len(t)>0 else True
+    return (latin/len(t))>0.85
 def _dt(s):
     try: return datetime.fromisoformat(s.replace("Z","+00:00"))
     except: return None
@@ -149,7 +148,9 @@ def compute_news_features(articles, ticker, price_return_30d=None):
         s+=max(0,3-(now-a["dt"]).days*0.3)
         return s
     # prefer ticker-relevant articles; dedupe by publisher to avoid all-one-source
-    ranked_all=sorted(arts, key=importance, reverse=True)
+    SPAM_B=["tokenized","rtsla","rtoken","tokenised"]
+    brief_pool=[a for a in arts if not any(sp in (a["title"]+a["reason"]).lower() for sp in SPAM_B)]
+    ranked_all=sorted(brief_pool, key=importance, reverse=True)
     seen_pub=Counter(); ranked=[]
     for a in ranked_all:
         if seen_pub[a["pub"]]>=4: continue  # max 4 per publisher in brief
@@ -161,6 +162,11 @@ def compute_news_features(articles, ticker, price_return_30d=None):
                       "date":a["dt"].strftime("%Y-%m-%d"),"url":a["url"]})
     f["_brief"]=brief; f["_article_count"]=n
     f["_sentiment_dist"]={"positive":pos,"neutral":neu,"negative":neg}
+    # feed: only articles genuinely about the company (rel_w full) or with real sentiment, drop tangential/spam
+    SPAM=["tokenized","rtsla","rtoken","tokenised","margin collateral"]
+    feed_arts=[a for a in arts if a["rel_w"]>=1.0 and not any(sp in (a["title"]+a["reason"]).lower() for sp in SPAM)]
+    if len(feed_arts)<8:  # backfill with other relevant if too few
+        feed_arts=feed_arts+[a for a in arts if a not in feed_arts and not any(sp in (a["title"]+a["reason"]).lower() for sp in SPAM)]
     f["_recent_headlines"]=[{"title":a["title"],"sentiment":a["sent"],"reason":a["reason"][:160],
-                             "publisher":a["pub"],"date":a["dt"].strftime("%Y-%m-%d"),"url":a["url"]} for a in arts[:15]]
+                             "publisher":a["pub"],"date":a["dt"].strftime("%Y-%m-%d"),"url":a["url"]} for a in feed_arts[:15]]
     return f
