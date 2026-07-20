@@ -60,8 +60,12 @@ def compute_news_features(articles, ticker, price_return_30d=None):
     f["sentiment_prior"]=sum(s_prior)/len(s_prior) if s_prior else None
     if f["sentiment_7d"] is not None and f["sentiment_prior"] is not None:
         f["sentiment_trend"]=f["sentiment_7d"]-f["sentiment_prior"]
+    elif f.get("sentiment_7d") is not None and f.get("sentiment_30d") is not None:
+        f["sentiment_trend"]=f["sentiment_7d"]-f["sentiment_30d"]
+    else:
+        f["sentiment_trend"]=0.0
     f["recent_vs_baseline_sentiment"]=(f.get("sentiment_7d") or 0)-(f.get("sentiment_30d") or 0)
-    if n>=6: f["sentiment_acceleration"]=sum(sv[:3])/3-sum(sv[3:6])/3
+    f["sentiment_acceleration"]=(sum(sv[:3])/3-sum(sv[3:6])/3) if n>=6 else 0.0
 
     f["article_count_7d"]=len(a7); f["article_count_30d"]=len(a30)
     baseline=len(a30)/30 if a30 else 0
