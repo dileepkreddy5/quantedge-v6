@@ -338,7 +338,7 @@ export function buildThesis(data: any, ticker: string): ThesisParagraphs {
 
   const compInsight = interpretCompositeScore(score, signal);
   const regimeInsight = interpretRegime(regime, regimeConf);
-  const shortThesis = `${ticker} receives a composite signal of ${Math.round(score)}/100. ${compInsight.headline.replace(/^Composite score [^.]+\. /, '')} ${regimeInsight.headline}`;
+  const shortThesis = `${ticker} shows ${compInsight.label.toLowerCase()} factor alignment. ${compInsight.headline.replace(/^Composite score [^.]+\. /, '')} ${regimeInsight.headline}`;
 
   const volInsight = interpretVol(annualVol);
   const ddInsight = interpretMaxDrawdown(maxDD);

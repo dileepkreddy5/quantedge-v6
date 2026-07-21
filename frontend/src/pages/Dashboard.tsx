@@ -185,6 +185,18 @@ export default function Dashboard() {
   const signal = data?.overall_signal || 'NEUTRAL';
   const signalColor = signal.includes('BUY') ? '#22c55e' : signal.includes('SELL') ? '#ef4444' : '#f59e0b';
 
+  // ── QuantEdge Conviction (16-module) — the single authoritative score ──
+  const [conviction, setConviction] = useState<{score:number; verdict:string} | null>(null);
+  useEffect(() => {
+    if (!ticker) { setConviction(null); return; }
+    api.get(`/api/v7/conviction/${ticker}`)
+      .then(r => { const d = r.data?.data; if (d && d.conviction_score != null) setConviction({ score: d.conviction_score, verdict: d.verdict || 'NEUTRAL' }); })
+      .catch(() => setConviction(null));
+  }, [ticker, data]);
+  const convScore = conviction ? Math.round(conviction.score) : null;
+  const convVerdict = conviction ? conviction.verdict.replace('_',' ') : signal;
+  const convColor = convVerdict.includes('BUY') ? '#22c55e' : convVerdict.includes('SELL') ? '#ef4444' : '#f59e0b';
+
   return (
     <div style={{ minHeight: '100vh', background: '#1a0f0a', fontFamily: "'Outfit', sans-serif", color: '#f4e8d8' }}>
       
@@ -279,7 +291,7 @@ export default function Dashboard() {
                 background: `${signalColor}15`, padding: '4px 10px',
                 border: `1px solid ${signalColor}40`, borderRadius: 4,
               }}>
-                {signal} · {data.overall_score}/100
+                {convVerdict} · {convScore != null ? convScore : (data.overall_score || 50)}
               </div>
             )}
             <button onClick={() => navigate('/')}
@@ -492,20 +504,20 @@ function TickerHeader({ data, ticker }: { data: any; ticker: string }) {
         border: `1px solid ${signalColor}40`,
         borderRadius: 6, textAlign: 'center',
       }}>
-        <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 20, color: signalColor, letterSpacing: 3 }}>{signal}</div>
-        <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: signalColor + 'aa', letterSpacing: 2 }}>COMPOSITE SIGNAL</div>
+        <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 20, color: convColor, letterSpacing: 3 }}>{convVerdict}</div>
+        <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: convColor + 'aa', letterSpacing: 2 }}>QUANTEDGE CONVICTION</div>
       </div>
 
       {/* Score gauge */}
       <div style={{ minWidth: 120 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
           <span style={{ fontFamily: "'Fira Code',monospace", fontSize: 9, color: '#9d8b7a', letterSpacing: 1 }}>SCORE</span>
-          <span style={{ fontFamily: "'Fira Code',monospace", fontSize: 12, color: signalColor, fontWeight: 700 }}>{data.overall_score || 50}/100</span>
+          <span style={{ fontFamily: "'Fira Code',monospace", fontSize: 12, color: convColor, fontWeight: 700 }}>{convScore != null ? convScore : (data.overall_score || 50)}/100</span>
         </div>
         <div style={{ height: 6, background: '#1a0f0a', borderRadius: 3, overflow: 'hidden' }}>
           <div style={{
             height: '100%', borderRadius: 3,
-            width: `${data.overall_score || 50}%`,
+            width: `${convScore != null ? convScore : (data.overall_score || 50)}%`,
             background: `linear-gradient(90deg, ${signalColor}88, ${signalColor})`,
             transition: 'width 1.2s cubic-bezier(0.4,0,0.2,1)',
           }} />
