@@ -21,31 +21,31 @@ export function interpretCompositeScore(score: number, _signal?: string): Insigh
   const s = Math.round(score);
   if (s >= 75) return {
     label: 'STRONG SIGNAL',
-    headline: `Composite score of ${s}/100 indicates favorable alignment across momentum, quality, and regime factors.`,
+    headline: `Strong alignment across momentum, quality, and regime factors.`,
     explanation: 'A 0-100 signal score combining momentum, quality, accumulation, and trend factors, weighted by the current market regime. Higher values indicate stronger multi-factor alignment.',
     sentiment: 'positive',
   };
   if (s >= 60) return {
     label: 'CONSTRUCTIVE',
-    headline: `Composite score of ${s}/100 reflects a positive bias from the underlying factors, with some areas of weakness.`,
+    headline: `Positive bias from the underlying factors, with some areas of weakness.`,
     explanation: 'A 0-100 signal score combining momentum, quality, accumulation, and trend factors, weighted by the current market regime.',
     sentiment: 'positive',
   };
   if (s >= 40) return {
     label: 'MIXED',
-    headline: `Composite score of ${s}/100 suggests conflicting signals across factors. No clear directional bias.`,
+    headline: `Conflicting signals across factors; no clear directional bias.`,
     explanation: 'A 0-100 signal score combining momentum, quality, accumulation, and trend factors, weighted by the current market regime.',
     sentiment: 'neutral',
   };
   if (s >= 25) return {
     label: 'CAUTIOUS',
-    headline: `Composite score of ${s}/100 indicates weakness across multiple factor categories.`,
+    headline: `Weakness across multiple factor categories.`,
     explanation: 'A 0-100 signal score combining momentum, quality, accumulation, and trend factors. Low values indicate factor deterioration.',
     sentiment: 'warning',
   };
   return {
     label: 'WEAK SIGNAL',
-    headline: `Composite score of ${s}/100 shows broad deterioration in momentum, quality, or regime positioning.`,
+    headline: `Broad deterioration in momentum, quality, or regime positioning.`,
     explanation: 'A 0-100 signal score combining momentum, quality, accumulation, and trend factors. Very low values indicate broad weakness.',
     sentiment: 'negative',
   };
@@ -338,7 +338,7 @@ export function buildThesis(data: any, ticker: string): ThesisParagraphs {
 
   const compInsight = interpretCompositeScore(score, signal);
   const regimeInsight = interpretRegime(regime, regimeConf);
-  const shortThesis = `${ticker} shows ${compInsight.label.toLowerCase()} factor alignment. ${compInsight.headline.replace(/^Composite score [^.]+\. /, '')} ${regimeInsight.headline}`;
+  const shortThesis = `${ticker} shows ${compInsight.label.toLowerCase()} factor alignment. ${compInsight.headline} ${regimeInsight.headline}`;
 
   const volInsight = interpretVol(annualVol);
   const ddInsight = interpretMaxDrawdown(maxDD);
@@ -352,7 +352,7 @@ export function buildThesis(data: any, ticker: string): ThesisParagraphs {
   const mcStr = (mc.bull_case_price && mc.base_case_price && mc.bear_case_price)
     ? ` Monte Carlo simulation places the base case at $${mc.base_case_price.toFixed(2)}, with bull/bear bounds of $${mc.bull_case_price.toFixed(2)} and $${mc.bear_case_price.toFixed(2)}.`
     : '';
-  const shortForward = `${mlInsight.headline}${mcStr} These projections are historical-simulation-derived and have not been validated in live forward-trading.`;
+  const shortForward = `${mlInsight.headline}${mcStr} Per the multi-horizon panel model, the 2-week horizon shows measured out-of-sample skill (rank-IC ~0.16); longer horizons are directional and require more history to validate. See the ML Models tab for per-horizon reliability.`;
 
   return {
     thesis: shortThesis,

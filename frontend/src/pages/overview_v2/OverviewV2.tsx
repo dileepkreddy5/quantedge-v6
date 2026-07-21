@@ -468,6 +468,43 @@ export default function OverviewV2({
         <ThesisBlock label="FORWARD VIEW"  text={thesis.forward} accent={COLORS.textDim} />
       </div>
 
+      {/* ── KEY METRICS GRID ────────────────────────────────── */}
+      <div>
+        <SectionHeader label="KEY METRICS" />
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(4, 1fr)',
+          gap: 10,
+        }}>
+          <MetricTile insight={sharpeInsight} valueOverride={(data.sharpe_ratio ?? 0).toFixed(2)} />
+          <MetricTile insight={betaInsight}   valueOverride={(data.beta ?? 1).toFixed(2)} />
+          <MetricTile insight={regimeInsight} />
+          <MetricTile insight={volInsight}    valueOverride={((data.annual_vol ?? 0) * 100).toFixed(1) + '%'} />
+          <MetricTile insight={ddInsight}     valueOverride={((data.max_drawdown ?? 0) * 100).toFixed(1) + '%'} />
+          <MetricTile insight={peInsight}     valueOverride={data.pe_ratio ? data.pe_ratio.toFixed(1) + 'x' : '—'} />
+          <MetricTile insight={mlInsight} />
+          <MetricTile insight={positionInsight} valueOverride={positionPct != null ? (positionPct * 100).toFixed(0) + '%' : '—'} />
+        </div>
+      </div>
+
+      {/* ── FAMA-FRENCH ─────────────────────────────────────── */}
+      <FamaFrenchTable data={data} />
+
+      {/* ── HONESTY (Deflated Sharpe + PBO) ─────────────────── */}
+      <HonestyPanel data={data} />
+
+      {/* ── PRICE CHART + SCENARIOS ─────────────────────────── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 12 }}>
+        <div>
+          <SectionHeader label="PRICE HISTORY" />
+          <PriceChart ticker={ticker} data={data} />
+        </div>
+        <div>
+          <SectionHeader label="MONTE CARLO SCENARIOS" />
+          <ScenarioPanel data={data} compact />
+        </div>
+      </div>
+
       {/* ── CONVICTION DECOMPOSITION (16-module) ────────────── */}
       {conv && conv.modules && conv.conviction_score != null && (() => {
         const mods = [...conv.modules].filter((m:any) => m.score != null);
@@ -519,42 +556,6 @@ export default function OverviewV2({
         );
       })()}
 
-      {/* ── KEY METRICS GRID ────────────────────────────────── */}
-      <div>
-        <SectionHeader label="KEY METRICS" />
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(4, 1fr)',
-          gap: 10,
-        }}>
-          <MetricTile insight={sharpeInsight} valueOverride={(data.sharpe_ratio ?? 0).toFixed(2)} />
-          <MetricTile insight={betaInsight}   valueOverride={(data.beta ?? 1).toFixed(2)} />
-          <MetricTile insight={regimeInsight} />
-          <MetricTile insight={volInsight}    valueOverride={((data.annual_vol ?? 0) * 100).toFixed(1) + '%'} />
-          <MetricTile insight={ddInsight}     valueOverride={((data.max_drawdown ?? 0) * 100).toFixed(1) + '%'} />
-          <MetricTile insight={peInsight}     valueOverride={data.pe_ratio ? data.pe_ratio.toFixed(1) + 'x' : '—'} />
-          <MetricTile insight={mlInsight} />
-          <MetricTile insight={positionInsight} valueOverride={positionPct != null ? (positionPct * 100).toFixed(0) + '%' : '—'} />
-        </div>
-      </div>
-
-      {/* ── FAMA-FRENCH ─────────────────────────────────────── */}
-      <FamaFrenchTable data={data} />
-
-      {/* ── HONESTY (Deflated Sharpe + PBO) ─────────────────── */}
-      <HonestyPanel data={data} />
-
-      {/* ── PRICE CHART + SCENARIOS ─────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 12 }}>
-        <div>
-          <SectionHeader label="PRICE HISTORY" />
-          <PriceChart ticker={ticker} data={data} />
-        </div>
-        <div>
-          <SectionHeader label="MONTE CARLO SCENARIOS" />
-          <ScenarioPanel data={data} compact />
-        </div>
-      </div>
 
       {/* ── DISCLAIMER ──────────────────────────────────────── */}
       <div style={{
