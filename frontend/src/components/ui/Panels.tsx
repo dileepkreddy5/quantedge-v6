@@ -128,6 +128,15 @@ export function MLModelsPanel({ data }: { data: any }) {
   const regimeDir = dirFromString(data.current_regime, ['BULL'], ['BEAR']);
   const gexDir = dirFromString(data.options?.gex?.gex_regime, ['POSITIVE'], ['NEGATIVE']);
   const sentVal = data.sentiment?.composite;
+  // GARCH volatility regime: current vol above long-run = elevated (risk-off lean)
+  const gCur = data.garch?.current_annual_vol, gLR = data.garch?.long_run_annual_vol;
+  const garchDir = (gCur != null && gLR != null) ? (Number(gCur) > Number(gLR) ? -1 : 1) : null;
+  // Monte Carlo: median (p50) simulated return direction
+  const mcMed = data.monte_carlo?.p50 ?? data.monte_carlo?.expected_return;
+  const mcDir = mcMed != null ? Math.sign(Number(mcMed)) : null;
+  // Panel cross-sectional ensemble: 1-month prediction direction
+  const panelPred = data.panel_prediction?.horizons?.['21d']?.pred_pct;
+  const panelDir = panelPred != null ? Math.sign(Number(panelPred)) : null;
 
   const modelDirs = [
     { name: 'LSTM',      v: lstm.pred_21d != null ? Math.sign(Number(lstm.pred_21d)) : null },
@@ -136,6 +145,9 @@ export function MLModelsPanel({ data }: { data: any }) {
     { name: 'Kalman',    v: kalmanDir },
     { name: 'Regime',    v: regimeDir },
     { name: 'Sentiment', v: sentVal != null ? Math.sign(Number(sentVal)) : null },
+    { name: 'GARCH',     v: garchDir },
+    { name: 'MonteCarlo',v: mcDir },
+    { name: 'Panel-CS',  v: panelDir },
     { name: 'Options',   v: gexDir },
   ].filter(m => m.v != null) as { name: string; v: number }[];
 
