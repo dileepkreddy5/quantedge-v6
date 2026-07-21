@@ -247,8 +247,8 @@ def main():
         "raw_features": feat_cols, "csrank_features": csrank_cols,
         "years": args.years, "step": args.step, "lookback": args.lookback,
         "date_range": [str(panel["date"].min()), str(panel["date"].max())],
-        "label_stats": {"mean": float(panel["label"].mean()), "std": float(panel["label"].std()),
-                        "min": float(panel["label"].min()), "max": float(panel["label"].max())},
+        "label_stats": {h: {"mean": float(panel[f"label_{h}d"].mean()), "std": float(panel[f"label_{h}d"].std())}
+                        for h in [5,10,21,63,126,252] if f"label_{h}d" in panel.columns},
     }
     (PANEL_DIR / f"panel_{stamp}_meta.json").write_text(json.dumps(meta, indent=2))
 
