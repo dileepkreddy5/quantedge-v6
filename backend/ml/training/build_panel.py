@@ -256,7 +256,7 @@ def main():
     logger.info(f"PANEL SAVED: {out}")
     logger.info(f"  {meta['n_rows']} rows | {meta['n_tickers']} tickers | {meta['n_dates']} dates")
     logger.info(f"  {len(feat_cols)} raw + {len(csrank_cols)} cross-sectional-rank features")
-    logger.info(f"  label mean={meta['label_stats']['mean']:+.4f} std={meta['label_stats']['std']:.4f}")
+    logger.info(f"  label horizons: {list(meta['label_stats'].keys())}")
     logger.info(f"  date range: {meta['date_range'][0][:10]} → {meta['date_range'][1][:10]}")
     logger.info("="*60)
 
