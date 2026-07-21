@@ -90,7 +90,7 @@ class PanelPredictor:
             return False
 
     def available(self) -> bool:
-        return self.loaded and self.xgb is not None
+        return self.loaded and len(self.horizons) > 0
 
     def predict(self, feature_dict: Dict[str, float]) -> Optional[Dict]:
         """Predict for one ticker given its computed features (raw feature dict).
