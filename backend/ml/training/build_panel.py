@@ -79,33 +79,57 @@ async def _fetch_bars(client: httpx.AsyncClient, ticker: str, years: int) -> Opt
         logger.warning(f"[{ticker}] fetch failed: {e}")
         return None
 
-def _triple_barrier_labels(close: pd.Series, dates: pd.DatetimeIndex,
-                            max_horizon: int = 21, pt_mult: float = 2.0,
-                            sl_mult: float = 2.0) -> Tuple[List[float], List[int]]:
-    """Path-dependent 21-day forward labels (same logic as live serving)."""
+HORIZONS = [5, 10, 21, 63, 126, 252]  # 1wk, 2wk, 1mo, 3mo, 6mo, 1yr — weeks to years
+
+def _multi_horizon_labels(close: pd.Series, dates: pd.DatetimeIndex,
+                           pt_mult: float = 2.0, sl_mult: float = 2.0):
+    """Path-dependent forward-return labels for MULTIPLE horizons.
+    Returns (labels_dict, valid_idx) where labels_dict[h] is the list of realized
+    log-returns at horizon h, aligned with valid_idx. A sample is valid only if the
+    LONGEST horizon fits (so all horizons share the same rows). 21d uses triple-barrier
+    (path-dependent); longer horizons use terminal return (barriers are a short-horizon
+    trading concept). No lookahead: only uses prices after the sample date."""
     log_ret = np.log(close / close.shift(1))
     sigma = log_ret.rolling(20, min_periods=5).std().bfill()
     n = len(close)
-    y_list, valid = [], []
+    max_h = max(HORIZONS)
+    labels = {h: [] for h in HORIZONS}
+    valid = []
     for k, d in enumerate(dates):
         try:
             pos = close.index.get_loc(d)
-            if pos + max_horizon >= n: continue
+            if pos + max_h >= n:
+                continue
             entry = float(close.iloc[pos]); s = float(sigma.iloc[pos])
-            if s <= 0 or not np.isfinite(s): continue
-            upper = entry * np.exp(pt_mult * s); lower = entry * np.exp(-sl_mult * s)
-            realized = None
-            for j in range(1, max_horizon + 1):
-                if pos + j >= n: break
-                p = float(close.iloc[pos + j])
-                if p >= upper: realized = np.log(upper / entry); break
-                if p <= lower: realized = np.log(lower / entry); break
-            if realized is None:
-                realized = np.log(float(close.iloc[pos + max_horizon]) / entry)
-            y_list.append(float(realized)); valid.append(k)
+            if s <= 0 or not np.isfinite(s):
+                continue
+            row_labels = {}
+            ok = True
+            for h in HORIZONS:
+                if h <= 21:
+                    # triple-barrier for the short horizon
+                    upper = entry * np.exp(pt_mult * s); lower = entry * np.exp(-sl_mult * s)
+                    realized = None
+                    for j in range(1, h + 1):
+                        p = float(close.iloc[pos + j])
+                        if p >= upper: realized = np.log(upper / entry); break
+                        if p <= lower: realized = np.log(lower / entry); break
+                    if realized is None:
+                        realized = np.log(float(close.iloc[pos + h]) / entry)
+                else:
+                    # terminal log-return for longer horizons
+                    realized = np.log(float(close.iloc[pos + h]) / entry)
+                if not np.isfinite(realized):
+                    ok = False; break
+                row_labels[h] = float(realized)
+            if not ok:
+                continue
+            for h in HORIZONS:
+                labels[h].append(row_labels[h])
+            valid.append(k)
         except Exception:
             continue
-    return y_list, valid
+    return labels, valid
 
 async def build_panel(tickers: List[str], years: int, step: int, lookback: int) -> pd.DataFrame:
     from ml.features.feature_engineering import FeaturePipeline
@@ -131,11 +155,11 @@ async def build_panel(tickers: List[str], years: int, step: int, lookback: int) 
             except Exception as e:
                 logger.info(f"[{idx+1}/{len(tickers)}] {tk}: feature build failed ({e}), skip")
                 continue
-            y_list, valid = _triple_barrier_labels(df["close"], dates)
-            if len(y_list) < 30:
-                logger.info(f"[{idx+1}/{len(tickers)}] {tk}: only {len(y_list)} labels, skip")
+            labels, valid = _multi_horizon_labels(df["close"], dates)
+            if len(valid) < 30:
+                logger.info(f"[{idx+1}/{len(tickers)}] {tk}: only {len(valid)} labels, skip")
                 continue
-            Xv = X[valid]; dv = dates[valid]
+            Xv = X[valid]
             cik = cik_map.get(tk)
             facts = None
             if cik:
@@ -145,9 +169,11 @@ async def build_panel(tickers: List[str], years: int, step: int, lookback: int) 
                     except Exception:
                         facts_cache[cik] = None
                 facts = facts_cache[cik]
-            for i in range(len(y_list)):
-                sample_date = dv[i]
-                row = {"date": sample_date, "ticker": tk, "label": y_list[i]}
+            for i in range(len(valid)):
+                sample_date = dates[valid[i]]
+                row = {"date": sample_date, "ticker": tk}
+                for h in HORIZONS:
+                    row[f"label_{h}d"] = labels[h][i]
                 for j, fn in enumerate(feat_names):
                     row[fn] = float(Xv[i, j])
                 if facts is not None:
@@ -165,7 +191,7 @@ async def build_panel(tickers: List[str], years: int, step: int, lookback: int) 
                         pass
                 rows.append(row)
             ok += 1
-            logger.info(f"[{idx+1}/{len(tickers)}] {tk}: +{len(y_list)} samples ({time.time()-t0:.1f}s) | panel={len(rows)}")
+            logger.info(f"[{idx+1}/{len(tickers)}] {tk}: +{len(valid)} samples ({time.time()-t0:.1f}s) | panel={len(rows)}")
             await __import__("asyncio").sleep(0.05)  # gentle pacing
     panel = pd.DataFrame(rows)
     logger.info(f"PANEL BUILT: {len(panel)} rows from {ok} tickers, {panel.shape[1]-3} features")
@@ -174,7 +200,7 @@ async def build_panel(tickers: List[str], years: int, step: int, lookback: int) 
 def add_cross_sectional_ranks(panel: pd.DataFrame) -> pd.DataFrame:
     """For each date, rank each feature into [0,1] percentile within the cross-section.
     This is the key transform enabling relative-value learning."""
-    feat_cols = [c for c in panel.columns if c not in ("date","ticker","label")]
+    feat_cols = [c for c in panel.columns if c not in ("date","ticker") and not c.startswith("label")]
     logger.info(f"Cross-sectional ranking {len(feat_cols)} features across {panel['date'].nunique()} dates...")
     # winsorize raw features first (fat tails), then rank within date
     ranked = panel.copy()

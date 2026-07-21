@@ -43,6 +43,7 @@ class PanelPredictor:
         self.feature_names: List[str] = []
         self.report: Dict = {}
         self.distribution: Dict = {}
+        self.horizons: Dict = {}
         self.loaded = False
 
     @classmethod
@@ -59,18 +60,27 @@ class PanelPredictor:
             lgb_p = PANEL_MODEL_DIR / "lgb_model.joblib"
             feat_p = PANEL_MODEL_DIR / "feature_names.json"
             rep_p = PANEL_MODEL_DIR / "training_report.json"
-            if not (xgb_p.exists() and lgb_p.exists() and feat_p.exists()):
+            has_horizon = any((PANEL_MODEL_DIR / f"xgb_{h}d.joblib").exists() for h in [5,10,21,63,126,252])
+            if not (has_horizon or (xgb_p.exists() and lgb_p.exists())) or not feat_p.exists():
                 logger.warning("Panel models not found — predictor unavailable until trained")
                 return False
-            self.xgb = joblib.load(xgb_p)
-            self.lgb = joblib.load(lgb_p)
+            # Load per-horizon models: xgb_{h}d.joblib / lgb_{h}d.joblib
+            self.horizons = {}
+            for h in [5, 10, 21, 63, 126, 252]:
+                xp = PANEL_MODEL_DIR / f"xgb_{h}d.joblib"
+                lp = PANEL_MODEL_DIR / f"lgb_{h}d.joblib"
+                if xp.exists() and lp.exists():
+                    self.horizons[h] = (joblib.load(xp), joblib.load(lp))
+            # Back-compat: if only the old single 21d model exists
+            if not self.horizons and xgb_p.exists() and lgb_p.exists():
+                self.horizons[21] = (joblib.load(xgb_p), joblib.load(lgb_p))
             self.feature_names = json.loads(feat_p.read_text())
             if rep_p.exists():
                 self.report = json.loads(rep_p.read_text())
             dist_p = PANEL_MODEL_DIR / "feature_distribution.json"
             if dist_p.exists():
                 self.distribution = json.loads(dist_p.read_text())
-            self.loaded = True
+            self.loaded = len(self.horizons) > 0
             logger.info(f"Panel models loaded: {len(self.feature_names)} features, "
                         f"OOS rank-IC {self.report.get('oos_rank_ic',{}).get('ensemble','?')}")
             return True
@@ -111,32 +121,44 @@ class PanelPredictor:
                 else:
                     vec.append(0.5)
         X = np.array(vec, dtype=np.float64).reshape(1, -1)
+        H_LABELS = {5:"1wk", 10:"2wk", 21:"1mo", 63:"3mo", 126:"6mo", 252:"1yr"}
         try:
-            xgb_pred = float(self.xgb.predict(X)[0])
-            lgb_pred = float(self.lgb.predict(X)[0])
-            ens = 0.5 * xgb_pred + 0.5 * lgb_pred
-            # SHAP drivers for this prediction
+            horizon_preds = {}
+            hz_report = self.report.get("horizons", {})
+            for h, (xm, lm) in sorted(self.horizons.items()):
+                xp = float(xm.predict(X)[0]); lp = float(lm.predict(X)[0])
+                ens = 0.5 * xp + 0.5 * lp
+                rep_h = hz_report.get(str(h), {})
+                horizon_preds[f"{h}d"] = {
+                    "label": H_LABELS.get(h, f"{h}d"),
+                    "pred_pct": round(ens * 100, 3),
+                    "xgb_pct": round(xp * 100, 3),
+                    "lgb_pct": round(lp * 100, 3),
+                    "agreement": round(1.0 - abs(xp - lp) / (abs(ens) + 1e-6), 3) if ens != 0 else None,
+                    "oos_rank_ic": rep_h.get("oos_rank_ic", {}).get("ensemble"),
+                    "ic_hit_rate": rep_h.get("ic_hit_rate"),
+                }
+            # SHAP drivers from the 21d model (primary)
             drivers = []
-            try:
-                _, sd = self.xgb.predict_with_shap(X)
-                allshap = {**sd.get("top_bullish_drivers", {}), **sd.get("top_bearish_drivers", {})}
-                top = sorted(allshap.items(), key=lambda kv: abs(kv[1]), reverse=True)[:8]
-                drivers = [{"feature": k.replace("_csrank", ""), "impact": round(float(v), 5)} for k, v in top]
-            except Exception:
-                pass
-            ic = self.report.get("oos_rank_ic", {})
+            if 21 in self.horizons:
+                try:
+                    _, sd = self.horizons[21][0].predict_with_shap(X)
+                    allshap = {**sd.get("top_bullish_drivers", {}), **sd.get("top_bearish_drivers", {})}
+                    top = sorted(allshap.items(), key=lambda kv: abs(kv[1]), reverse=True)[:8]
+                    drivers = [{"feature": k.replace("_csrank", ""), "impact": round(float(v), 5)} for k, v in top]
+                except Exception:
+                    pass
+            primary = horizon_preds.get("21d", {})
             return {
                 "available": True,
-                "pred_21d_pct": round(ens * 100, 3),
-                "xgb_pred_pct": round(xgb_pred * 100, 3),
-                "lgb_pred_pct": round(lgb_pred * 100, 3),
-                "model_agreement": round(1.0 - abs(xgb_pred - lgb_pred) / (abs(ens) + 1e-6), 3) if ens != 0 else None,
+                "horizons": horizon_preds,
+                "pred_21d_pct": primary.get("pred_pct"),
+                "model_agreement": primary.get("agreement"),
                 "shap_drivers": drivers,
-                "oos_rank_ic": ic.get("ensemble"),
-                "ic_hit_rate": self.report.get("ic_hit_rate"),
+                "oos_rank_ic": primary.get("oos_rank_ic"),
                 "trained_at": self.report.get("trained_at"),
-                "n_train": self.report.get("n_train"),
-                "methodology": "Cross-sectional gradient-boosted ensemble trained on a rolling universe panel with point-in-time fundamentals. Predicts 21-day forward return.",
+                "n_tickers_trained": self.report.get("n_tickers"),
+                "methodology": "Multi-horizon cross-sectional gradient-boosted ensemble on a rolling universe panel with point-in-time fundamentals. Separate validated model per horizon (1wk-1yr).",
             }
         except Exception as e:
             logger.warning(f"Panel predict failed: {e}")

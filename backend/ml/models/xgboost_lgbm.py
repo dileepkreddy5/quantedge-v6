@@ -154,25 +154,34 @@ class XGBoostPredictor:
                 name: float(val)
                 for name, val in zip(self.feature_names, mean_shap)
             }
-            # Top drivers for this specific prediction
+            # Top drivers. For a single prediction, use that row's signed SHAP
+            # (directional). For a batch, use MEAN signed SHAP across rows so
+            # drivers ALWAYS populate (previous code only ran for len(X)==1,
+            # leaving batch callers like the panel trainer with empty drivers).
             if len(X) == 1:
-                row_shap = {
-                    name: float(val)
-                    for name, val in zip(self.feature_names, shap_values[0])
-                }
-                top_positive = sorted(
-                    {k: v for k, v in row_shap.items() if v > 0}.items(),
-                    key=lambda x: x[1], reverse=True
-                )[:5]
-                top_negative = sorted(
-                    {k: v for k, v in row_shap.items() if v < 0}.items(),
-                    key=lambda x: x[1]
-                )[:5]
-                # Convert to dict form so callers can ** -unpack them.
-                # Previously these were list-of-tuples which silently produced
-                # empty dicts when merged downstream.
-                shap_dict["top_bullish_drivers"] = dict(top_positive)
-                shap_dict["top_bearish_drivers"] = dict(top_negative)
+                signed = shap_values[0]
+            else:
+                signed = shap_values.mean(axis=0)  # mean signed SHAP across the batch
+            row_shap = {
+                name: float(val)
+                for name, val in zip(self.feature_names, signed)
+            }
+            top_positive = sorted(
+                {k: v for k, v in row_shap.items() if v > 0}.items(),
+                key=lambda x: x[1], reverse=True
+            )[:8]
+            top_negative = sorted(
+                {k: v for k, v in row_shap.items() if v < 0}.items(),
+                key=lambda x: x[1]
+            )[:8]
+            shap_dict["top_bullish_drivers"] = dict(top_positive)
+            shap_dict["top_bearish_drivers"] = dict(top_negative)
+            # Also expose mean-|SHAP| ranking (importance regardless of direction)
+            mean_abs_ranked = sorted(
+                {n: float(v) for n, v in zip(self.feature_names, mean_shap)}.items(),
+                key=lambda x: x[1], reverse=True
+            )[:15]
+            shap_dict["top_importance"] = dict(mean_abs_ranked)
 
         return predictions, shap_dict
 
