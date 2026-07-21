@@ -509,16 +509,6 @@ function TickerHeader({ data, ticker }: { data: any; ticker: string }) {
       </div>
 
       {/* Signal */}
-      <div style={{
-        padding: '8px 16px',
-        background: `${signalColor}12`,
-        border: `1px solid ${signalColor}40`,
-        borderRadius: 6, textAlign: 'center',
-      }}>
-        <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 20, color: convColor, letterSpacing: 3 }}>{convVerdict}</div>
-        <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: convColor + 'aa', letterSpacing: 2 }}>QUANTEDGE CONVICTION</div>
-      </div>
-
 
       {/* QuantEdge Conviction (new 20-module consolidated score) */}
       <ConvictionBadge ticker={ticker} />
