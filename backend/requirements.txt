@@ -83,3 +83,5 @@ torch==2.2.2
 # ── Testing ──────────────────────────────────────────────────
 pytest==8.1.1
 pytest-asyncio==0.23.6
+pyarrow
+fastparquet
