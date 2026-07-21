@@ -221,12 +221,23 @@ def main():
     ap.add_argument("--years", type=int, default=5)
     ap.add_argument("--step", type=int, default=5, help="days between samples per ticker")
     ap.add_argument("--lookback", type=int, default=252)
+    ap.add_argument("--full", action="store_true", help="pull full liquid US universe dynamically")
     args = ap.parse_args()
 
     if not POLYGON_KEY:
         logger.error("POLYGON_API_KEY not set. Export it first."); sys.exit(1)
 
-    universe = DEFAULT_UNIVERSE[:args.tickers]
+    if getattr(args, "full", False):
+        from ml.training.select_universe import liquid_universe
+        logger.info(f"Pulling liquid US universe (top {args.tickers} by dollar volume)...")
+        universe = liquid_universe(top_n=args.tickers)
+        # filter to common stocks with a CIK (has fundamentals) — drops ETFs/funds
+        from quantedge.fundamentals.universe_full import ticker_cik_map
+        cik_map = ticker_cik_map()
+        universe = [t for t in universe if t in cik_map]
+        logger.info(f"Liquid universe with fundamentals (CS only): {len(universe)} tickers")
+    else:
+        universe = DEFAULT_UNIVERSE[:args.tickers]
     logger.info(f"Building panel: {len(universe)} tickers, {args.years}yr, step={args.step}, lookback={args.lookback}")
 
     import asyncio

@@ -113,6 +113,7 @@ export function MLModelsPanel({ data }: { data: any }) {
   const lgbm = preds.lightgbm || {};
   const shap = preds.shap_top_drivers || [];
   const quantile = preds.quantile || {};
+  const panel = data.panel_prediction || null;  // cross-sectional multi-horizon models
 
   // ── Cross-model conviction: agreement among INDEPENDENT model signals on 21-day direction ──
   // Note: Ensemble is excluded — it's derived from LSTM/XGB/LGBM, so it isn't an independent vote.
@@ -152,6 +153,66 @@ export function MLModelsPanel({ data }: { data: any }) {
 
   return (
     <div className="qe-grid-3">
+
+      {panel && panel.horizons && (
+        <Card style={{ gridColumn:'span 3' }}>
+          <SectionTitle>MULTI-HORIZON ML FORECAST — CROSS-SECTIONAL PANEL MODEL</SectionTitle>
+          <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:11, color:'#8a7560', marginBottom:12, lineHeight:1.5 }}>
+            Gradient-boosted ensemble (XGBoost + LightGBM) trained cross-sectionally on the US universe with point-in-time fundamentals.
+            Each horizon independently validated out-of-sample. Predictions are model-implied return leans, honestly labeled by measured reliability.
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(6, 1fr)', gap:8 }}>
+            {['5d','10d','21d','63d','126d','252d'].map((hk) => {
+              const h = panel.horizons[hk];
+              if (!h) return null;
+              const pv = Number(h.pred_pct);
+              const col = pv > 0 ? '#22c55e' : pv < 0 ? '#ef4444' : '#8a7560';
+              const ic = h.oos_rank_ic;
+              const icNum = ic != null ? Number(ic) : null;
+              const strong = icNum != null && icNum >= 0.05;
+              const badgeCol = strong ? '#22c55e' : (icNum != null && icNum > 0.02) ? '#eab308' : '#8a7560';
+              const badgeTxt = strong ? 'VALIDATED' : (icNum != null && icNum > 0.02) ? 'MODERATE' : 'LOW CONF';
+              return (
+                <div key={hk} style={{ border:'1px solid #3a2f28', borderRadius:8, padding:'10px 8px', background:'#1a1512', textAlign:'center' }}>
+                  <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:10, color:'#8a7560', letterSpacing:1, marginBottom:6 }}>{h.label}</div>
+                  <div style={{ fontFamily:"'Fira Code',monospace", fontSize:20, fontWeight:800, color:col, lineHeight:1 }}>
+                    {pv > 0 ? '+' : ''}{pv.toFixed(1)}%
+                  </div>
+                  <div style={{ fontFamily:"'Fira Code',monospace", fontSize:9, color:'#8a7560', marginTop:6 }}>
+                    IC {icNum != null ? (icNum >= 0 ? '+' : '') + icNum.toFixed(3) : 'n/a'}
+                  </div>
+                  <div style={{ marginTop:6, fontFamily:"'Fira Code',monospace", fontSize:8, letterSpacing:0.5,
+                    padding:'2px 5px', borderRadius:4, border:'1px solid ' + badgeCol + '40', color:badgeCol, background:badgeCol + '12', display:'inline-block' }}>
+                    {badgeTxt}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {panel.shap_drivers && panel.shap_drivers.length > 0 && (
+            <div style={{ marginTop:12 }}>
+              <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:10, color:'#8a7560', letterSpacing:1, marginBottom:6 }}>TOP PREDICTIVE DRIVERS (1-MONTH MODEL)</div>
+              <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+                {panel.shap_drivers.slice(0,8).map((d:any, i:number) => {
+                  const col = Number(d.impact) > 0 ? '#22c55e' : '#ef4444';
+                  return (
+                    <span key={i} style={{ fontFamily:"'Fira Code',monospace", fontSize:9, padding:'3px 7px', borderRadius:4,
+                      border:'1px solid ' + col + '40', color:col, background:col + '10' }}>
+                      {d.feature} {Number(d.impact) > 0 ? '\u25b2' : '\u25bc'}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          {panel.methodology && (
+            <div style={{ marginTop:10, fontFamily:"'Outfit',sans-serif", fontSize:10, color:'#6b5d52', lineHeight:1.4 }}>
+              Trained on {panel.n_tickers_trained || 'the US'} stocks · {panel.methodology}
+            </div>
+          )}
+        </Card>
+      )}
+
       {/* Cross-model conviction */}
       <Card style={{ gridColumn:'span 3' }}>
         <SectionTitle>MODEL CONVICTION — CROSS-MODEL AGREEMENT</SectionTitle>
