@@ -457,31 +457,7 @@ export default function OverviewV2({
           </div>
         </div>
 
-        <div style={{
-          background: COLORS.panelAlt,
-          border: `2px solid ${(conv && conv.verdict?.includes('BUY')) ? COLORS.green : (conv && conv.verdict?.includes('SELL')) ? COLORS.red : scoreColor}`,
-          borderRadius: 4, padding: '14px 20px',
-          textAlign: 'center', minWidth: 160,
-        }}>
-          <div style={{
-            fontFamily: fontMono, fontSize: 8, letterSpacing: 3,
-            color: COLORS.textFaint, marginBottom: 4,
-          }}>
-            QUANTEDGE CONVICTION
-          </div>
-          <div style={{
-            fontFamily: fontMono, fontSize: 32, fontWeight: 700,
-            color: (conv && conv.verdict?.includes('BUY')) ? COLORS.green : (conv && conv.verdict?.includes('SELL')) ? COLORS.red : scoreColor, lineHeight: 1,
-          }}>
-            {conv && conv.conviction_score != null ? Math.round(conv.conviction_score) : Math.round(score)}
-          </div>
-          <div style={{
-            fontFamily: fontMono, fontSize: 9, letterSpacing: 2,
-            color: (conv && conv.verdict?.includes('BUY')) ? COLORS.green : (conv && conv.verdict?.includes('SELL')) ? COLORS.red : scoreColor, marginTop: 4,
-          }}>
-            {conv && conv.verdict ? conv.verdict.replace('_',' ') : scoreInsight.label}
-          </div>
-        </div>
+
       </div>
 
       {/* ── THESIS PARAGRAPHS ───────────────────────────────── */}

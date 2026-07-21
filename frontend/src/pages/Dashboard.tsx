@@ -519,21 +519,6 @@ function TickerHeader({ data, ticker }: { data: any; ticker: string }) {
         <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: convColor + 'aa', letterSpacing: 2 }}>QUANTEDGE CONVICTION</div>
       </div>
 
-      {/* Score gauge */}
-      <div style={{ minWidth: 120 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-          <span style={{ fontFamily: "'Fira Code',monospace", fontSize: 9, color: '#9d8b7a', letterSpacing: 1 }}>SCORE</span>
-          <span style={{ fontFamily: "'Fira Code',monospace", fontSize: 12, color: convColor, fontWeight: 700 }}>{convScore != null ? convScore : (data.overall_score || 50)}/100</span>
-        </div>
-        <div style={{ height: 6, background: '#1a0f0a', borderRadius: 3, overflow: 'hidden' }}>
-          <div style={{
-            height: '100%', borderRadius: 3,
-            width: `${convScore != null ? convScore : (data.overall_score || 50)}%`,
-            background: `linear-gradient(90deg, ${signalColor}88, ${signalColor})`,
-            transition: 'width 1.2s cubic-bezier(0.4,0,0.2,1)',
-          }} />
-        </div>
-      </div>
 
       {/* QuantEdge Conviction (new 20-module consolidated score) */}
       <ConvictionBadge ticker={ticker} />
