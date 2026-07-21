@@ -469,6 +469,17 @@ function TickerHeader({ data, ticker }: { data: any; ticker: string }) {
   const isUp = change >= 0;
   const signal = data.overall_signal || 'NEUTRAL';
   const signalColor = signal.includes('BUY') ? '#22c55e' : signal.includes('SELL') ? '#ef4444' : '#f59e0b';
+  // Conviction (16-module) — the authoritative score
+  const [conviction, setConviction] = useState<{score:number; verdict:string} | null>(null);
+  useEffect(() => {
+    if (!ticker) { setConviction(null); return; }
+    api.get(`/api/v7/conviction/${ticker}`)
+      .then(r => { const d = r.data?.data; if (d && d.conviction_score != null) setConviction({ score: d.conviction_score, verdict: d.verdict || 'NEUTRAL' }); })
+      .catch(() => setConviction(null));
+  }, [ticker, data]);
+  const convScore = conviction ? Math.round(conviction.score) : null;
+  const convVerdict = conviction ? conviction.verdict.replace('_',' ') : signal;
+  const convColor = convVerdict.includes('BUY') ? '#22c55e' : convVerdict.includes('SELL') ? '#ef4444' : '#f59e0b';
 
   return (
     <div style={{
