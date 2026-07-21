@@ -139,7 +139,6 @@ async def build_panel(tickers: List[str], years: int, step: int, lookback: int) 
     fe = FeaturePipeline()
     logger.info("Loading ticker->CIK map for fundamentals...")
     cik_map = ticker_cik_map()
-    facts_cache = {}
     rows = []
     ok = 0
     async with httpx.AsyncClient() as client:
@@ -163,12 +162,10 @@ async def build_panel(tickers: List[str], years: int, step: int, lookback: int) 
             cik = cik_map.get(tk)
             facts = None
             if cik:
-                if cik not in facts_cache:
-                    try:
-                        facts_cache[cik] = company_facts_from_bulk(cik)
-                    except Exception:
-                        facts_cache[cik] = None
-                facts = facts_cache[cik]
+                try:
+                    facts = company_facts_from_bulk(cik)  # load once, released after ticker
+                except Exception:
+                    facts = None
             for i in range(len(valid)):
                 sample_date = dates[valid[i]]
                 row = {"date": sample_date, "ticker": tk}
@@ -190,6 +187,7 @@ async def build_panel(tickers: List[str], years: int, step: int, lookback: int) 
                     except Exception:
                         pass
                 rows.append(row)
+            facts = None  # release SEC JSON before next ticker
             ok += 1
             logger.info(f"[{idx+1}/{len(tickers)}] {tk}: +{len(valid)} samples ({time.time()-t0:.1f}s) | panel={len(rows)}")
             await __import__("asyncio").sleep(0.05)  # gentle pacing
