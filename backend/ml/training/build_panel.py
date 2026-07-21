@@ -109,7 +109,13 @@ def _triple_barrier_labels(close: pd.Series, dates: pd.DatetimeIndex,
 
 async def build_panel(tickers: List[str], years: int, step: int, lookback: int) -> pd.DataFrame:
     from ml.features.feature_engineering import FeaturePipeline
+    from quantedge.fundamentals.universe_full import ticker_cik_map
+    from quantedge.fundamentals.edgar_bulk import company_facts_from_bulk
+    from quantedge.fundamentals.pit_fundamentals import point_in_time_fundamentals
     fe = FeaturePipeline()
+    logger.info("Loading ticker->CIK map for fundamentals...")
+    cik_map = ticker_cik_map()
+    facts_cache = {}
     rows = []
     ok = 0
     async with httpx.AsyncClient() as client:
@@ -130,10 +136,33 @@ async def build_panel(tickers: List[str], years: int, step: int, lookback: int) 
                 logger.info(f"[{idx+1}/{len(tickers)}] {tk}: only {len(y_list)} labels, skip")
                 continue
             Xv = X[valid]; dv = dates[valid]
+            cik = cik_map.get(tk)
+            facts = None
+            if cik:
+                if cik not in facts_cache:
+                    try:
+                        facts_cache[cik] = company_facts_from_bulk(cik)
+                    except Exception:
+                        facts_cache[cik] = None
+                facts = facts_cache[cik]
             for i in range(len(y_list)):
-                row = {"date": dv[i], "ticker": tk, "label": y_list[i]}
+                sample_date = dv[i]
+                row = {"date": sample_date, "ticker": tk, "label": y_list[i]}
                 for j, fn in enumerate(feat_names):
                     row[fn] = float(Xv[i, j])
+                if facts is not None:
+                    try:
+                        pos = df.index.get_loc(sample_date)
+                        close_px = float(df["close"].iloc[pos])
+                        pit = point_in_time_fundamentals(
+                            facts,
+                            sample_date.date() if hasattr(sample_date, "date") else sample_date,
+                            price=close_px,
+                        )
+                        for fk, fv in pit.items():
+                            row[fk] = fv
+                    except Exception:
+                        pass
                 rows.append(row)
             ok += 1
             logger.info(f"[{idx+1}/{len(tickers)}] {tk}: +{len(y_list)} samples ({time.time()-t0:.1f}s) | panel={len(rows)}")

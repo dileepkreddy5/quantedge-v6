@@ -75,6 +75,16 @@ def main():
 
     # Use cross-sectional-rank features (the relative-value signal) as primary inputs
     csrank_cols = [c for c in df.columns if c.endswith("_csrank")]
+    # Drop dead features: constant or all-zero raw columns carry no signal and
+    # dilute the model (e.g. unfilled fundamental placeholders).
+    _keep = []
+    for c in csrank_cols:
+        raw = c.replace("_csrank", "")
+        if raw in df.columns and df[raw].nunique(dropna=True) > 3 and df[raw].abs().sum() > 0:
+            _keep.append(c)
+    dropped = len(csrank_cols) - len(_keep)
+    csrank_cols = _keep
+    logger.info(f"Dropped {dropped} dead/constant features; using {len(csrank_cols)}")
     logger.info(f"Using {len(csrank_cols)} cross-sectional-rank features")
 
     # Clean: drop rows with NaN label; fill feature NaNs with 0.5 (neutral rank)
@@ -146,6 +156,21 @@ def main():
     joblib.dump(xgb, OUT_DIR / "xgb_model.joblib")
     joblib.dump(lgb, OUT_DIR / "lgb_model.joblib")
     (OUT_DIR / "feature_names.json").write_text(json.dumps(csrank_cols, indent=2))
+
+    # Save the RAW feature training distribution so serving can map a single
+    # ticker's raw feature value to its percentile within the training population.
+    # This is what makes single-ticker cross-sectional prediction correct: the
+    # searched ticker is ranked against the distribution the model learned on.
+    raw_cols = [c.replace("_csrank", "") for c in csrank_cols]
+    dist = {}
+    for rc in raw_cols:
+        if rc in df.columns:
+            vals = df[rc].dropna().values.astype(float)
+            if len(vals) >= 20:
+                # store percentiles 0..100 for fast lookup
+                dist[rc] = [float(np.percentile(vals, p)) for p in range(0, 101)]
+    (OUT_DIR / "feature_distribution.json").write_text(json.dumps(dist))
+    logger.info(f"Saved training distribution for {len(dist)} raw features")
 
     report = {
         "trained_at": datetime.now().isoformat(),

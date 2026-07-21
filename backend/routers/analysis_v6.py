@@ -284,6 +284,19 @@ class QuantEdgeAnalyzerV6:
             )
             result["ml_predictions"] = ml_predictions
 
+            # Cross-sectional panel prediction: score this ticker against models
+            # trained on the whole-universe rolling panel (with point-in-time
+            # fundamentals). Works for any US ticker; loads pre-trained models once.
+            try:
+                from ml.serving.panel_predictor import PanelPredictor
+                _pp = PanelPredictor.get()
+                if _pp.available():
+                    panel_pred = _pp.predict(feature_matrix)
+                    if panel_pred:
+                        result["panel_prediction"] = panel_pred
+            except Exception as _e:
+                logger.warning(f"panel prediction skipped: {_e}")
+
             ensemble_preds = ml_predictions.get("ensemble", {})
             predicted_return_1y = ensemble_preds.get("pred_252d", annual_return * 100) / 100
 
