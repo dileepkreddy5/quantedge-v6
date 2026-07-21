@@ -179,14 +179,25 @@ def main():
         joblib.dump(xgb, OUT_DIR / f"xgb_{h}d.joblib")
         joblib.dump(lgb, OUT_DIR / f"lgb_{h}d.joblib")
 
+        # A horizon needs enough INDEPENDENT (non-overlapping) validation dates to
+        # trust its IC. With <5 independent dates the number is statistically
+        # meaningless (t-stat undefined). We mark those as low-confidence rather
+        # than reporting an inflated IC — this is the honest thing to do.
+        MIN_INDEP_DATES = 5
+        reliable = ens_nd >= MIN_INDEP_DATES and abs(t_stat) > 0
         horizon_reports[str(h)] = {
             "horizon_label": HORIZON_LABELS[h],
             "oos_rank_ic": {"xgboost": round(xgb_ic,4), "lightgbm": round(lgb_ic,4), "ensemble": round(ens_ic,4)},
-            "ic_std": round(ens_ic_std,4), "n_val_dates": ens_nd,
+            "ic_std": round(ens_ic_std,4),
+            "n_independent_val_dates": ens_nd,
             "ic_hit_rate": round(hit_rate,3), "ic_t_stat": round(t_stat,2),
             "n_train": int(train_mask.sum()), "n_val": int(val_mask.sum()),
+            "reliable": reliable,
+            "confidence_note": ("Statistically reliable" if reliable else
+                f"Low confidence: only {ens_nd} independent (non-overlapping) {h}-day windows in the validation period — needs more history to measure {HORIZON_LABELS[h]} skill reliably."),
         }
-        logger.info(f"  [{HORIZON_LABELS[h]:>4} / {h:3}d] ensemble rank-IC {ens_ic:+.4f} | hit {hit_rate:.0%} | t {t_stat:+.2f} | n_val {val_mask.sum()}")
+        _tag = "OK " if (ens_nd >= 5 and abs(t_stat) > 0) else "LOW"
+        logger.info(f"  [{HORIZON_LABELS[h]:>4} / {h:3}d] {_tag} rank-IC {ens_ic:+.4f} | t {t_stat:+.2f} | indep_dates {ens_nd}")
 
         # SHAP from the 21d (primary) model
         if h == 21:
@@ -218,7 +229,9 @@ def main():
     logger.info("MULTI-HORIZON PANEL TRAINING COMPLETE")
     for h in HORIZONS:
         r = horizon_reports.get(str(h))
-        if r: logger.info(f"  {r['horizon_label']:>4}: rank-IC {r['oos_rank_ic']['ensemble']:+.4f} | hit {r['ic_hit_rate']:.0%}")
+        if r:
+            tag = "reliable" if r.get("reliable") else "LOW-CONF (insufficient independent windows)"
+            logger.info(f"  {r['horizon_label']:>4}: rank-IC {r['oos_rank_ic']['ensemble']:+.4f} | t {r['ic_t_stat']:+.2f} | indep_dates {r['n_independent_val_dates']} | {tag}")
     logger.info(f"  Top drivers (21d): {', '.join(d['feature'] for d in shap_drivers_21d[:5])}")
     logger.info(f"  Models saved to: {OUT_DIR}")
     logger.info("=" * 64)
