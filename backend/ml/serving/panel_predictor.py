@@ -21,10 +21,11 @@ logger = logging.getLogger("panel_predictor")
 # the container's MODEL_DIR env may point elsewhere (used for other model types).
 def _find_panel_dir() -> Path:
     candidates = [
-        Path("/app/ml_models/panel"),
-        Path(os.environ.get("MODEL_DIR", "/app/ml_models")) / "panel",
+        Path(os.environ.get("MODEL_DIR", "/app/models")) / "panel",
         Path("/app/models/panel"),
+        Path("/app/ml_models/panel"),
         Path("./ml_models/panel"),
+        Path.home() / "Desktop/QuantEdge_V6/ml_models/panel",
     ]
     for c in candidates:
         if (c / "xgb_model.joblib").exists():
