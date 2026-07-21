@@ -42,12 +42,27 @@ def _latest_panel() -> Path:
     return Path(panels[-1])
 
 
-def cross_sectional_rank_ic(dates: np.ndarray, preds: np.ndarray, y: np.ndarray) -> Tuple[float, float, int]:
-    """The honest quant metric. For each date with >=5 names, Spearman-rank
-    predictions vs realized returns; average across dates.
-    Returns (mean_rank_ic, ic_std, n_dates_used)."""
+def cross_sectional_rank_ic(dates: np.ndarray, preds: np.ndarray, y: np.ndarray,
+                            horizon_days: int = 0) -> Tuple[float, float, int]:
+    """Honest cross-sectional rank-IC with OVERLAP CORRECTION.
+    For each date with >=5 names, Spearman-rank predictions vs realized returns.
+    CRITICAL: for long horizons, overlapping forward-return windows are NOT
+    independent — using all dates inflates IC and t-stats spuriously. We therefore
+    only keep validation dates spaced >= horizon_days apart, so each measured IC
+    comes from a non-overlapping (independent) forward window. This gives the
+    honest number, which for long horizons will be lower and noisier — that's the
+    truth of the data, not a bug."""
+    uniq = np.sort(np.unique(dates))
+    # enforce non-overlapping spacing for long horizons
+    if horizon_days and horizon_days > 5:
+        kept = []
+        last = None
+        for d in uniq:
+            if last is None or (pd.Timestamp(d) - pd.Timestamp(last)).days >= horizon_days:
+                kept.append(d); last = d
+        uniq = np.array(kept)
     ics = []
-    for d in np.unique(dates):
+    for d in uniq:
         m = dates == d
         if m.sum() < 5:
             continue
@@ -136,19 +151,24 @@ def main():
         xgb = XGBoostPredictor(target_horizon=h)
         xgb_fit = xgb.fit(X_train, y_train, csrank_cols, X_val=X_val, y_val=y_val)
         xgb_val = xgb.predict(X_val)
-        xgb_ic, _, _ = cross_sectional_rank_ic(dates_val, xgb_val, y_val)
+        xgb_ic, _, _ = cross_sectional_rank_ic(dates_val, xgb_val, y_val, horizon_days=h)
 
         lgb = LightGBMPredictor(target_horizon=h)
         lgb.fit(X_train, y_train, csrank_cols, X_val=X_val, y_val=y_val)
         lgb_val = lgb.predict(X_val)
-        lgb_ic, _, _ = cross_sectional_rank_ic(dates_val, lgb_val, y_val)
+        lgb_ic, _, _ = cross_sectional_rank_ic(dates_val, lgb_val, y_val, horizon_days=h)
 
         ens_val = 0.5 * xgb_val + 0.5 * lgb_val
-        ens_ic, ens_ic_std, ens_nd = cross_sectional_rank_ic(dates_val, ens_val, y_val)
+        ens_ic, ens_ic_std, ens_nd = cross_sectional_rank_ic(dates_val, ens_val, y_val, horizon_days=h)
 
         # hit rate + t-stat
+        # non-overlapping dates for honest hit-rate / t-stat
+        _uniq = np.sort(np.unique(dates_val)); _kept=[]; _last=None
+        for _d in _uniq:
+            if _last is None or (pd.Timestamp(_d)-pd.Timestamp(_last)).days >= h:
+                _kept.append(_d); _last=_d
         date_ics = []
-        for d in np.unique(dates_val):
+        for d in _kept:
             m = dates_val == d
             if m.sum() < 5 or np.std(ens_val[m]) == 0: continue
             rho, _ = spearmanr(ens_val[m], y_val[m])
