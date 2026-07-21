@@ -35,14 +35,14 @@ export default function ConvictionBadge({ ticker }: { ticker: string }) {
         <div style={{ fontSize: 18, fontWeight: 700, color: col, letterSpacing: 1 }}>
           {c.verdict.replace('_', ' ')} · {c.conviction_score}</div>
         <div style={{ fontSize: 8, color: '#7a7266', letterSpacing: 1 }}>
-          {(c.coverage.pct * 100).toFixed(0)}% model coverage · {c.coverage.modules_total - c.coverage.modules_live} modules building</div>
+          {(c.coverage.pct * 100).toFixed(0)}% coverage · {c.coverage.modules_live}/{c.coverage.modules_total} modules live</div>
       </div>
       {show && (
         <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 6, zIndex: 50,
           background: '#111', border: '1px solid #2a2a2a', borderRadius: 8, padding: 12, minWidth: 260,
           boxShadow: '0 8px 24px rgba(0,0,0,.5)' }}>
           <div style={{ fontSize: 10, color: '#9d8b7a', marginBottom: 8, letterSpacing: 1 }}>
-            20-MODULE CONVICTION TREE — {c.coverage.live_weight}/{c.coverage.total_weight} weight live</div>
+            {c.modules.length}-MODULE CONVICTION TREE — {c.coverage.live_weight}/{c.coverage.total_weight} weight live</div>
           {c.modules.map(m => (
             <div key={m.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 3,
               opacity: m.score == null ? 0.4 : 1 }}>

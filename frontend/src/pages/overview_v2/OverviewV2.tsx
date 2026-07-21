@@ -2,7 +2,8 @@
 // QuantEdge v6.0 — Overview V2
 // Bloomberg-style institutional layout with layered insights
 // ============================================================
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { api } from '../../auth/authStore';
 import {
   Insight,
   interpretCompositeScore,
@@ -366,6 +367,13 @@ export default function OverviewV2({
     );
   }
 
+  // ── 16-module conviction decomposition (the deep score) ──
+  const [conv, setConv] = useState<any>(null);
+  useEffect(() => {
+    if (!ticker) return;
+    api.get(`/api/v7/conviction/${ticker}`).then(r => setConv(r.data?.data || null)).catch(() => setConv(null));
+  }, [ticker]);
+
   const thesis = buildThesis(data, ticker);
   const score = data.overall_score ?? 50;
   const scoreInsight = interpretCompositeScore(score, data.overall_signal);
@@ -483,6 +491,57 @@ export default function OverviewV2({
         <ThesisBlock label="RISK PROFILE"  text={thesis.risk}    accent={COLORS.cyan} />
         <ThesisBlock label="FORWARD VIEW"  text={thesis.forward} accent={COLORS.textDim} />
       </div>
+
+      {/* ── CONVICTION DECOMPOSITION (16-module) ────────────── */}
+      {conv && conv.modules && conv.conviction_score != null && (() => {
+        const mods = [...conv.modules].filter((m:any) => m.score != null);
+        // weighted contribution of each module to the final score
+        const totalW = mods.reduce((s:number,m:any)=>s+(m.weight||0),0) || 100;
+        const withContrib = mods.map((m:any)=>({ ...m,
+          contrib: (m.score * (m.weight||0)) / totalW,
+          label: (m.label||'').replace(' Intelligence',''),
+        })).sort((a:any,b:any)=>b.contrib-a.contrib);
+        const maxContrib = Math.max(...withContrib.map((m:any)=>m.contrib), 1);
+        const vColor = (s:number) => s>=70 ? COLORS.green : s>=50 ? COLORS.amber : COLORS.red;
+        const top = withContrib.slice(0,3).map((m:any)=>m.label).join(', ');
+        const drags = withContrib.filter((m:any)=>m.score<45).map((m:any)=>m.label);
+        const cScore = conv.conviction_score;
+        const cCol = conv.verdict?.includes('BUY') ? COLORS.green : conv.verdict?.includes('SELL') ? COLORS.red : COLORS.amber;
+        return (
+          <div>
+            <SectionHeader label={`CONVICTION DECOMPOSITION — WHY ${cScore.toFixed(0)}`} />
+            <div style={{ display:'flex', alignItems:'baseline', gap:12, marginBottom:10, flexWrap:'wrap' }}>
+              <span style={{ fontFamily:"'Fira Code',monospace", fontSize:32, fontWeight:800, color:cCol, lineHeight:1 }}>{cScore.toFixed(0)}</span>
+              <span style={{ fontFamily:"'Fira Code',monospace", fontSize:14, fontWeight:700, color:cCol }}>{(conv.verdict||'').replace('_',' ')}</span>
+              <span style={{ fontFamily:"'Outfit',sans-serif", fontSize:12, color:COLORS.textDim, flex:1, minWidth:200 }}>
+                16-module weighted conviction · driven by {top}{drags.length ? ` · held back by ${drags.join(', ')}` : ''}
+              </span>
+            </div>
+            <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
+              {withContrib.map((m:any)=>(
+                <div key={m.id} style={{ display:'grid', gridTemplateColumns:'150px 1fr 60px 44px', alignItems:'center', gap:10 }}>
+                  <span style={{ fontFamily:"'Outfit',sans-serif", fontSize:11, color:COLORS.text }}>
+                    {m.label}<span style={{ color:COLORS.textDim, fontSize:9 }}> · {m.weight}%</span>
+                  </span>
+                  <div style={{ height:16, background:'#1a1512', borderRadius:3, position:'relative', overflow:'hidden' }}>
+                    <div style={{ position:'absolute', left:0, top:0, bottom:0,
+                      width:`${(m.contrib/maxContrib)*100}%`, background:vColor(m.score), opacity:0.55, borderRadius:3 }} />
+                  </div>
+                  <span style={{ fontFamily:"'Fira Code',monospace", fontSize:11, color:vColor(m.score), fontWeight:700, textAlign:'right' }}>
+                    {m.score.toFixed(1)}
+                  </span>
+                  <span style={{ fontFamily:"'Fira Code',monospace", fontSize:10, color:COLORS.textDim, textAlign:'right' }}>
+                    +{m.contrib.toFixed(1)}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:10, color:COLORS.textDim, marginTop:8, lineHeight:1.5 }}>
+              Each module scores 0–100 on its dimension; contribution = score × weight. The final conviction is the weighted sum across all 16 institutional dimensions.
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── KEY METRICS GRID ────────────────────────────────── */}
       <div>
