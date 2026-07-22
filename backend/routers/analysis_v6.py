@@ -200,7 +200,27 @@ class QuantEdgeAnalyzerV6:
             volume = price_data.get("volume", pd.Series(0, index=close.index))
 
             returns = close.pct_change().dropna()
+
+            # Polygon occasionally returns a bar spanning an unadjusted corporate
+            # action — META shows a +1394% day in June 2022 where the series jumps
+            # from ~$14 to ~$200. One such print takes the return std from 0.024 to
+            # 0.410, which annualises to 650% volatility and corrupts Sharpe, VaR,
+            # position sizing and every Monte Carlo path downstream. Equities do not
+            # move 60% in a session; anything beyond that is a data error.
+            _bad = returns.abs() > 0.60
+            if _bad.any():
+                _n = int(_bad.sum())
+                logger.warning(
+                    f"{ticker}: dropped {_n} bar(s) with implausible daily moves "
+                    f"(max {returns.abs().max():.1%}) — likely unadjusted split data")
+                returns = returns[~_bad]
+                # Rebuild the price series from the surviving returns so anything
+                # deriving prices rather than returns is consistent with them.
+                _keep = close.index.isin(returns.index) | (close.index == close.index[0])
+                close = close[_keep]
+
             log_returns = np.log(close / close.shift(1)).dropna()
+            log_returns = log_returns[log_returns.abs() < 0.47]   # ln(1.6)
 
             current_price = float(close.iloc[-1])
             price_1y_ago = float(close.iloc[-252]) if len(close) >= 252 else float(close.iloc[0])
