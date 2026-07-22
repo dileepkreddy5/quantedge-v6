@@ -883,81 +883,200 @@ export function VolatilityPanel({ data }: { data: any }) {
 // ══════════════════════════════════════════════════════════════
 export function RegimePanel({ data }: { data: any }) {
   const regime = data.regime || {};
+  const rc = data.regime_context || null;
   const probs = regime.regime_probabilities || {};
   const trans = regime.next_regime_probabilities || {};
-  const durations = regime.historical_durations || {};
   const current = data.current_regime || 'UNKNOWN';
-  const colorMap: any = { BULL_LOW_VOL:'#22c55e', BULL_HIGH_VOL:'#86efac', MEAN_REVERT:'#f59e0b', BEAR_LOW_VOL:'#f87171', BEAR_HIGH_VOL:'#ef4444' };
+  const C: any = { BULL_LOW_VOL:'#22c55e', BULL_HIGH_VOL:'#86efac', MEAN_REVERT:'#f59e0b', BEAR_LOW_VOL:'#f87171', BEAR_HIGH_VOL:'#ef4444' };
+  const pretty = (s:string) => (s||'').replace(/_/g,' ');
+
+  const TRAITS: any = {
+    BULL_LOW_VOL:  ['Price trending above its medium-term average','Volatility below this stock\u2019s own median','Steady advances rather than sharp moves','Historically the easiest state to hold through'],
+    BULL_HIGH_VOL: ['Price trending above its medium-term average','Volatility above this stock\u2019s own median','Larger daily swings in both directions','Gains come faster but drawdowns are sharper'],
+    MEAN_REVERT:   ['No clear trend \u2014 price oscillating around its average','Direction reverses frequently','Momentum strategies tend to underperform here','Often the least rewarding state to hold'],
+    BEAR_LOW_VOL:  ['Price trending below its medium-term average','Volatility contained despite the downtrend','Orderly decline rather than panic','Can precede either stabilisation or further weakness'],
+    BEAR_HIGH_VOL: ['Price trending below its medium-term average','Volatility elevated','Sharp moves in both directions','Highest uncertainty \u2014 position sizes should be smallest here'],
+  };
+
+  const cs = rc?.conditional_stats?.[rc?.inferred_state];
+  const dur = rc?.median_duration_for_state;
+  const elapsed = rc?.days_in_current;
+  const extended = dur && elapsed ? elapsed / dur : null;
 
   return (
     <div className="qe-grid-3">
-      <Card style={{ gridColumn:'span 1' }}>
-        <SectionTitle>CURRENT REGIME</SectionTitle>
-        <div style={{ textAlign:'center', padding:'20px 0' }}>
-          <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:28, color: colorMap[current]||'#f59e0b', letterSpacing:3, marginBottom:6 }}>
-            {current.replace(/_/g,' ')}
-          </div>
-          <div style={{ fontFamily:"'Fira Code',monospace", fontSize:10, color:'#9d8b7a', marginBottom:8 }}>
-            Confidence: {((regime.confidence||0)*100).toFixed(1)}%
-          </div>
-          <div style={{ fontFamily:"'Fira Code',monospace", fontSize:10, color:'#9d8b7a', marginBottom:8 }}>
-            Persistence: {((regime.regime_persistence||0)*100).toFixed(1)}% (p_{'{ii}'})
-          </div>
-          <div style={{ fontFamily:"'Fira Code',monospace", fontSize:10, color:'#daa520' }}>
-            Expected duration: {Math.round(regime.expected_duration_days||0)} days
-          </div>
+      <Card style={{ gridColumn:'span 3' }}>
+        <SectionTitle>WHAT A MARKET REGIME IS</SectionTitle>
+        <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:12, color:'#b8a894', lineHeight:1.65 }}>
+          A stock does not behave the same way all the time. It moves through persistent behavioural states \u2014 stretches of
+          steady advance, stretches of violent swinging, stretches of directionless chop. This model reads returns, volatility,
+          volume and trend together and infers which state the stock is currently in.
+          <br/><br/>
+          It matters because <b style={{color:'#d4c4b0'}}>the same signal means different things in different states</b>.
+          Momentum works in trending regimes and fails in mean-reverting ones. A 3% drop is noise in a high-volatility state and
+          a warning in a calm one. Position sizes appropriate in one regime will be reckless in another.
         </div>
-        <div style={{ fontFamily:"'Fira Code',monospace", fontSize:8, color:'#8a7560', marginTop:12, lineHeight:1.7 }}>
-          HMM 5-state Gaussian model<br/>
-          Baum-Welch EM (20 random restarts)<br/>
-          Features: returns, vol, volume, trend
-        </div>
-      </Card>
-
-      <Card>
-        <SectionTitle>STATE PROBABILITIES P(S_t | data)</SectionTitle>
-        {Object.entries(probs).map(([name, p]: [string, any]) => (
-          <div key={name} style={{ marginBottom:8 }}>
-            <div style={{ display:'flex', justifyContent:'space-between', marginBottom:3 }}>
-              <span style={{ fontFamily:"'Fira Code',monospace", fontSize:9, color: name===current ? '#daa520' : '#9d8b7a' }}>{name.replace(/_/g,' ')}</span>
-              <span style={{ fontFamily:"'Fira Code',monospace", fontSize:11, color: colorMap[name]||'#d4c4b0' }}>{((p||0)*100).toFixed(1)}%</span>
-            </div>
-            <div style={{ height:4, background:'#1a0f0a', borderRadius:2 }}>
-              <div style={{ height:'100%', background: colorMap[name]||'#3a2920', borderRadius:2, width:`${(p||0)*100}%`, transition:'width 1.2s ease' }} />
-            </div>
-          </div>
-        ))}
-      </Card>
-
-      <Card>
-        <SectionTitle>TRANSITION MATRIX P(S_{'{t+1}'} | current)</SectionTitle>
-        <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:10, color:'#9d8b7a', marginBottom:10 }}>
-          Probability of next regime given we are currently in <span style={{ color: colorMap[current]||'#f59e0b' }}>{current?.replace(/_/g,' ')}</span>
-        </div>
-        {Object.entries(trans).map(([name, p]: [string, any]) => (
-          <div key={name} style={{ marginBottom:6 }}>
-            <div style={{ display:'flex', justifyContent:'space-between', marginBottom:3 }}>
-              <span style={{ fontFamily:"'Fira Code',monospace", fontSize:9, color:'#9d8b7a' }}>{name.replace(/_/g,' ')}</span>
-              <span style={{ fontFamily:"'Fira Code',monospace", fontSize:11, color: colorMap[name]||'#d4c4b0' }}>{((p||0)*100).toFixed(1)}%</span>
-            </div>
-            <div style={{ height:3, background:'#1a0f0a', borderRadius:2 }}>
-              <div style={{ height:'100%', background: colorMap[name]||'#3a2920', borderRadius:2, width:`${(p||0)*100}%`, transition:'width 1s' }} />
-            </div>
-          </div>
-        ))}
       </Card>
 
       <Card style={{ gridColumn:'span 3' }}>
-        <SectionTitle>HISTORICAL AVERAGE REGIME DURATIONS (Trading Days)</SectionTitle>
-        <div style={{ display:'flex', gap:12, flexWrap:'wrap' }}>
-          {Object.entries(durations).map(([name, days]: [string, any]) => (
-            <div key={name} style={{ flex:1, minWidth:140, background:'#1a0f0a', borderRadius:6, padding:'12px 14px', border:`1px solid ${colorMap[name]||'#3a2920'}40` }}>
-              <div style={{ fontFamily:"'Fira Code',monospace", fontSize:8, color: colorMap[name]||'#9d8b7a', letterSpacing:2, marginBottom:6 }}>{name.replace(/_/g,' ')}</div>
-              <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:28, color:'#d4c4b0', letterSpacing:2 }}>{Math.round(days||0)}</div>
-              <div style={{ fontFamily:"'Fira Code',monospace", fontSize:8, color:'#8a7560' }}>avg trading days</div>
+        <SectionTitle>WHERE THIS STOCK STANDS NOW</SectionTitle>
+        <div style={{ display:'flex', gap:24, flexWrap:'wrap', alignItems:'flex-start' }}>
+          <div style={{ minWidth:200 }}>
+            <div style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'8px 14px', borderRadius:6,
+              background:`${C[current]||'#f59e0b'}14`, border:`1px solid ${C[current]||'#f59e0b'}55` }}>
+              <span style={{ width:9, height:9, borderRadius:'50%', background:C[current]||'#f59e0b' }} />
+              <span style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:22, letterSpacing:3, color:C[current]||'#f59e0b' }}>{pretty(current)}</span>
             </div>
-          ))}
+            <div style={{ fontFamily:"'Fira Code',monospace", fontSize:10, color:'#8a7560', marginTop:10, lineHeight:1.8 }}>
+              model confidence {((regime.confidence||0)*100).toFixed(1)}%<br/>
+              {elapsed != null && <>day {elapsed} of this episode<br/></>}
+              {dur != null && <>typical episode runs {dur} days<br/></>}
+              {rc?.current_episode_return_pct != null && <>episode return {rc.current_episode_return_pct > 0 ? '+' : ''}{rc.current_episode_return_pct}%</>}
+            </div>
+          </div>
+          <div style={{ flex:1, minWidth:300, fontFamily:"'Outfit',sans-serif", fontSize:12, color:'#b8a894', lineHeight:1.65 }}>
+            {rc ? (<>
+              {data.name || 'This stock'} is in a <b style={{color:C[current]}}>{pretty(current).toLowerCase()}</b> state with{' '}
+              {((regime.confidence||0)*100).toFixed(1)}% model confidence. It has held this state for{' '}
+              <b style={{color:'#d4c4b0'}}>{elapsed} trading days</b>
+              {dur != null && <>, against a historical median of {dur} days across {rc.past_episodes_of_state} prior episodes
+                {extended && extended > 1.3 ? ' \u2014 this run is unusually extended' : extended && extended < 0.6 ? ' \u2014 this run is still young' : ''}</>}.
+              {cs && <> Historically this stock has spent {cs.share_of_time_pct}% of its time in this state, returning{' '}
+                <b style={{color: cs.annualised_return_pct > 0 ? '#22c55e' : '#ef4444'}}>{cs.annualised_return_pct > 0 ? '+' : ''}{cs.annualised_return_pct}% annualised</b>{' '}
+                while in it, with {cs.win_rate_pct}% of days positive and a worst single day of {cs.worst_day_pct}%.</>}
+              {' '}The model puts a <b style={{color:'#d4c4b0'}}>{((regime.regime_persistence||0)*100).toFixed(0)}%</b> chance on
+              remaining in this state tomorrow.
+            </>) : 'Regime history unavailable for this ticker.'}
+          </div>
         </div>
+        {TRAITS[current] && (
+          <div style={{ marginTop:16, paddingTop:14, borderTop:'1px solid rgba(212,149,108,0.12)' }}>
+            <div style={{ fontFamily:"'Fira Code',monospace", fontSize:9, color:'#daa520', letterSpacing:2, marginBottom:8 }}>WHAT THIS STATE LOOKS LIKE</div>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(2, 1fr)', gap:'4px 20px' }}>
+              {TRAITS[current].map((t:string,i:number) => (
+                <div key={i} style={{ fontFamily:"'Outfit',sans-serif", fontSize:11, color:'#9d8b7a', lineHeight:1.6 }}>
+                  <span style={{ color:C[current] }}>\u00b7</span> {t}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </Card>
+
+      {rc?.episodes && (
+        <Card style={{ gridColumn:'span 3' }}>
+          <SectionTitle>HOW WE GOT HERE</SectionTitle>
+          <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:11, color:'#9d8b7a', marginBottom:12 }}>
+            Recent regime episodes, most recent last. Width is proportional to duration; the figure below each is the price
+            change over that stretch.
+          </div>
+          {(() => {
+            const eps = rc.episodes;
+            const tot = eps.reduce((a:number,e:any)=>a+e.days,0) || 1;
+            return (
+              <>
+                <div style={{ display:'flex', height:30, borderRadius:4, overflow:'hidden', marginBottom:8 }}>
+                  {eps.map((e:any,i:number)=>(
+                    <div key={i} title={`${pretty(e.regime)} · ${e.start} → ${e.end} · ${e.days}d · ${e.return_pct}%`}
+                      style={{ width:`${(e.days/tot)*100}%`, background:C[e.regime]||'#8a7560', opacity:e.ongoing?0.75:0.4,
+                        borderRight:'1px solid #1a0f0a', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                      {e.days/tot > 0.07 && <span style={{ fontFamily:"'Fira Code',monospace", fontSize:8, color:'#1a0f0a', fontWeight:700 }}>{e.days}d</span>}
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns:`repeat(${Math.min(eps.length,7)}, 1fr)`, gap:6 }}>
+                  {eps.slice(-7).map((e:any,i:number)=>(
+                    <div key={i} style={{ background:'#1a0f0a', borderRadius:5, padding:'7px 8px' }}>
+                      <div style={{ fontFamily:"'Fira Code',monospace", fontSize:8, color:C[e.regime]||'#8a7560', letterSpacing:0.5 }}>{pretty(e.regime)}</div>
+                      <div style={{ fontFamily:"'Fira Code',monospace", fontSize:8.5, color:'#6b5d52', marginTop:2 }}>{e.start}</div>
+                      <div style={{ fontFamily:"'Fira Code',monospace", fontSize:12, fontWeight:700, marginTop:3,
+                        color: e.return_pct > 0 ? '#22c55e' : e.return_pct < 0 ? '#ef4444' : '#8a7560' }}>
+                        {e.return_pct > 0 ? '+' : ''}{e.return_pct}%
+                      </div>
+                      <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:8, color:'#6b5d52' }}>{e.days} days{e.ongoing ? ' · ongoing' : ''}</div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            );
+          })()}
+        </Card>
+      )}
+
+      {rc?.conditional_stats && (
+        <Card style={{ gridColumn:'span 3' }}>
+          <SectionTitle>WHAT HAS HAPPENED IN EACH STATE</SectionTitle>
+          <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:11, color:'#9d8b7a', marginBottom:12 }}>
+            Returns this stock actually delivered while in each state, over the available history. This is a description of the
+            past, not a forecast \u2014 but it shows which conditions have historically rewarded holding and which have not.
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'150px repeat(5, 1fr)', gap:'6px 10px', alignItems:'center' }}>
+            {['STATE','SHARE OF TIME','ANNUALISED','WIN RATE','WORST DAY','DAILY VOL'].map(h=>(
+              <div key={h} style={{ fontFamily:"'Fira Code',monospace", fontSize:8, color:'#6b5d52', letterSpacing:1 }}>{h}</div>
+            ))}
+            {Object.entries(rc.conditional_stats).sort((a:any,b:any)=>b[1].annualised_return_pct-a[1].annualised_return_pct).map(([s,x]:any)=>(
+              <React.Fragment key={s}>
+                <div style={{ fontFamily:"'Fira Code',monospace", fontSize:10, color: s===rc.inferred_state ? '#daa520' : C[s]||'#9d8b7a' }}>
+                  {pretty(s)}{s===rc.inferred_state ? ' \u25c0' : ''}
+                </div>
+                <div style={{ fontFamily:"'Fira Code',monospace", fontSize:10.5, color:'#9d8b7a' }}>{x.share_of_time_pct}%</div>
+                <div style={{ fontFamily:"'Fira Code',monospace", fontSize:12, fontWeight:700, color: x.annualised_return_pct > 0 ? '#22c55e' : '#ef4444' }}>
+                  {x.annualised_return_pct > 0 ? '+' : ''}{x.annualised_return_pct}%
+                </div>
+                <div style={{ fontFamily:"'Fira Code',monospace", fontSize:10.5, color:'#d4c4b0' }}>{x.win_rate_pct}%</div>
+                <div style={{ fontFamily:"'Fira Code',monospace", fontSize:10.5, color:'#ef4444' }}>{x.worst_day_pct}%</div>
+                <div style={{ fontFamily:"'Fira Code',monospace", fontSize:10.5, color:'#9d8b7a' }}>{x.daily_vol_pct}%</div>
+              </React.Fragment>
+            ))}
+          </div>
+          <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:9.5, color:'#6b5d52', marginTop:12, lineHeight:1.5 }}>
+            Win rates near 50% are normal and expected \u2014 regime conditioning shifts the return distribution, it does not
+            make direction predictable. A state can carry a bearish label yet a positive average return, because the label
+            describes the trend backdrop rather than the next day&apos;s move. {rc.note}
+          </div>
+        </Card>
+      )}
+
+      <Card style={{ gridColumn:'span 3' }}>
+        <details>
+          <summary style={{ cursor:'pointer', listStyle:'none', outline:'none' }}>
+            <SectionTitle>MODEL INTERNALS &nbsp;<span style={{ fontSize:9, color:'#6b5d52' }}>(advanced \u2014 click to expand)</span></SectionTitle>
+          </summary>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:20, marginTop:8 }}>
+            <div>
+              <div style={{ fontFamily:"'Fira Code',monospace", fontSize:9, color:'#daa520', letterSpacing:2, marginBottom:8 }}>STATE PROBABILITIES</div>
+              {Object.entries(probs).map(([n,p]:any)=>(
+                <div key={n} style={{ marginBottom:7 }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', marginBottom:3 }}>
+                    <span style={{ fontFamily:"'Fira Code',monospace", fontSize:9, color: n===current ? '#daa520' : '#9d8b7a' }}>{pretty(n)}</span>
+                    <span style={{ fontFamily:"'Fira Code',monospace", fontSize:10.5, color:C[n]||'#d4c4b0' }}>{((p||0)*100).toFixed(1)}%</span>
+                  </div>
+                  <div style={{ height:4, background:'#1a0f0a', borderRadius:2 }}>
+                    <div style={{ height:'100%', background:C[n]||'#3a2920', borderRadius:2, width:`${(p||0)*100}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div>
+              <div style={{ fontFamily:"'Fira Code',monospace", fontSize:9, color:'#daa520', letterSpacing:2, marginBottom:8 }}>TRANSITION PROBABILITIES</div>
+              {Object.entries(trans).map(([n,p]:any)=>(
+                <div key={n} style={{ marginBottom:7 }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', marginBottom:3 }}>
+                    <span style={{ fontFamily:"'Fira Code',monospace", fontSize:9, color:'#9d8b7a' }}>{pretty(n)}</span>
+                    <span style={{ fontFamily:"'Fira Code',monospace", fontSize:10.5, color:C[n]||'#d4c4b0' }}>{((p||0)*100).toFixed(1)}%</span>
+                  </div>
+                  <div style={{ height:4, background:'#1a0f0a', borderRadius:2 }}>
+                    <div style={{ height:'100%', background:C[n]||'#3a2920', borderRadius:2, width:`${(p||0)*100}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div style={{ fontFamily:"'Fira Code',monospace", fontSize:8.5, color:'#6b5d52', marginTop:12, lineHeight:1.7 }}>
+            Hidden Markov Model, 5 Gaussian states, Baum-Welch EM with 20 random restarts. Features: returns, volatility, volume, trend.
+            {rc?.vol_threshold_pct && <> Regime history reconstructed using a {rc.vol_threshold_pct}% volatility median and a 63-day trend threshold.</>}
+          </div>
+        </details>
       </Card>
     </div>
   );
