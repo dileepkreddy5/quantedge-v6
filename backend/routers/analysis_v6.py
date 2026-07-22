@@ -224,6 +224,32 @@ class QuantEdgeAnalyzerV6:
                 ]:
                     result[key] = fundamentals.get(key)
 
+                # Compute fields Polygon fundamentals omits, from data we already have.
+                try:
+                    import numpy as _np
+                    _closes = price_data["close"].dropna()
+                    if len(_closes) >= 60:
+                        _last252 = _closes.iloc[-252:] if len(_closes) >= 252 else _closes
+                        if result.get("week_52_high") is None:
+                            result["week_52_high"] = float(_last252.max())
+                        if result.get("week_52_low") is None:
+                            result["week_52_low"] = float(_last252.min())
+                    # PEG = P/E / earnings growth% (if both present and growth positive)
+                    if result.get("peg_ratio") is None:
+                        _pe = result.get("pe_ratio"); _g = result.get("earnings_growth")
+                        if _pe and _g and _g > 0:
+                            result["peg_ratio"] = float(_pe / (_g * 100))
+                    # FCF yield = (operating cash flow - capex) / market cap — approximate
+                    # via net margin * revenue as a proxy floor if direct FCF absent
+                    if result.get("fcf_yield") is None:
+                        _fund = fundamentals
+                        _ocf = _fund.get("operating_cash_flow") or _fund.get("free_cash_flow")
+                        _mcap = result.get("market_cap")
+                        if _ocf and _mcap and _mcap > 0:
+                            result["fcf_yield"] = float(_ocf / _mcap)
+                except Exception as _e:
+                    logger.info(f"supplemental field computation skipped: {_e}")
+
             # ── LAYER 2: FEATURES ─────────────────────────────
             try:
                 feature_matrix = self.feature_pipeline.build_feature_matrix(
