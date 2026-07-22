@@ -208,13 +208,13 @@ export function MLModelsPanel({ data }: { data: any }) {
     { name: 'XGBoost', kind: 'Gradient-boosted trees',
       value: xgb.pred_21d != null ? `${(Number(xgb.pred_21d)).toFixed(2)}% (21d)` : null,
       dir: xgb.pred_21d != null ? Math.sign(Number(xgb.pred_21d)) : null,
-      what: 'Builds thousands of decision trees over 170 indicators to find which combinations preceded gains.',
+      what: 'Builds thousands of decision trees over 135 ranked features to find which combinations preceded gains.',
       why: 'Handles non-linear interactions between factors that a single rule cannot.' },
     { name: 'LightGBM', kind: 'Gradient-boosted trees',
       value: lgbm.pred_21d != null ? `${(Number(lgbm.pred_21d)).toFixed(2)}% (21d)` : null,
       dir: lgbm.pred_21d != null ? Math.sign(Number(lgbm.pred_21d)) : null,
       what: 'A second tree model using a different growth strategy, run alongside XGBoost.',
-      why: 'When two independent tree models agree, the signal is more robust.' },
+      why: 'Different split strategy on the same features — agreement is a consistency check, not independent confirmation.' },
     { name: 'Kalman Filter', kind: 'State-space trend',
       value: kSlope != null ? `slope ${Number(kSlope).toFixed(4)}` : null,
       dir: kalmanDir,
@@ -243,7 +243,7 @@ export function MLModelsPanel({ data }: { data: any }) {
     { name: 'Cross-Sectional Panel', kind: 'Multi-horizon ensemble',
       value: panelPred != null ? `${Number(panelPred).toFixed(2)}% (1mo)` : null,
       dir: panelDir,
-      what: 'Ranks this stock against the whole US universe on 178 factors including point-in-time fundamentals.',
+      what: 'Ranks this stock against the whole US universe on 135 ranked features including point-in-time fundamentals.',
       why: 'The only model here with measured out-of-sample skill — see the reliability badges above.' },
   ];
 
@@ -342,7 +342,7 @@ export function MLModelsPanel({ data }: { data: any }) {
         <div style={{ display:'flex', alignItems:'center', gap:20, flexWrap:'wrap' }}>
           <div style={{ textAlign:'center', minWidth:110 }}>
             <div style={{ fontFamily:'var(--font-mono)', fontSize:36, fontWeight:800, color: convColor, lineHeight:1 }}>{conviction}</div>
-            <div style={{ fontFamily:'var(--font-body)', fontSize:10, color:'var(--cocoa)', marginTop:4, letterSpacing:1 }}>CONVICTION / 100</div>
+            <div style={{ fontFamily:'var(--font-body)', fontSize:10, color:'var(--cocoa)', marginTop:4, letterSpacing:1 }}>MODEL AGREEMENT / 100</div>
           </div>
           <div style={{ flex:1, minWidth:200 }}>
             <div style={{ fontFamily:'var(--font-mono)', fontSize:14, fontWeight:700, color: convColor, marginBottom:4 }}>
@@ -351,9 +351,8 @@ export function MLModelsPanel({ data }: { data: any }) {
             <div style={{ fontFamily:'var(--font-body)', fontSize:12, color:'var(--latte)', lineHeight:1.5 }}>
               {majority} of {nTotal} models agree on a {direction.toLowerCase()} 21-day lean
               {mlCollapsed ? ' (the three return-forecasting models produced near-identical output — a sign they found no distinguishing signal — so they count once, not three times)' : ''}
-              {mlCollapsed ? ' (the three return-forecasting models produced near-identical output — a sign they found no distinguishing signal — so they count once, not three times)' : ''}
               {nTotal - majority > 0 ? `, ${nTotal - majority} disagree` : ''}.
-              {' '}Conviction measures <b style={{color:'var(--latte)'}}>agreement across models</b>, not predictive accuracy.
+              {' '}This is <b style={{color:'var(--latte)'}}>agreement across models</b>, not predictive accuracy — and separate from the QuantEdge conviction score in the header, which weighs 16 intelligence modules.
             </div>
           </div>
           <div style={{ display:'flex', gap:6, flexWrap:'wrap', minWidth:160 }}>
