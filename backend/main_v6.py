@@ -339,7 +339,7 @@ async def lifespan(app: FastAPI):
                         LEFT JOIN (SELECT DISTINCT src_ticker FROM relationships) r
                           ON r.src_ticker = u.ticker
                         WHERE u.cik IS NOT NULL AND u.active AND r.src_ticker IS NULL
-                        ORDER BY u.market_cap DESC NULLS LAST LIMIT 60
+                        ORDER BY u.market_cap DESC NULLS LAST LIMIT 400
                     """)
                 ok = 0
                 for row in rows:
@@ -360,6 +360,22 @@ async def lifespan(app: FastAPI):
                 replace_existing=True, max_instances=1, coalesce=True,
             )
             logger.info("relationship extraction scheduled (03:30 ET nightly)")
+
+            # Coverage is what makes this section useful; at 400 a night the
+            # universe fills in under a fortnight. Kick one pass now rather than
+            # waiting for the first scheduled run.
+            async def _catchup():
+                await asyncio.sleep(45)          # let startup settle
+                try:
+                    async with app.state.db.acquire() as conn:
+                        done = await conn.fetchval(
+                            "SELECT count(DISTINCT src_ticker) FROM relationships")
+                    if done < 2000:
+                        logger.info(f"relationship coverage at {done}; running catch-up")
+                        await _extract_relationships()
+                except Exception as e:
+                    logger.warning(f"relationship catch-up skipped: {e}")
+            asyncio.create_task(_catchup())
 
         # News briefings — pre-build each morning for popular tickers (warms cache)
         async def _refresh_news():
