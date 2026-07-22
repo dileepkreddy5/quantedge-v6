@@ -138,6 +138,12 @@ class PanelPredictor:
                     "agreement": round(1.0 - abs(xp - lp) / (abs(ens) + 1e-6), 3) if ens != 0 else None,
                     "oos_rank_ic": rep_h.get("oos_rank_ic", {}).get("ensemble"),
                     "ic_hit_rate": rep_h.get("ic_hit_rate"),
+                    "ic_t_stat": rep_h.get("ic_t_stat"),
+                    "n_independent_val_dates": rep_h.get("n_independent_val_dates"),
+                    "reliable": rep_h.get("reliable"),
+                    "confidence_note": rep_h.get("confidence_note"),
+                    "n_train": rep_h.get("n_train"),
+                    "n_val": rep_h.get("n_val"),
                 }
             # SHAP drivers from the 21d model (primary)
             drivers = []
