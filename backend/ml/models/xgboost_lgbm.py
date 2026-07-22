@@ -42,7 +42,16 @@ class XGBoostPredictor:
       - max_depth=6: Prevents overfitting on noisy financial data
       - subsample=0.8: Stochastic boosting (more robust)
       - colsample_bytree=0.7: Feature subsampling
-      - min_child_weight=20: Requires 20+ samples per leaf (anti-overfit)
+      - min_child_weight=5: Samples per leaf. Was 20, which combined with
+        gamma to block splitting entirely at short horizons.
+      - gamma=0.0: Minimum loss reduction to split. MUST stay near zero here:
+        gamma is an ABSOLUTE threshold in units of the objective, but forward-
+        return variance scales with horizon. At 0.1 it exceeded any achievable
+        squared-error gain on 5/10/21-day targets, so every tree stopped at the
+        root — 136 trees, 136 leaves, zero feature importances, a constant
+        0.0038 prediction and a rank IC of exactly 0.0. Long horizons split
+        normally, which is why the failure looked like weak signal rather than
+        a broken model.
       - reg_alpha=0.1, reg_lambda=1.0: L1+L2 regularization
       - tree_method='hist': Fast histogram-based splitting
     """
@@ -62,10 +71,10 @@ class XGBoostPredictor:
             "subsample": 0.8,
             "colsample_bytree": 0.7,
             "colsample_bylevel": 0.8,
-            "min_child_weight": 20,
+            "min_child_weight": 5,
             "reg_alpha": 0.1,
             "reg_lambda": 1.0,
-            "gamma": 0.1,
+            "gamma": 0.0,
             "random_state": 42,
             "tree_method": "hist",
             "objective": "reg:squarederror",
