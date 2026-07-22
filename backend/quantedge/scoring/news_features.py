@@ -76,6 +76,83 @@ _FLUFF = ("best stocks","should you buy","stocks to buy","etf","mutual fund","in
           "10 stocks","top 5","millionaire","retire","dividend kings","motley fool picks",
           "market size worth","cagr","forecast to 2030","forecast to 2035")
 
+# Source tiers. A wire report and a Motley Fool comparison are not equivalent inputs.
+_SOURCE_TIER = {
+    "reuters":95,"bloomberg":95,"wall street journal":92,"wsj":92,"financial times":92,
+    "cnbc":85,"barron":85,"marketwatch":80,"associated press":90,"ap news":90,
+    "investor's business daily":80,"seeking alpha":60,"benzinga":65,"investing.com":65,
+    "the motley fool":55,"zacks":60,"simply wall st":50,"insider monkey":45,
+    "globenewswire":70,"prnewswire":70,"businesswire":70,"accesswire":55,
+}
+def _source_weight(pub: str) -> int:
+    p = (pub or "").lower()
+    for k, v in _SOURCE_TIER.items():
+        if k in p:
+            return v
+    return 60
+
+# Language that distinguishes something that happened from something someone thinks.
+_REPORTED = ("reported","announced","posted","filed","said","confirmed","disclosed","unveiled",
+             "launched","completed","acquired","agreed","signed","raised guidance","cut guidance",
+             "issued","declared","appointed","resigned","stepped down","settled","fined","sued",
+             "recalled","approved","rejected","beat","missed","warned")
+_SPECULATIVE = ("could","should you","is it time","prediction","predict","vs.","versus","better buy",
+                "why you should","here's why","3 reasons","5 reasons","is now the","will it",
+                "what to expect","preview","forecast to","best stock","top pick","worth buying",
+                "my favorite","i'd buy","think about")
+_ANALYST = ("price target","raises target","lowers target","upgrade","downgrade","initiated coverage",
+            "reiterates","outperform","underperform","overweight","underweight","buy rating","sell rating")
+_EVENT_KINDS = (
+    ("EARNINGS",   ("earnings","quarterly results","q1 results","q2 results","q3 results","q4 results","eps","revenue beat","revenue miss")),
+    ("GUIDANCE",   ("guidance","outlook","forecast raised","forecast cut","warns")),
+    ("DEAL",       ("acquisition","acquires","merger","deal","partnership","contract","agreement","stake")),
+    ("LEGAL",      ("lawsuit","sued","investigation","antitrust","doj","sec charges","fine","settlement","probe")),
+    ("REGULATORY", ("fda","approval","regulator","ban","tariff","sanction","ruling")),
+    ("PERSONNEL",  ("ceo","cfo","resign","steps down","appointed","named chief")),
+    ("PRODUCT",    ("launch","unveil","releases","introduces","recall")),
+    ("CAPITAL",    ("buyback","repurchase","dividend","split","offering","debt")),
+)
+
+def _classify(title: str, reason: str, publisher: str) -> dict:
+    """Is this a reported event, an analyst action, or commentary about one?
+    The distinction matters: most financial coverage is opinion about events,
+    not the events themselves."""
+    import re as _re
+    t = (title or "").lower(); r = (reason or "").lower(); blob = t + " " + r
+    has_figure = bool(_re.search(r"\$\s?[\d,.]+\s*(billion|million|trillion|bn|m\b)?|\d+(\.\d+)?\s?%|\bq[1-4]\b", blob, _re.I))
+    reported = sum(1 for w in _REPORTED if w in blob)
+    spec = sum(1 for w in _SPECULATIVE if w in t)
+    if _re.search(r"\?\s*$", t) or _re.search(r"^\s*\w+:\s*(can|will|is|should|does|why)\b", t) \
+       or _re.search(r"\b(can|will|would|might|may)\b[^.]{0,60}\b(justify|beat|reach|hit|survive|continue|last)\b", t):
+        spec += 1
+    analyst = any(w in blob for w in _ANALYST)
+
+    kind = None
+    for k, words in _EVENT_KINDS:
+        if any(w in blob for w in words):
+            kind = k; break
+
+    announced = bool(_re.search(r"\b(announce[sd]?|unveil[sed]*|report[sed]*|post[sed]*|sign[sed]*|complete[sd]*|acquire[sd]*)\b", t))
+    # Future-tense or forecast framing overrides everything: it has not happened yet.
+    if _re.search(r"\b(will|would|could|should|expects? to|set to|poised to|on track to)\b", t) \
+       or t.strip().startswith(("prediction","forecast","outlook:","preview")) \
+       or _re.search(r"\bin (20\d\d|\w+ 20\d\d)\b", t):
+        spec += 2
+    if announced and kind and spec == 0:
+        cls = "EVENT"
+    elif analyst and not spec and _re.search(r"(price target|upgrade[sd]?|downgrade[sd]?|initiat|reiterat|raises|lowers|cuts)", t):
+        cls = "ANALYST"
+    elif spec >= 1 and reported == 0:
+        cls = "COMMENTARY"
+    elif reported >= 1 and kind and spec == 0 and (has_figure or reported >= 2):
+        cls = "EVENT"
+    elif spec >= 1:
+        cls = "COMMENTARY"
+    else:
+        cls = "COMMENTARY"
+    return {"class": cls, "event_kind": kind if cls == "EVENT" else None,
+            "has_figure": has_figure, "source_weight": _source_weight(publisher)}
+
 def _materiality(title: str, reason: str, publisher: str) -> tuple:
     """Score how likely an article is to actually matter for the stock.
     Returns (score 0-100, list of reasons the score fired)."""
@@ -256,14 +333,37 @@ def compute_news_features(articles, ticker, price_return_30d=None):
     # feed shows English + relevant (foreign titles hidden here but their sentiment already counted above)
     for a in arts:
         _m, _w = _materiality(a["title"], a.get("reason",""), a.get("pub",""))
-        a["_mat"] = _m + (12 if a["rel_w"] >= 1.0 else 0)
-        a["_mat_why"] = _w
-    feed_arts=[a for a in arts if a.get("is_en") and (a["rel_w"]>=1.0 or a["_mat"]>=55)]
+        _cl = _classify(a["title"], a.get("reason",""), a.get("pub",""))
+        a["_cls"] = _cl
+        # A reported event outranks commentary that merely discusses one.
+        _bonus = {"EVENT": 25, "ANALYST": 15, "COMMENTARY": 0}[_cl["class"]]
+        _src = (_cl["source_weight"] - 60) * 0.25
+        a["_mat"] = max(0, min(100, _m + (12 if a["rel_w"] >= 1.0 else 0) + _bonus + _src))
+        a["_mat_why"] = ([_cl["event_kind"].lower()] if _cl["event_kind"] else []) + _w
+    # An article whose headline names a different company is about that company,
+    # regardless of whether ours appears in the body.
+    def _other_subject(a):
+        t = a["title"].lower()
+        if any(n in t for n in _company_names) or tkr in t:
+            return False
+        import re as _re2
+        if _re2.match(r"^(stock market today|market wrap|markets? close|dow jones today|premarket|midday)", t):
+            return True
+        return bool(_re2.search(r"\b[A-Z][a-zA-Z]{2,}\s+(stock|shares|earnings)\b", a["title"]))
+    feed_arts=[a for a in arts if a.get("is_en") and a["rel_w"]>=1.0 and not _other_subject(a)]
     if len(feed_arts)<6:
         _rest=sorted([a for a in arts if a.get("is_en") and a not in feed_arts],
                      key=lambda x:-x["_mat"])
         feed_arts=feed_arts+_rest[:6-len(feed_arts)]
     feed_arts=sorted(feed_arts, key=lambda x:(-x["_mat"], -x["dt"].timestamp()))
+    # Same story, same outlet, reworded headline — keep the higher-scoring one.
+    _seen, _dedup = [], []
+    for a in feed_arts:
+        _w = set(w for w in a["title"].lower().split() if len(w) > 3)
+        if any(len(_w & s) / max(1, min(len(_w), len(s))) > 0.45 for s in _seen):
+            continue
+        _seen.append(_w); _dedup.append(a)
+    feed_arts = _dedup
     # Sentiment weighted by materiality — the aggregate should reflect the articles
     # that matter, not be dominated by the filler the ranking already demoted.
     _mw = [(a["_mat"], a["sval"]) for a in arts if a.get("is_en") and a.get("_mat") is not None]
@@ -277,6 +377,8 @@ def compute_news_features(articles, ticker, price_return_30d=None):
 
     f["_recent_headlines"]=[{"title":a["title"],"sentiment":a["sent"],"reason":a["reason"][:160],
                              "publisher":a["pub"],"date":a["dt"].strftime("%Y-%m-%d"),"url":a["url"],
-                             "materiality":a["_mat"],"materiality_why":a["_mat_why"],
-                             "about_company":a["rel_w"]>=1.0} for a in feed_arts[:15]]
+                             "materiality":round(a["_mat"]),"materiality_why":a["_mat_why"],
+                             "about_company":a["rel_w"]>=1.0,
+                             "kind":a["_cls"]["class"],"event_kind":a["_cls"]["event_kind"],
+                             "source_weight":a["_cls"]["source_weight"]} for a in feed_arts[:20]]
     return f
