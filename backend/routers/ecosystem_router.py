@@ -69,26 +69,30 @@ async def get_ecosystem(
     if ticker not in meta:
         return {"data": {"available": False, "reason": "ticker not in scanned universe"}, "cached": False}
 
-    end = date.today()
-    start = end - timedelta(days=400)
-    s, e = start.isoformat(), end.isoformat()
+    # Prices come from the local bars table rather than the API: one query against
+    # 3,000 tickers instead of 220 HTTP calls, which is what previously forced a cap.
+    async with store.pool.acquire() as conn:
+        me_rows = await conn.fetch(
+            "SELECT d, c FROM daily_bars WHERE ticker=$1 AND d >= CURRENT_DATE - INTERVAL '400 days'"
+            " ORDER BY d", ticker)
+        if len(me_rows) < 120:
+            return {"data": {"available": False, "reason": "insufficient local price history"}, "cached": False}
+        my_dates = [r["d"] for r in me_rows]
+        start_d = my_dates[0]
 
-    async with httpx.AsyncClient() as client:
-        base = await _closes(client, ticker, s, e)
-        if base is None:
-            return {"data": {"available": False, "reason": "insufficient price history"}, "cached": False}
-        spy = await _closes(client, "SPY", s, e)
+        peer_rows = await conn.fetch(
+            "SELECT ticker, d, c FROM daily_bars WHERE d >= $1 AND ticker = ANY($2::text[]) ORDER BY ticker, d",
+            start_d, [u["ticker"] for u in universe])
+        spy_rows = await conn.fetch(
+            "SELECT d, c FROM daily_bars WHERE ticker='SPY' AND d >= $1 ORDER BY d", start_d)
 
-        # Cap the comparison set: largest names by market cap, so the work is bounded.
-        cands = sorted(universe, key=lambda x: -(x["market_cap"] or 0))[:220]
-        sem = asyncio.Semaphore(12)
+    base = {r["d"]: float(r["c"]) for r in me_rows}
+    spy = {r["d"]: float(r["c"]) for r in spy_rows}
+    series: Dict[str, Dict] = {}
+    for r in peer_rows:
+        series.setdefault(r["ticker"], {})[r["d"]] = float(r["c"])
 
-        async def one(row):
-            async with sem:
-                arr = await _closes(client, row["ticker"], s, e)
-            return row, arr
-
-        results = await asyncio.gather(*[one(r) for r in cands], return_exceptions=True)
+    results = [(meta[t], s) for t, s in series.items() if t in meta and len(s) >= 120]
 
     out: List[Dict] = []
     base_dates = sorted(base.keys())
