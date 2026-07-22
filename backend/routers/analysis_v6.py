@@ -910,6 +910,79 @@ class QuantEdgeAnalyzerV6:
                 result["garman_klass_vol"] = 0.0
                 result["yang_zhang_vol"] = 0.0
 
+            # ── RISK SHAPE: the underwater curve, the return distribution, and
+            # every drawdown episode worth naming. A max-drawdown scalar says a
+            # stock fell 44%; it does not say when, for how long, or whether it
+            # ever recovered — which is what actually matters to someone holding it.
+            try:
+                import numpy as _np
+                _c = close.dropna()
+                if len(_c) >= 120:
+                    _peak = _c.cummax()
+                    _uw = (_c / _peak - 1.0)
+
+                    # Sample the curve for plotting rather than shipping 1200 points.
+                    _step = max(1, len(_uw) // 180)
+                    _pts = [{"d": str(i)[:10], "v": round(float(v) * 100, 2)}
+                            for i, v in list(_uw.items())[::_step]]
+
+                    # Discrete episodes: from a peak, through the trough, back to flat.
+                    _eps, _in, _start, _trough, _tdate = [], False, None, 0.0, None
+                    for _i, _v in _uw.items():
+                        _v = float(_v)
+                        if not _in and _v < -0.05:
+                            _in, _start, _trough, _tdate = True, _i, _v, _i
+                        elif _in:
+                            if _v < _trough:
+                                _trough, _tdate = _v, _i
+                            if _v >= -0.005:
+                                _eps.append({
+                                    "start": str(_start)[:10], "trough": str(_tdate)[:10],
+                                    "end": str(_i)[:10],
+                                    "depth_pct": round(_trough * 100, 1),
+                                    "days": int((_i - _start).days),
+                                    "recovery_days": int((_i - _tdate).days),
+                                    "recovered": True})
+                                _in = False
+                    if _in:
+                        _eps.append({
+                            "start": str(_start)[:10], "trough": str(_tdate)[:10],
+                            "end": None, "depth_pct": round(_trough * 100, 1),
+                            "days": int((_uw.index[-1] - _start).days),
+                            "recovery_days": None, "recovered": False})
+                    _eps.sort(key=lambda x: x["depth_pct"])
+
+                    # Return distribution against the normal curve the same volatility
+                    # would imply — this is what excess kurtosis looks like plotted.
+                    _r = returns.values * 100
+                    _lo, _hi = float(_np.percentile(_r, 0.5)), float(_np.percentile(_r, 99.5))
+                    _edges = _np.linspace(_lo, _hi, 25)
+                    _hist, _ = _np.histogram(_r, bins=_edges)
+                    _mu, _sd = float(_np.mean(_r)), float(_np.std(_r))
+                    _mid = (_edges[:-1] + _edges[1:]) / 2
+                    _w = _edges[1] - _edges[0]
+                    _norm = (len(_r) * _w / (_sd * _np.sqrt(2 * _np.pi))
+                             * _np.exp(-0.5 * ((_mid - _mu) / _sd) ** 2))
+
+                    result["risk_shape"] = {
+                        "underwater": _pts,
+                        "current_drawdown_pct": round(float(_uw.iloc[-1]) * 100, 2),
+                        "days_underwater": int((_uw.iloc[-1] < -0.005) and
+                                               (len(_uw) - int(_np.argmax((_uw.values >= -0.005)[::-1])) )) if float(_uw.iloc[-1]) < -0.005 else 0,
+                        "episodes": _eps[:6],
+                        "distribution": {
+                            "mids": [round(float(x), 2) for x in _mid],
+                            "actual": [int(x) for x in _hist],
+                            "normal": [round(float(x), 1) for x in _norm],
+                            "mean": round(_mu, 3), "sd": round(_sd, 3),
+                        },
+                        "note": ("Underwater curve shows how far below the prior peak the price sat on each day. "
+                                 "The distribution compares actual daily returns against the normal curve implied "
+                                 "by the same volatility — the gap in the tails is what excess kurtosis measures."),
+                    }
+            except Exception as _e:
+                logger.warning(f"risk shape skipped: {_e}")
+
             # ── MARKET MODEL (CAPM) — real regression vs SPY ─────────────
             # Single-factor market model: regress the stock's excess returns on
             # the market's (SPY) excess returns. Yields a genuine beta, alpha,
