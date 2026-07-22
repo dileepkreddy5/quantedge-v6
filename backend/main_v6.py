@@ -325,6 +325,42 @@ async def lifespan(app: FastAPI):
             )
             logger.info("daily bars sync + weekly universe refresh scheduled")
 
+        # Disclosed relationships from 10-K filings. SEC throttles aggressively,
+        # so this works through the universe a slice at a time and picks up where
+        # it left off rather than demanding a clean run.
+        async def _extract_relationships():
+            try:
+                from services.relationships import RelationshipExtractor
+                ex = RelationshipExtractor(app.state.db)
+                await ex.ensure_tables()
+                async with app.state.db.acquire() as conn:
+                    rows = await conn.fetch("""
+                        SELECT u.ticker, u.cik FROM universe u
+                        LEFT JOIN (SELECT DISTINCT src_ticker FROM relationships) r
+                          ON r.src_ticker = u.ticker
+                        WHERE u.cik IS NOT NULL AND u.active AND r.src_ticker IS NULL
+                        ORDER BY u.market_cap DESC NULLS LAST LIMIT 120
+                    """)
+                ok = 0
+                for row in rows:
+                    res = await ex.extract_for(row["ticker"], row["cik"])
+                    if res.get("found"):
+                        ok += 1
+                    await asyncio.sleep(1.2)   # well inside SEC's rate limit
+                logger.info(f"relationships: {ok}/{len(rows)} tickers yielded links")
+            except Exception as e:
+                logger.error(f"relationship extraction failed: {e}")
+
+        if getattr(app.state, "db", None):
+            scheduler.add_job(
+                _extract_relationships,
+                trigger=CronTrigger(hour=3, minute=30, timezone=et),
+                id="relationship_extract",
+                name="10-K relationship extraction",
+                replace_existing=True, max_instances=1, coalesce=True,
+            )
+            logger.info("relationship extraction scheduled (03:30 ET nightly)")
+
         # News briefings — pre-build each morning for popular tickers (warms cache)
         async def _refresh_news():
             try:
