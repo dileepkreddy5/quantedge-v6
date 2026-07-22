@@ -598,6 +598,103 @@ export function VolatilityPanel({ data }: { data: any }) {
         })()}
       </Card>
 
+      {data.flow_analysis?.participation && (() => {
+        const fl = data.flow_analysis;
+        const p = fl.participation;
+        const sc = (s:number) => s >= 70 ? '#22c55e' : s >= 45 ? '#f59e0b' : '#ef4444';
+        const pvCol = { ACCUMULATION:'#22c55e', 'SELLING EXHAUSTION':'#f59e0b', BALANCED:'#8a7560',
+                        'WEAK RALLY':'#f59e0b', DISTRIBUTION:'#ef4444' }[fl.pv_agreement] || '#8a7560';
+        const ladder = [252,90,63,30,21,15,5]
+          .map(w => ({ w, v: fl[`up_volume_share_${w}d`] }))
+          .filter(x => x.v != null);
+        const lo = 40, hi = 90;
+        return (
+          <Card style={{ gridColumn:'span 3' }}>
+            <SectionTitle>MARKET PARTICIPATION — HOW MUCH CONVICTION IS BEHIND THIS MOVE</SectionTitle>
+
+            <div style={{ display:'flex', gap:24, alignItems:'flex-start', flexWrap:'wrap', marginBottom:18 }}>
+              <div style={{ textAlign:'center', minWidth:120 }}>
+                <div style={{ fontFamily:"'Fira Code',monospace", fontSize:42, fontWeight:800, color:sc(p.score), lineHeight:1 }}>{p.score}</div>
+                <div style={{ fontFamily:"'Fira Code',monospace", fontSize:9, color:'#8a7560', letterSpacing:2, marginTop:4 }}>PARTICIPATION</div>
+                <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:12, color:sc(p.score), marginTop:2 }}>{p.label}</div>
+              </div>
+              <div style={{ flex:1, minWidth:280 }}>
+                {p.components.map((c:any) => (
+                  <div key={c.name} style={{ display:'grid', gridTemplateColumns:'170px 1fr 90px', gap:10, alignItems:'center', marginBottom:5 }}>
+                    <span style={{ fontFamily:"'Outfit',sans-serif", fontSize:10.5, color:'#9d8b7a' }}>{c.name}</span>
+                    <div style={{ height:12, background:'#1a0f0a', borderRadius:3, overflow:'hidden' }}>
+                      <div style={{ height:'100%', width:`${c.score}%`, background:sc(c.score), opacity:0.5, borderRadius:3 }} />
+                    </div>
+                    <span style={{ fontFamily:"'Fira Code',monospace", fontSize:10.5, color:'#d4c4b0', textAlign:'right' }}>{c.value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 }}>
+              <div>
+                <div style={{ fontFamily:"'Fira Code',monospace", fontSize:9, color:'#daa520', letterSpacing:2, marginBottom:8 }}>
+                  PARTICIPATION TREND — SHARE OF VOLUME ON UP DAYS
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns:`repeat(${ladder.length}, 1fr)`, gap:5, alignItems:'end' }}>
+                  {ladder.map(x => {
+                    const h = Math.max(6, ((x.v - lo) / (hi - lo)) * 60);
+                    const c = x.v >= 60 ? '#22c55e' : x.v >= 50 ? '#8a7560' : '#ef4444';
+                    return (
+                      <div key={x.w} style={{ textAlign:'center' }}>
+                        <div style={{ fontFamily:"'Fira Code',monospace", fontSize:9.5, color:c, marginBottom:3 }}>{x.v.toFixed(0)}%</div>
+                        <div style={{ height:h, background:c, opacity:0.45, borderRadius:'2px 2px 0 0' }} />
+                        <div style={{ fontFamily:"'Fira Code',monospace", fontSize:8, color:'#6b5d52', marginTop:3 }}>{x.w}d</div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:9.5, color:'#7a6b5d', marginTop:8, lineHeight:1.5 }}>
+                  Left is the longest lookback. A rising staircase means buying participation has strengthened over time.
+                  50% is neutral — above it, more volume traded on advancing days.
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontFamily:"'Fira Code',monospace", fontSize:9, color:'#daa520', letterSpacing:2, marginBottom:8 }}>
+                  PRICE-VOLUME AGREEMENT
+                </div>
+                <div style={{ padding:'10px 12px', background:'#1a0f0a', borderRadius:6, borderLeft:`2px solid ${pvCol}`, marginBottom:10 }}>
+                  <div style={{ fontFamily:"'Fira Code',monospace", fontSize:13, fontWeight:700, color:pvCol, letterSpacing:1 }}>{fl.pv_agreement}</div>
+                  <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:10.5, color:'#9d8b7a', lineHeight:1.5, marginTop:4 }}>{fl.pv_note}</div>
+                </div>
+                {fl.exhaustion && (
+                  <div style={{ padding:'10px 12px', background:'#1a0f0a', borderRadius:6, borderLeft:'2px solid #f59e0b', marginBottom:10 }}>
+                    <div style={{ fontFamily:"'Fira Code',monospace", fontSize:11, color:'#f59e0b', letterSpacing:1 }}>
+                      {fl.exhaustion.type} EXHAUSTION · {fl.exhaustion.score}
+                    </div>
+                    <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:10.5, color:'#9d8b7a', lineHeight:1.5, marginTop:4 }}>{fl.exhaustion.note}</div>
+                  </div>
+                )}
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+                  {[
+                    { l:'1Y VWAP', v:`$${fl.vwap_1y}`, n:`price ${fl.price_vs_vwap_pct > 0 ? '+' : ''}${fl.price_vs_vwap_pct}% vs it` },
+                    { l:'VOLUME IN PROFIT', v:`${fl.shares_in_profit_pct}%`, n:'of last year\u2019s volume' },
+                    { l:'DAILY TURNOVER', v:fl.turnover_daily_pct != null ? `${fl.turnover_daily_pct}%` : '—', n:'of shares outstanding' },
+                    { l:'VOL VS 1Y AVG', v:`${fl.volume_vs_1y_avg_pct > 0 ? '+' : ''}${fl.volume_vs_1y_avg_pct}%`, n:'21-day average' },
+                  ].map(x => (
+                    <div key={x.l} style={{ background:'#1a0f0a', borderRadius:6, padding:'8px 10px' }}>
+                      <div style={{ fontFamily:"'Fira Code',monospace", fontSize:8, color:'#8a7560', letterSpacing:1 }}>{x.l}</div>
+                      <div style={{ fontFamily:"'Fira Code',monospace", fontSize:13, color:'#d4c4b0', fontWeight:600, marginTop:2 }}>{x.v}</div>
+                      <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:8.5, color:'#6b5d52' }}>{x.n}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:9.5, color:'#6b5d52', marginTop:14, lineHeight:1.5, paddingTop:10, borderTop:'1px solid rgba(212,149,108,0.1)' }}>
+              {fl.disclaimer}
+            </div>
+          </Card>
+        );
+      })()}
+
       {data.volatility_history && (() => {
         const vh = data.volatility_history;
         const span = (vh.range_high - vh.range_low) || 1;
@@ -663,67 +760,7 @@ export function VolatilityPanel({ data }: { data: any }) {
         );
       })()}
 
-      {data.volatility_history && (() => {
-        const vh = data.volatility_history;
-        const span = (vh.range_high - vh.range_low) || 1;
-        const posOf = (v:number) => ((v - vh.range_low) / span) * 100;
-        const pct = vh.percentile;
-        const verdict = pct >= 80 ? { t:'unusually turbulent', c:'#ef4444' }
-                      : pct >= 60 ? { t:'above its normal range', c:'#f59e0b' }
-                      : pct >= 40 ? { t:'about normal', c:'#22c55e' }
-                      : pct >= 20 ? { t:'quieter than usual', c:'#22c55e' }
-                      : { t:'unusually calm', c:'#f59e0b' };
-        const order = ['1d','3d','1w','2w','1mo','2mo','3mo','6mo','1y','2y','3y','5y'];
-        const rows = order.filter(k => vh.changes[k]).map(k => ({ k, ...vh.changes[k] }));
-        return (
-          <Card style={{ gridColumn:'span 3' }}>
-            <SectionTitle>IS VOLATILITY CHANGING?</SectionTitle>
-            <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:12, color:'#b8a894', lineHeight:1.6, marginBottom:14 }}>
-              Rolling 21-day volatility is <b style={{color:'#d4c4b0'}}>{vh.current}%</b>, which sits at the{' '}
-              <b style={{ color: verdict.c }}>{pct}th percentile</b> of this stock&apos;s own history — {verdict.t}.
-              Its median over the period is {vh.median}%.
-            </div>
-            <div style={{ marginBottom:18 }}>
-              <div style={{ position:'relative', height:30 }}>
-                <div style={{ position:'absolute', top:12, left:0, right:0, height:6,
-                  background:'linear-gradient(90deg,#22c55e44,#f59e0b44,#ef444444)', borderRadius:3 }} />
-                <div style={{ position:'absolute', top:6, left:`${posOf(vh.median)}%`, width:1, height:18, background:'#9d8b7a88' }} />
-                <div style={{ position:'absolute', top:3, left:`${posOf(vh.current)}%`, transform:'translateX(-50%)' }}>
-                  <div style={{ width:3, height:24, background:'#daa520', borderRadius:1 }} />
-                </div>
-              </div>
-              <div style={{ display:'flex', justifyContent:'space-between', fontFamily:"'Fira Code',monospace", fontSize:9, color:'#8a7560', marginTop:2 }}>
-                <span>{vh.range_low}% low</span>
-                <span style={{ color:'#6b5d52' }}>median {vh.median}%</span>
-                <span>{vh.range_high}% high</span>
-              </div>
-            </div>
-            <div style={{ display:'grid', gridTemplateColumns:`repeat(${Math.min(rows.length,6)}, 1fr)`, gap:8 }}>
-              {rows.map(r => {
-                const up = r.change > 0;
-                const c = Math.abs(r.change) < 0.5 ? '#8a7560' : up ? '#ef4444' : '#22c55e';
-                return (
-                  <div key={r.k} style={{ background:'#1a0f0a', borderRadius:6, padding:'9px 6px', textAlign:'center' }}>
-                    <div style={{ fontFamily:"'Fira Code',monospace", fontSize:8, color:'#8a7560', letterSpacing:1 }}>{r.k.toUpperCase()} AGO</div>
-                    <div style={{ fontFamily:"'Fira Code',monospace", fontSize:11, color:'#9d8b7a', marginTop:3 }}>{r.then}%</div>
-                    <div style={{ fontFamily:"'Fira Code',monospace", fontSize:13, fontWeight:700, color:c, marginTop:3 }}>
-                      {r.change > 0 ? '+' : ''}{r.change.toFixed(1)}pt
-                    </div>
-                    <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:8.5, color:'#6b5d52', marginTop:1 }}>
-                      {r.change_pct != null ? `${r.change_pct > 0 ? '+' : ''}${r.change_pct}%` : ''}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:10, color:'#7a6b5d', marginTop:12, lineHeight:1.5 }}>
-              Red means volatility has risen since that point, green that it has fallen. Rising volatility signals growing
-              disagreement or uncertainty — it does not indicate direction, and spikes accompany panic selling as readily
-              as aggressive buying. {vh.observations} daily observations available.
-            </div>
-          </Card>
-        );
-      })()}
+
 
       <Card style={{ gridColumn:'span 3' }}>
         <SectionTitle>REALIZED VOLATILITY — TERM STRUCTURE</SectionTitle>
