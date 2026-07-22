@@ -893,9 +893,9 @@ export function RegimePanel({ data }: { data: any }) {
   const TRAITS: any = {
     BULL_LOW_VOL:  ['Price trending above its medium-term average','Volatility below this stock\u2019s own median','Steady advances rather than sharp moves','Historically the easiest state to hold through'],
     BULL_HIGH_VOL: ['Price trending above its medium-term average','Volatility above this stock\u2019s own median','Larger daily swings in both directions','Gains come faster but drawdowns are sharper'],
-    MEAN_REVERT:   ['No clear trend \u2014 price oscillating around its average','Direction reverses frequently','Momentum strategies tend to underperform here','Often the least rewarding state to hold'],
+    MEAN_REVERT:   ['No clear trend — price oscillating around its average','Direction reverses frequently','Momentum strategies tend to underperform here','Often the least rewarding state to hold'],
     BEAR_LOW_VOL:  ['Price trending below its medium-term average','Volatility contained despite the downtrend','Orderly decline rather than panic','Can precede either stabilisation or further weakness'],
-    BEAR_HIGH_VOL: ['Price trending below its medium-term average','Volatility elevated','Sharp moves in both directions','Highest uncertainty \u2014 position sizes should be smallest here'],
+    BEAR_HIGH_VOL: ['Price trending below its medium-term average','Volatility elevated','Sharp moves in both directions','Highest uncertainty — position sizes should be smallest here'],
   };
 
   const cs = rc?.conditional_stats?.[rc?.inferred_state];
@@ -908,7 +908,7 @@ export function RegimePanel({ data }: { data: any }) {
       <Card style={{ gridColumn:'span 3' }}>
         <SectionTitle>WHAT A MARKET REGIME IS</SectionTitle>
         <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:12, color:'#b8a894', lineHeight:1.65 }}>
-          A stock does not behave the same way all the time. It moves through persistent behavioural states \u2014 stretches of
+          A stock does not behave the same way all the time. It moves through persistent behavioural states — stretches of
           steady advance, stretches of violent swinging, stretches of directionless chop. This model reads returns, volatility,
           volume and trend together and infers which state the stock is currently in.
           <br/><br/>
@@ -940,7 +940,7 @@ export function RegimePanel({ data }: { data: any }) {
               {((regime.confidence||0)*100).toFixed(1)}% model confidence. It has held this state for{' '}
               <b style={{color:'#d4c4b0'}}>{elapsed} trading days</b>
               {dur != null && <>, against a historical median of {dur} days across {rc.past_episodes_of_state} prior episodes
-                {extended && extended > 1.3 ? ' \u2014 this run is unusually extended' : extended && extended < 0.6 ? ' \u2014 this run is still young' : ''}</>}.
+                {extended && extended > 1.3 ? ' — this run is unusually extended' : extended && extended < 0.6 ? ' — this run is still young' : ''}</>}.
               {cs && <> Historically this stock has spent {cs.share_of_time_pct}% of its time in this state, returning{' '}
                 <b style={{color: cs.annualised_return_pct > 0 ? '#22c55e' : '#ef4444'}}>{cs.annualised_return_pct > 0 ? '+' : ''}{cs.annualised_return_pct}% annualised</b>{' '}
                 while in it, with {cs.win_rate_pct}% of days positive and a worst single day of {cs.worst_day_pct}%.</>}
@@ -955,7 +955,7 @@ export function RegimePanel({ data }: { data: any }) {
             <div style={{ display:'grid', gridTemplateColumns:'repeat(2, 1fr)', gap:'4px 20px' }}>
               {TRAITS[current].map((t:string,i:number) => (
                 <div key={i} style={{ fontFamily:"'Outfit',sans-serif", fontSize:11, color:'#9d8b7a', lineHeight:1.6 }}>
-                  <span style={{ color:C[current] }}>\u00b7</span> {t}
+                  <span style={{ color:C[current] }}>·</span> {t}
                 </div>
               ))}
             </div>
@@ -1071,7 +1071,7 @@ export function RegimePanel({ data }: { data: any }) {
           <SectionTitle>WHAT HAS HAPPENED IN EACH STATE</SectionTitle>
           <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:11, color:'#9d8b7a', marginBottom:12 }}>
             Returns this stock actually delivered while in each state, over the available history. This is a description of the
-            past, not a forecast \u2014 but it shows which conditions have historically rewarded holding and which have not.
+            past, not a forecast — but it shows which conditions have historically rewarded holding and which have not.
           </div>
           <div style={{ display:'grid', gridTemplateColumns:'150px repeat(5, 1fr)', gap:'6px 10px', alignItems:'center' }}>
             {['STATE','SHARE OF TIME','ANNUALISED','WIN RATE','WORST DAY','DAILY VOL'].map(h=>(
@@ -1093,7 +1093,7 @@ export function RegimePanel({ data }: { data: any }) {
             ))}
           </div>
           <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:9.5, color:'#6b5d52', marginTop:12, lineHeight:1.5 }}>
-            Win rates near 50% are normal and expected \u2014 regime conditioning shifts the return distribution, it does not
+            Win rates near 50% are normal and expected — regime conditioning shifts the return distribution, it does not
             make direction predictable. A state can carry a bearish label yet a positive average return, because the label
             describes the trend backdrop rather than the next day&apos;s move. {rc.note}
           </div>
@@ -1103,7 +1103,7 @@ export function RegimePanel({ data }: { data: any }) {
       <Card style={{ gridColumn:'span 3' }}>
         <details>
           <summary style={{ cursor:'pointer', listStyle:'none', outline:'none' }}>
-            <SectionTitle>MODEL INTERNALS &nbsp;<span style={{ fontSize:9, color:'#6b5d52' }}>(advanced \u2014 click to expand)</span></SectionTitle>
+            <SectionTitle>MODEL INTERNALS &nbsp;<span style={{ fontSize:9, color:'#6b5d52' }}>(advanced — click to expand)</span></SectionTitle>
           </summary>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:20, marginTop:8 }}>
             <div>

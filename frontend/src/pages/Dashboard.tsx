@@ -48,7 +48,6 @@ const TABS = [
   { id: 'ml',          label: '🧠 ML MODELS' },
   { id: 'volatility',  label: '📊 VOLATILITY' },
   { id: 'regime',      label: '🌡 REGIME' },
-  { id: 'sentiment',   label: '💬 SENTIMENT' },
   { id: 'news',        label: '📰 NEWS' },
   { id: 'peers',       label: '👥 PEERS' },
   { id: 'montecarlo',  label: '🎲 MONTE CARLO' },
@@ -423,8 +422,7 @@ export default function Dashboard() {
               {activeTab === 'ml'          && <MLModelsPanel data={data} />}
               {activeTab === 'volatility'  && <VolatilityPanel data={data} />}
               {activeTab === 'regime'      && <RegimePanel data={data} />}
-              {activeTab === 'sentiment'   && <SentimentPanel data={data} />}
-              {activeTab === 'news'        && <NewsPanel ticker={ticker} />}
+              {activeTab === 'news'        && <NewsPanel ticker={ticker} data={data} />}
               {activeTab === 'peers'       && <PeerPanel data={data} ticker={ticker} onAnalyze={runAnalysis} />}
               {activeTab === 'montecarlo'  && <MonteCarloPanel data={data} />}
               {activeTab === 'risk'        && <RiskPanel ticker={ticker} />}
