@@ -663,6 +663,68 @@ export function VolatilityPanel({ data }: { data: any }) {
         );
       })()}
 
+      {data.volatility_history && (() => {
+        const vh = data.volatility_history;
+        const span = (vh.range_high - vh.range_low) || 1;
+        const posOf = (v:number) => ((v - vh.range_low) / span) * 100;
+        const pct = vh.percentile;
+        const verdict = pct >= 80 ? { t:'unusually turbulent', c:'#ef4444' }
+                      : pct >= 60 ? { t:'above its normal range', c:'#f59e0b' }
+                      : pct >= 40 ? { t:'about normal', c:'#22c55e' }
+                      : pct >= 20 ? { t:'quieter than usual', c:'#22c55e' }
+                      : { t:'unusually calm', c:'#f59e0b' };
+        const order = ['1d','3d','1w','2w','1mo','2mo','3mo','6mo','1y','2y','3y','5y'];
+        const rows = order.filter(k => vh.changes[k]).map(k => ({ k, ...vh.changes[k] }));
+        return (
+          <Card style={{ gridColumn:'span 3' }}>
+            <SectionTitle>IS VOLATILITY CHANGING?</SectionTitle>
+            <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:12, color:'#b8a894', lineHeight:1.6, marginBottom:14 }}>
+              Rolling 21-day volatility is <b style={{color:'#d4c4b0'}}>{vh.current}%</b>, which sits at the{' '}
+              <b style={{ color: verdict.c }}>{pct}th percentile</b> of this stock&apos;s own history — {verdict.t}.
+              Its median over the period is {vh.median}%.
+            </div>
+            <div style={{ marginBottom:18 }}>
+              <div style={{ position:'relative', height:30 }}>
+                <div style={{ position:'absolute', top:12, left:0, right:0, height:6,
+                  background:'linear-gradient(90deg,#22c55e44,#f59e0b44,#ef444444)', borderRadius:3 }} />
+                <div style={{ position:'absolute', top:6, left:`${posOf(vh.median)}%`, width:1, height:18, background:'#9d8b7a88' }} />
+                <div style={{ position:'absolute', top:3, left:`${posOf(vh.current)}%`, transform:'translateX(-50%)' }}>
+                  <div style={{ width:3, height:24, background:'#daa520', borderRadius:1 }} />
+                </div>
+              </div>
+              <div style={{ display:'flex', justifyContent:'space-between', fontFamily:"'Fira Code',monospace", fontSize:9, color:'#8a7560', marginTop:2 }}>
+                <span>{vh.range_low}% low</span>
+                <span style={{ color:'#6b5d52' }}>median {vh.median}%</span>
+                <span>{vh.range_high}% high</span>
+              </div>
+            </div>
+            <div style={{ display:'grid', gridTemplateColumns:`repeat(${Math.min(rows.length,6)}, 1fr)`, gap:8 }}>
+              {rows.map(r => {
+                const up = r.change > 0;
+                const c = Math.abs(r.change) < 0.5 ? '#8a7560' : up ? '#ef4444' : '#22c55e';
+                return (
+                  <div key={r.k} style={{ background:'#1a0f0a', borderRadius:6, padding:'9px 6px', textAlign:'center' }}>
+                    <div style={{ fontFamily:"'Fira Code',monospace", fontSize:8, color:'#8a7560', letterSpacing:1 }}>{r.k.toUpperCase()} AGO</div>
+                    <div style={{ fontFamily:"'Fira Code',monospace", fontSize:11, color:'#9d8b7a', marginTop:3 }}>{r.then}%</div>
+                    <div style={{ fontFamily:"'Fira Code',monospace", fontSize:13, fontWeight:700, color:c, marginTop:3 }}>
+                      {r.change > 0 ? '+' : ''}{r.change.toFixed(1)}pt
+                    </div>
+                    <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:8.5, color:'#6b5d52', marginTop:1 }}>
+                      {r.change_pct != null ? `${r.change_pct > 0 ? '+' : ''}${r.change_pct}%` : ''}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:10, color:'#7a6b5d', marginTop:12, lineHeight:1.5 }}>
+              Red means volatility has risen since that point, green that it has fallen. Rising volatility signals growing
+              disagreement or uncertainty — it does not indicate direction, and spikes accompany panic selling as readily
+              as aggressive buying. {vh.observations} daily observations available.
+            </div>
+          </Card>
+        );
+      })()}
+
       <Card style={{ gridColumn:'span 3' }}>
         <SectionTitle>REALIZED VOLATILITY — TERM STRUCTURE</SectionTitle>
         <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:10.5, color:'#9d8b7a', marginBottom:12 }}>
