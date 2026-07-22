@@ -9,6 +9,91 @@ from collections import Counter
 TIER1={"reuters","bloomberg","wall street journal","wsj","financial times","cnbc","the new york times",
        "associated press","barron's","forbes","marketwatch","the motley fool","seeking alpha","yahoo"}
 
+# A handful of tickers whose editorial name genuinely differs from anything
+# derivable from the ticker itself. Everything else is inferred from the corpus.
+_COMPANY_ALIASES = {
+    "GOOGL":["alphabet","google"], "GOOG":["alphabet","google"],
+    "META":["meta","facebook"], "TSM":["tsmc","taiwan semi"],
+    "BRK.B":["berkshire"], "BRK-B":["berkshire"],
+}
+
+_STOPWORDS = {"the","a","an","and","or","but","for","with","from","this","that","what","why","how",
+              "is","are","was","were","be","been","has","have","had","will","would","could","should",
+              "stock","stocks","shares","share","investors","investing","market","markets","best",
+              "buy","sell","hold","today","now","new","one","two","three","after","before","more",
+              "than","its","it","he","she","they","you","your","i","in","on","at","to","of","by",
+              "up","down","says","said","just","can","not","all","out","over","into","about","q1",
+              "q2","q3","q4","ceo","cfo","ai","us","etf","nasdaq","nyse","sp","dow"}
+
+def _infer_company_name(ticker, articles):
+    """Work out what the press calls this company, from the headlines themselves.
+    Avoids maintaining a lookup table for 6,000 tickers: if fifteen articles about
+    PLTR keep saying 'Palantir', the name is discoverable from the corpus."""
+    import re as _re
+    from collections import Counter as _Counter
+    known = _COMPANY_ALIASES.get(ticker.upper())
+    if known:
+        return set(known)
+    counts = _Counter()
+    for a in articles[:40]:
+        t = a.get("title") or ""
+        # Capitalised tokens that are not sentence-initial noise
+        for tok in _re.findall(r"\b[A-Z][a-zA-Z'&.-]{2,}\b", t):
+            low = tok.lower().strip(".'&-")
+            if low and low not in _STOPWORDS and not low.isdigit():
+                counts[low] += 1
+    if not counts:
+        return set()
+    top, n = counts.most_common(1)[0]
+    # Require the candidate to appear in a meaningful share of headlines
+    if n < max(2, len(articles[:40]) * 0.15):
+        return set()
+    names = {top}
+    # Keep a two-word form if the following token also recurs (e.g. "advanced micro")
+    for a in articles[:40]:
+        t = (a.get("title") or "").lower()
+        m = _re.search(_re.escape(top) + r"\s+([a-z][a-z'&.-]{2,})", t)
+        if m and counts.get(m.group(1), 0) >= n * 0.6:
+            names.add(f"{top} {m.group(1)}")
+            break
+    return names
+
+# Phrases the summariser uses when the company is only mentioned in passing.
+_PASSING = ("mentioned as","mentioned only","listed as","included in the broader",
+            "not the focus","without additional commentary","no substantive analysis",
+            "brief mention","only in a headline reference","not specifically analyzed",
+            "part of the dominant","classified as")
+
+# Events that actually move a share price.
+_MATERIAL = {
+    "earnings":9,"quarterly results":9,"guidance":9,"revenue":7,"margin":7,"profit":7,
+    "outlook":7,"forecast":6,"beat":6,"miss":6,"downgrade":8,"upgrade":8,"price target":7,
+    "acquisition":8,"merger":8,"buyback":6,"dividend":6,"lawsuit":6,"investigation":7,
+    "recall":7,"antitrust":7,"regulator":6,"sec filing":6,"ceo":6,"cfo":6,"steps down":7,
+    "layoff":6,"launch":5,"unveil":5,"supply":5,"shortage":6,"tariff":6,"ban":6,
+}
+_FLUFF = ("best stocks","should you buy","stocks to buy","etf","mutual fund","index fund",
+          "10 stocks","top 5","millionaire","retire","dividend kings","motley fool picks",
+          "market size worth","cagr","forecast to 2030","forecast to 2035")
+
+def _materiality(title: str, reason: str, publisher: str) -> tuple:
+    """Score how likely an article is to actually matter for the stock.
+    Returns (score 0-100, list of reasons the score fired)."""
+    t, r = (title or "").lower(), (reason or "").lower()
+    score, why = 40, []
+    if any(p in r for p in _PASSING):
+        score -= 30; why.append("passing mention")
+    hits = [k for k in _MATERIAL if k in t or k in r]
+    if hits:
+        gain = min(45, sum(_MATERIAL[k] for k in hits[:4]))
+        score += gain; why.append(", ".join(hits[:3]))
+    if any(fl in t for fl in _FLUFF):
+        score -= 25; why.append("listicle or promotional")
+    if publisher and any(p in publisher.lower() for p in ("globenewswire","prnewswire","businesswire","accesswire")):
+        score -= 12; why.append("press release wire")
+    return max(0, min(100, score)), why
+
+
 def _is_english(a):
     t=a.get("title") or ""   # check TITLE only - descriptions/reasoning are always English
     if not t: return True
@@ -41,8 +126,11 @@ def compute_news_features(articles, ticker, price_return_30d=None):
     n=len(arts)
     if n==0: return {"available":False}
     tkr=ticker.lower()
+    _company_names = _infer_company_name(ticker, articles)
     for a in arts:
-        a["rel_w"]=1.0 if (tkr in a["title"].lower()) else 0.5
+        _t = a["title"].lower()
+        _in_title = (tkr in _t) or any(n in _t for n in _company_names)
+        a["rel_w"] = 1.0 if _in_title else 0.5
     def within(days): return [a for a in arts if (now-a["dt"]).days<=days]
     a7=within(7); a30=within(30)
     sv=[a["sval"] for a in arts]; sv30=[a["sval"] for a in a30]
@@ -166,9 +254,18 @@ def compute_news_features(articles, ticker, price_return_30d=None):
     f["_sentiment_dist"]={"positive":pos,"neutral":neu,"negative":neg}
     # feed: only articles genuinely about the company (rel_w full) or with real sentiment, drop tangential/spam
     # feed shows English + relevant (foreign titles hidden here but their sentiment already counted above)
-    feed_arts=[a for a in arts if a.get("is_en") and a["rel_w"]>=1.0]
-    if len(feed_arts)<8:
-        feed_arts=feed_arts+[a for a in arts if a.get("is_en") and a not in feed_arts]
+    for a in arts:
+        _m, _w = _materiality(a["title"], a.get("reason",""), a.get("pub",""))
+        a["_mat"] = _m + (12 if a["rel_w"] >= 1.0 else 0)
+        a["_mat_why"] = _w
+    feed_arts=[a for a in arts if a.get("is_en") and (a["rel_w"]>=1.0 or a["_mat"]>=55)]
+    if len(feed_arts)<6:
+        _rest=sorted([a for a in arts if a.get("is_en") and a not in feed_arts],
+                     key=lambda x:-x["_mat"])
+        feed_arts=feed_arts+_rest[:6-len(feed_arts)]
+    feed_arts=sorted(feed_arts, key=lambda x:(-x["_mat"], -x["dt"].timestamp()))
     f["_recent_headlines"]=[{"title":a["title"],"sentiment":a["sent"],"reason":a["reason"][:160],
-                             "publisher":a["pub"],"date":a["dt"].strftime("%Y-%m-%d"),"url":a["url"]} for a in feed_arts[:15]]
+                             "publisher":a["pub"],"date":a["dt"].strftime("%Y-%m-%d"),"url":a["url"],
+                             "materiality":a["_mat"],"materiality_why":a["_mat_why"],
+                             "about_company":a["rel_w"]>=1.0} for a in feed_arts[:15]]
     return f
