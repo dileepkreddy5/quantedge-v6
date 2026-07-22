@@ -781,6 +781,105 @@ export function VolatilityPanel({ data }: { data: any }) {
         );
       })()}
 
+      {data.monte_carlo && (() => {
+        const mc = data.monte_carlo;
+        const px = data.price || 0;
+        const vol = (data.annual_vol || 0);
+        if (!px || !mc.p50) return null;
+        const pct = (v: any) => v == null ? null : Number(v) * 100;
+        const band = [
+          { k: 'p5',  l: 'P5',  d: '1-in-20 downside' },
+          { k: 'p25', l: 'P25', d: 'lower quartile' },
+          { k: 'p50', l: 'P50', d: 'median path' },
+          { k: 'p75', l: 'P75', d: 'upper quartile' },
+          { k: 'p95', l: 'P95', d: '1-in-20 upside' },
+        ].map(x => ({ ...x, v: pct(mc[x.k]) })).filter(x => x.v != null) as any[];
+        if (band.length < 3) return null;
+        const lo = Math.min(...band.map(x => x.v)), hi = Math.max(...band.map(x => x.v));
+        const span = (hi - lo) || 1;
+        const pos = (v: number) => ((v - lo) / span) * 100;
+        // A normal distribution at this volatility would put the 1-in-20 outcomes
+        // at ±1.645 sigma. Comparing that to the simulated tail shows how much the
+        // parametric estimate understates what jumps and fat tails actually produce.
+        const normLo = -1.645 * vol * 100, normHi = 1.645 * vol * 100;
+        const simLo = band[0].v, simHi = band[band.length - 1].v;
+        const tailGap = Math.abs(simLo) - Math.abs(normLo);
+        const pLoss = pct(mc.prob_loss) ?? (mc.p50 != null && Number(mc.p50) < 0 ? null : null);
+        return (
+          <Card style={{ gridColumn:'span 3' }}>
+            <SectionTitle>ONE-YEAR OUTCOME RANGE — SIMULATED</SectionTitle>
+            <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:11, color:'#9d8b7a', lineHeight:1.55, marginBottom:16 }}>
+              The expected moves above assume returns are normally distributed. This runs {(mc.n_paths || 10000).toLocaleString()} price
+              paths through a {mc.model || 'jump-diffusion'} model with fat tails instead, which is closer to how equities
+              actually behave. Where the two disagree is the interesting part.
+            </div>
+
+            <div style={{ position:'relative', height:42, marginBottom:8 }}>
+              <div style={{ position:'absolute', top:18, left:0, right:0, height:6,
+                background:'linear-gradient(90deg,#ef444455,#8a756033,#22c55e55)', borderRadius:3 }} />
+              {lo <= 0 && hi >= 0 && (
+                <div style={{ position:'absolute', top:10, left:`${pos(0)}%`, width:1, height:22, background:'#9d8b7a88' }} />
+              )}
+              {band.map(x => (
+                <div key={x.k} style={{ position:'absolute', left:`${pos(x.v)}%`, top: x.k==='p50'?8:13,
+                  transform:'translateX(-50%)', width: x.k==='p50'?3:2, height: x.k==='p50'?26:16,
+                  background: x.k==='p50' ? '#daa520' : '#9d8b7a', borderRadius:1 }} />
+              ))}
+            </div>
+            <div style={{ display:'grid', gridTemplateColumns:`repeat(${band.length}, 1fr)`, gap:8, marginBottom:16 }}>
+              {band.map(x => {
+                const c = x.v > 0 ? '#22c55e' : x.v < 0 ? '#ef4444' : '#8a7560';
+                return (
+                  <div key={x.k} style={{ textAlign:'center' }}>
+                    <div style={{ fontFamily:"'Fira Code',monospace", fontSize:8, color:'#8a7560', letterSpacing:1 }}>{x.l}</div>
+                    <div style={{ fontFamily:"'Fira Code',monospace", fontSize:16, fontWeight:700, color:c, marginTop:2 }}>
+                      {x.v > 0 ? '+' : ''}{x.v.toFixed(1)}%
+                    </div>
+                    <div style={{ fontFamily:"'Fira Code',monospace", fontSize:9, color:'#9d8b7a' }}>
+                      ${(px * (1 + x.v / 100)).toFixed(0)}
+                    </div>
+                    <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:8.5, color:'#6b5d52', marginTop:1 }}>{x.d}</div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14, paddingTop:12,
+              borderTop:'1px solid rgba(212,149,108,0.12)' }}>
+              <div>
+                <div style={{ fontFamily:"'Fira Code',monospace", fontSize:9, color:'#daa520', letterSpacing:2, marginBottom:6 }}>
+                  NORMAL ASSUMPTION VS SIMULATION
+                </div>
+                <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:11, color:'#b8a894', lineHeight:1.6 }}>
+                  A normal distribution at {(vol*100).toFixed(0)}% volatility puts the 1-in-20 outcomes at{' '}
+                  <b style={{color:'#9d8b7a'}}>{normLo.toFixed(0)}%</b> and <b style={{color:'#9d8b7a'}}>+{normHi.toFixed(0)}%</b>.
+                  {' '}The simulation puts them at <b style={{color:'#ef4444'}}>{simLo.toFixed(0)}%</b> and{' '}
+                  <b style={{color:'#22c55e'}}>+{simHi.toFixed(0)}%</b>
+                  {Math.abs(tailGap) > 3 && (
+                    <> — the downside tail is <b style={{color: tailGap > 0 ? '#ef4444' : '#22c55e'}}>
+                      {Math.abs(tailGap).toFixed(0)} points {tailGap > 0 ? 'worse' : 'milder'}</b> than the normal
+                      assumption implies, which is what jumps and fat tails do to a distribution.</>
+                  )}
+                  {Math.abs(tailGap) <= 3 && <> — close enough that the normal estimate is a fair guide here.</>}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontFamily:"'Fira Code',monospace", fontSize:9, color:'#daa520', letterSpacing:2, marginBottom:6 }}>
+                  WHAT THE RANGE MEANS
+                </div>
+                <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:11, color:'#b8a894', lineHeight:1.6 }}>
+                  Nine in ten simulated paths land between <b>{simLo.toFixed(0)}%</b> and <b>+{simHi.toFixed(0)}%</b> a year out.
+                  The median path ends at <b style={{color: band.find((x:any)=>x.k==='p50')!.v >= 0 ? '#22c55e':'#ef4444'}}>
+                  ${(px * (1 + band.find((x:any)=>x.k==='p50')!.v / 100)).toFixed(0)}</b>.
+                  This is a projection of current volatility and drift, not a forecast — it says how wide the
+                  distribution is, not which way it will resolve.
+                </div>
+              </div>
+            </div>
+          </Card>
+        );
+      })()}
+
       {data.volatility_history && (() => {
         const vh = data.volatility_history;
         const span = (vh.range_high - vh.range_low) || 1;

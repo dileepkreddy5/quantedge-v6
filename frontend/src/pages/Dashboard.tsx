@@ -50,7 +50,6 @@ const TABS = [
   { id: 'regime',      label: '🌡 REGIME' },
   { id: 'news',        label: '📰 NEWS' },
   { id: 'peers',       label: '👥 PEERS' },
-  { id: 'montecarlo',  label: '🎲 MONTE CARLO' },
   { id: 'risk',        label: '🛡 RISK' },
   { id: 'industry',    label: '🏭 INDUSTRY' },
   { id: 'competitive', label: '⚔️ COMPETITIVE' },
@@ -424,7 +423,6 @@ export default function Dashboard() {
               {activeTab === 'regime'      && <RegimePanel data={data} />}
               {activeTab === 'news'        && <NewsPanel ticker={ticker} data={data} />}
               {activeTab === 'peers'       && <PeerPanel data={data} ticker={ticker} onAnalyze={runAnalysis} />}
-              {activeTab === 'montecarlo'  && <MonteCarloPanel data={data} />}
               {activeTab === 'risk'        && <RiskPanel ticker={ticker} />}
               {activeTab === 'industry'    && <IndustryPanel ticker={ticker} />}
               {activeTab === 'competitive' && <CompetitivePanel ticker={ticker} />}
