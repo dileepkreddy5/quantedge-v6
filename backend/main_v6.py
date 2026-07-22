@@ -42,6 +42,7 @@ from routers.portfolio_sizer_router import router as portfolio_sizer_router
 from routers.news_momentum_router import router as news_momentum_router
 from routers.ascent_router import router as ascent_router
 from routers.peers_router import router as peers_router
+from routers.ecosystem_router import router as ecosystem_router
 from routers.news_router import router as news_router
 from routers.risk_router import router as risk_router
 from routers.industry_router import router as industry_router
@@ -480,6 +481,7 @@ app.include_router(quality_router,       prefix="/api/v6",             tags=["Qu
 app.include_router(screener_router,      prefix="/api/v6",             tags=["Screener"])
 app.include_router(ascent_router,        prefix="/api/v6",             tags=["Ascent Radar"])
 app.include_router(peers_router,         prefix="/api/v6",             tags=["Peers"])
+app.include_router(ecosystem_router,     prefix="/api/v6",             tags=["Ecosystem"])
 app.include_router(news_router,          prefix="/api/v6",             tags=["News"])
 app.include_router(risk_router, prefix="/api/v6", tags=["Risk"])
 app.include_router(industry_router, prefix="/api/v6", tags=["Industry"])
