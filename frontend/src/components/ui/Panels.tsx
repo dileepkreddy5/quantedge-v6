@@ -531,10 +531,13 @@ export function VolatilityPanel({ data }: { data: any }) {
   return (
     <div className="qe-grid-3">
       <Card style={{ gridColumn:'span 2' }}>
-        <SectionTitle>VOLATILITY — CURRENT VERSUS STRUCTURAL</SectionTitle>
+        <SectionTitle>CONDITIONAL VOLATILITY — GARCH MODEL ESTIMATE</SectionTitle>
         {stance && (
           <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:12, color:'#b8a894', lineHeight:1.6, marginBottom:14 }}>
             Volatility is <b style={{ color: stance.c }}>{stance.t.toLowerCase()}</b> — {stance.s}.
+            <span style={{ color:'#7a6b5d' }}> This is the GARCH model&apos;s conditional estimate, which weights recent
+            observations and mean-reverts. Simple realized volatility over the last 21 days appears below and will read
+            higher during a turbulent stretch.</span>
           </div>
         )}
         <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:10, marginBottom:14 }}>
@@ -572,7 +575,10 @@ export function VolatilityPanel({ data }: { data: any }) {
       </Card>
 
       <Card>
-        <SectionTitle>ESTIMATOR CROSS-CHECK</SectionTitle>
+        <details>
+        <summary style={{ cursor:'pointer', listStyle:'none' }}>
+          <SectionTitle>ESTIMATOR CROSS-CHECK &nbsp;<span style={{ fontSize:9, color:'#6b5d52' }}>(advanced — click to expand)</span></SectionTitle>
+        </summary>
         <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:10.5, color:'#9d8b7a', lineHeight:1.5, marginBottom:12 }}>
           Four ways of measuring the same thing. Wide disagreement between them usually means gappy or illiquid trading.
         </div>
@@ -596,6 +602,7 @@ export function VolatilityPanel({ data }: { data: any }) {
             </div>
           );
         })()}
+        </details>
       </Card>
 
       {data.volatility_intel && (() => {
@@ -788,7 +795,7 @@ export function VolatilityPanel({ data }: { data: any }) {
         const rows = order.filter(k => vh.changes[k]).map(k => ({ k, ...vh.changes[k] }));
         return (
           <Card style={{ gridColumn:'span 3' }}>
-            <SectionTitle>IS VOLATILITY CHANGING?</SectionTitle>
+            <SectionTitle>REALIZED VOLATILITY — WHAT ACTUALLY HAPPENED</SectionTitle>
             <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:12, color:'#b8a894', lineHeight:1.6, marginBottom:14 }}>
               Rolling 21-day volatility is <b style={{color:'#d4c4b0'}}>{vh.current}%</b>, which sits at the{' '}
               <b style={{ color: verdict.c }}>{pct}th percentile</b> of this stock&apos;s own history — {verdict.t}.
@@ -852,12 +859,14 @@ export function VolatilityPanel({ data }: { data: any }) {
             .filter(p => p.v > 0);
           if (!pts.length) return <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:11, color:'#8a7560' }}>Realized volatility unavailable.</div>;
           const mx = Math.max(...pts.map(p => p.v));
+          const mn = Math.min(...pts.map(p => p.v));
+          const rng = (mx - mn) || 1;
           return (
             <div style={{ display:'grid', gridTemplateColumns:`repeat(${pts.length}, 1fr)`, gap:10, alignItems:'end' }}>
               {pts.map(p => (
                 <div key={p.d} style={{ textAlign:'center' }}>
                   <div style={{ fontFamily:"'Fira Code',monospace", fontSize:12, color:'#d4c4b0', fontWeight:600, marginBottom:5 }}>{p.v.toFixed(1)}%</div>
-                  <div style={{ height:Math.max(4, (p.v/mx)*70), background:'linear-gradient(180deg,#daa52099,#daa52033)', borderRadius:'3px 3px 0 0' }} />
+                  <div style={{ height:Math.max(8, 12 + ((p.v-mn)/rng)*58), background:'linear-gradient(180deg,#daa52099,#daa52033)', borderRadius:'3px 3px 0 0' }} />
                   <div style={{ fontFamily:"'Fira Code',monospace", fontSize:9, color:'#8a7560', marginTop:5 }}>{p.d}d</div>
                 </div>
               ))}
