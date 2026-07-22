@@ -222,7 +222,13 @@ class AnalystRatingsEngine:
                 for r in recs[:6]
             ],
             "earnings": {
-                "date":           next_earnings_date,
+                # last_reported, not next. The old "date" key held last report
+                # + 90 days and read as a forward date; a consumer had no way
+                # to tell a fabricated date from a real one.
+                "last_reported":  next_earnings_date,
+                "days_since":     (-days_to if days_to is not None else None),
+                "next_scheduled": None,   # needs FinnhubFeed.get_events()
+                "date":           next_earnings_date,   # deprecated alias
                 "days_to":        days_to,
                 "eps_estimate":   eps_est,
                 "eps_prev_year":  eps_prev,
@@ -244,20 +250,27 @@ class AnalystRatingsEngine:
 
     def _next_earnings_date(self, earnings: List[Dict[str, Any]]) -> Tuple[Optional[str], Optional[int]]:
         """
-        Finnhub free tier doesn't have a forward earnings calendar endpoint.
-        Estimate next earnings by adding ~90 days to the most recent report.
+        Return the LAST REPORTED period, not a guess at the next one.
+
+        This previously returned last_report + 90 days and served it as the
+        next earnings date. That is a fabricated figure: quarters are not 90
+        days apart, companies move their dates, and when the estimate landed in
+        the past the field shipped a negative days_to under a forward label
+        (META: 2026-06-29, days_to -23).
+
+        Finnhub does expose /calendar/earnings — FinnhubFeed.get_events()
+        implements it — so a real forward date is obtainable and should be
+        wired through rather than inferred here. Until then, report what is
+        known and leave the future null.
         """
         if not earnings:
             return None, None
-        latest = earnings[0]
-        period = latest.get("period")
+        period = earnings[0].get("period")
         if not period:
             return None, None
         try:
             last_report = datetime.strptime(period, "%Y-%m-%d").date()
-            next_est = last_report + timedelta(days=90)
-            days_to = (next_est - date.today()).days
-            return next_est.isoformat(), days_to
+            return last_report.isoformat(), -(date.today() - last_report).days
         except Exception:
             return None, None
 
