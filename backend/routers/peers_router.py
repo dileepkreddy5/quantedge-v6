@@ -94,7 +94,11 @@ async def get_peer_relative(
     WINDOWS = [("1M", 21), ("3M", 63), ("6M", 126), ("1Y", 252), ("2Y", 504)]
     windows = []
     for label, n in WINDOWS:
-        if len(wide) < n + 1:
+        # daily_bars holds ~2 years, so the 2Y window would be dropped for
+        # being four sessions short. Use whatever history exists and let the
+        # caller see n_sessions rather than silently omitting the window.
+        n = min(n, len(wide) - 1)
+        if n < 15:
             continue
         seg = wide.iloc[-(n + 1):]
         # A peer that listed part-way through the window would rebase off a
@@ -124,7 +128,8 @@ async def get_peer_relative(
     series = []
     for d, row in rebased.iterrows():
         pv = sorted(float(row[c]) for c in peer_cols if _pd.notna(row[c]))
-        if not pv:
+        # Quartiles off fewer than four names describe nothing.
+        if len(pv) < 4:
             continue
         series.append({
             "d": str(d),
@@ -134,10 +139,25 @@ async def get_peer_relative(
             "p75": round(pv[min(len(pv) - 1, int(len(pv) * 0.75))], 2),
         })
 
+    # Per-ticker series so the client can let the user pick which rivals to
+    # plot without another round trip. Small payload: ~8 tickers x 501 points.
+    by_ticker = {}
+    for c in valid:
+        by_ticker[c] = [None if _pd.isna(v) else round(float(v), 2) for v in rebased[c].tolist()]
+    caps = {p["ticker"]: p.get("market_cap") for p in meta["peers"]}
+    roster = sorted(
+        [{"ticker": c, "market_cap": caps.get(c),
+          "total_pct": by_ticker[c][-1] if by_ticker[c] else None} for c in valid if c != ticker],
+        key=lambda r: -(r["market_cap"] or 0))
+
     return {"data": {
         "available": True,
         "ticker": ticker,
         "group_label": meta.get("bucket"),
+        "group_kind": meta.get("group_kind"),
+        "dates": [str(d) for d in rebased.index],
+        "by_ticker": by_ticker,
+        "roster": roster,
         "n_peers": len(peer_cols),
         "n_sessions": len(series),
         "series": series,

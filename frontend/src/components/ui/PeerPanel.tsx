@@ -33,13 +33,19 @@ const PeerPanel: React.FC<Props> = ({ ticker: tickerProp, data: analysisData, on
   const [scoreData, setScoreData] = useState<any>(null);
   const [rel, setRel] = useState<any>(null);
   const [relPerf, setRelPerf] = useState<any>(null);
+  const [picked, setPicked] = useState<string[]>([]);
+  const [win, setWin] = useState<number>(252);
 
   const load = useCallback(async () => {
     if (!ticker) { setLoading(false); return; }
     setLoading(true); setErr(false);
     try {
       api.get(`/api/v6/peers/${ticker}/relative`)
-        .then(r => setRelPerf(r.data?.data?.available ? r.data.data : null))
+        .then(r => {
+          const rp = r.data?.data?.available ? r.data.data : null;
+          setRelPerf(rp);
+          setPicked((rp?.roster || []).slice(0, 5).map((x:any) => x.ticker));
+        })
         .catch(() => setRelPerf(null));
       const res = await api.get(`/api/v6/peers/${ticker}`);
       setPd(res.data?.data || null);
@@ -228,66 +234,90 @@ const PeerPanel: React.FC<Props> = ({ ticker: tickerProp, data: analysisData, on
         );
       })()}
 
-      {relPerf && relPerf.series?.length > 20 && (() => {
-        const W = 900, H = 260, PAD = { l: 52, r: 16, t: 14, b: 26 };
-        const s = relPerf.series;
-        const vals = s.flatMap((p:any) => [p.t, p.med, p.p25, p.p75].filter((v:any)=>v!=null));
-        const lo = Math.min(...vals), hi = Math.max(...vals);
-        const pad = (hi - lo) * 0.08 || 1;
-        const yLo = lo - pad, yHi = hi + pad;
-        const sx = (i:number) => PAD.l + (i/(s.length-1)) * (W-PAD.l-PAD.r);
-        const sy = (v:number) => H-PAD.b - ((v-yLo)/(yHi-yLo)) * (H-PAD.t-PAD.b);
-        const path = (k:string) => s.map((p:any,i:number)=> (p[k]==null?null:`${i===0?'M':'L'}${sx(i).toFixed(1)},${sy(p[k]).toFixed(1)}`)).filter(Boolean).join(' ');
-        const band = s.map((p:any,i:number)=>`${i===0?'M':'L'}${sx(i).toFixed(1)},${sy(p.p75).toFixed(1)}`).join(' ')
-          + ' ' + s.slice().reverse().map((p:any,i:number)=>`L${sx(s.length-1-i).toFixed(1)},${sy(p.p25).toFixed(1)}`).join(' ') + ' Z';
-        const last = s[s.length-1];
-        const ahead = last.t != null && last.t > last.med;
+      {relPerf && relPerf.dates?.length > 20 && (() => {
+        const LINE = ['#6ea8d8','#7aa874','#c98f6c','#a98bc4','#c9b06c'];
+        const W = 900, H = 200, PAD = { l: 46, r: 92, t: 10, b: 20 };
+        const all = relPerf.dates as string[];
+        const n = Math.min(win, all.length - 1);
+        const i0 = all.length - 1 - n;
+        const dates = all.slice(i0);
+        // Rebase to the window start so every line begins at zero.
+        const cut = (t:string) => {
+          const raw = relPerf.by_ticker[t];
+          if (!raw) return null;
+          const seg = raw.slice(i0);
+          const b = seg.find((v:any) => v != null);
+          if (b == null) return null;
+          return seg.map((v:any) => v == null ? null : ((1 + v/100) / (1 + b/100) - 1) * 100);
+        };
+        const lines = [{ t: relPerf.ticker, v: cut(relPerf.ticker), c: C.gold, me: true },
+          ...picked.map((t:string, i:number) => ({ t, v: cut(t), c: LINE[i % LINE.length], me: false }))]
+          .filter(l => l.v);
+        const flat = lines.flatMap(l => (l.v as any[]).filter(v => v != null));
+        if (!flat.length) return null;
+        const lo = Math.min(...flat, 0), hi = Math.max(...flat, 0);
+        const pad = (hi - lo) * 0.1 || 1;
+        const sx = (i:number) => PAD.l + (i/(dates.length-1)) * (W-PAD.l-PAD.r);
+        const sy = (v:number) => H-PAD.b - ((v-(lo-pad))/((hi+pad)-(lo-pad))) * (H-PAD.t-PAD.b);
+        const path = (vs:any[]) => vs.map((v,i)=> v==null?null:`${i===0||vs[i-1]==null?'M':'L'}${sx(i).toFixed(1)},${sy(v).toFixed(1)}`).filter(Boolean).join(' ');
+        const toggle = (t:string) => setPicked(p => p.includes(t) ? (p.length>1 ? p.filter(x=>x!==t) : p) : (p.length<5 ? [...p,t] : p));
+        const WINS = [['1M',21],['3M',63],['6M',126],['1Y',252],['2Y',504]] as [string,number][];
+
         return (
           <>
-            <div style={{ color:C.gold, fontWeight:700, fontSize:13, marginBottom:4, marginTop:4 }}>PERFORMANCE VS PEER GROUP</div>
-            <div style={{ fontSize:11, color:C.textDim, marginBottom:10, fontStyle:'italic' }}>
-              Cumulative return since {s[0].d}, rebased to zero. Shaded band spans the 25th-75th percentile of {relPerf.n_peers} peers.
-              A stock rising with its industry is not outperforming it.
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', flexWrap:'wrap', gap:8, marginTop:4 }}>
+              <div style={{ color:C.gold, fontWeight:700, fontSize:13 }}>PERFORMANCE VS NAMED RIVALS</div>
+              <div style={{ display:'flex', gap:4 }}>
+                {WINS.filter(([,d])=>d<=all.length).map(([l,d])=>(
+                  <button key={l} onClick={()=>setWin(d)} style={{ fontFamily:'monospace', fontSize:10, padding:'3px 8px', cursor:'pointer',
+                    background: win===d?'rgba(218,165,32,0.12)':'transparent', color: win===d?C.gold:C.textDim,
+                    border:`1px solid ${win===d?C.gold:C.border}`, borderRadius:3 }}>{l}</button>
+                ))}
+              </div>
             </div>
-            <svg viewBox={`0 0 ${W} ${H}`} style={{ width:'100%', display:'block', marginBottom:8 }}>
+            <div style={{ fontSize:11, color:C.textDim, marginBottom:8, fontStyle:'italic' }}>
+              Cumulative return rebased to zero at the window start. Pick 1-5 rivals below.
+              {relPerf.group_kind === 'industry'
+                ? ' Group matched on exact 4-digit SIC — precise classification, though shared coding does not guarantee a shared business.'
+                : ` Group matched at ${relPerf.group_kind} level — a broad comparison, read it loosely.`}
+            </div>
+            <svg viewBox={`0 0 ${W} ${H}`} style={{ width:'100%', display:'block' }}>
               <line x1={PAD.l} y1={sy(0)} x2={W-PAD.r} y2={sy(0)} stroke={C.border} strokeDasharray="3 4" />
-              <path d={band} fill="rgba(212,149,108,0.10)" stroke="none" />
-              <path d={path('med')} fill="none" stroke="rgba(212,149,108,0.75)" strokeWidth={1.4} />
-              <path d={path('t')} fill="none" stroke={C.gold} strokeWidth={2} />
-              {[yLo, (yLo+yHi)/2, yHi].map((v,i)=>(
-                <text key={i} x={PAD.l-8} y={sy(v)+3} fill={C.textDim} fontSize="10" fontFamily="monospace" textAnchor="end">
+              {lines.map(l => <path key={l.t} d={path(l.v as any[])} fill="none" stroke={l.c} strokeWidth={l.me?2:1.2} opacity={l.me?1:0.85} />)}
+              {[lo-pad, (lo+hi)/2, hi+pad].map((v,i)=>(
+                <text key={i} x={PAD.l-6} y={sy(v)+3} fill={C.textDim} fontSize="9.5" fontFamily="monospace" textAnchor="end">
                   {v>=0?'+':''}{v.toFixed(0)}%
                 </text>
               ))}
-              <text x={PAD.l} y={H-8} fill={C.textDim} fontSize="9.5" fontFamily="monospace">{s[0].d}</text>
-              <text x={W-PAD.r} y={H-8} fill={C.textDim} fontSize="9.5" fontFamily="monospace" textAnchor="end">{last.d}</text>
-              <text x={W-PAD.r-4} y={sy(last.t)-6} fill={C.gold} fontSize="11" fontFamily="monospace" textAnchor="end" fontWeight="700">
-                {ticker} {last.t>=0?'+':''}{last.t?.toFixed(0)}%
-              </text>
-              <text x={W-PAD.r-4} y={sy(last.med)+14} fill="rgba(212,149,108,0.8)" fontSize="10" fontFamily="monospace" textAnchor="end">
-                peer median {last.med>=0?'+':''}{last.med.toFixed(0)}%
-              </text>
+              {lines.map(l => {
+                const vs = l.v as any[]; const last = vs[vs.length-1];
+                return last==null?null:(
+                  <text key={l.t} x={W-PAD.r+6} y={sy(last)+3} fill={l.c} fontSize="10" fontFamily="monospace" fontWeight={l.me?700:400}>
+                    {l.t} {last>=0?'+':''}{last.toFixed(0)}%
+                  </text>
+                );
+              })}
+              <text x={PAD.l} y={H-4} fill={C.textDim} fontSize="9" fontFamily="monospace">{dates[0]}</text>
+              <text x={W-PAD.r} y={H-4} fill={C.textDim} fontSize="9" fontFamily="monospace" textAnchor="end">{dates[dates.length-1]}</text>
             </svg>
-            <div style={{ display:'grid', gridTemplateColumns:`repeat(${relPerf.windows.length}, 1fr)`, gap:8, marginBottom:8 }}>
-              {relPerf.windows.map((w:any)=>(
-                <div key={w.window} style={{ background:'rgba(212,149,108,0.04)', borderRadius:4, padding:'8px 10px' }}>
-                  <div style={{ fontFamily:'monospace', fontSize:9, color:C.textDim, letterSpacing:1 }}>{w.window}</div>
-                  <div style={{ fontFamily:'monospace', fontSize:15, fontWeight:700, marginTop:2,
-                    color: w.relative_pts>=0 ? C.green : C.red }}>
-                    {w.relative_pts>=0?'+':''}{w.relative_pts}pts
-                  </div>
-                  <div style={{ fontFamily:'monospace', fontSize:9.5, color:C.textDim }}>
-                    {w.target_pct>=0?'+':''}{w.target_pct}% vs {w.peer_median_pct>=0?'+':''}{w.peer_median_pct}%
-                  </div>
-                </div>
-              ))}
+            <div style={{ display:'flex', gap:5, flexWrap:'wrap', marginTop:8, marginBottom:6 }}>
+              {relPerf.roster.map((r:any)=>{
+                const on = picked.includes(r.ticker);
+                return (
+                  <button key={r.ticker} onClick={()=>toggle(r.ticker)} title={fmtCap(r.market_cap)}
+                    style={{ fontFamily:'monospace', fontSize:10, padding:'3px 9px', cursor:'pointer', borderRadius:3,
+                      background: on?'rgba(218,165,32,0.10)':'transparent', color: on?C.text:C.textDim,
+                      border:`1px solid ${on?'rgba(218,165,32,0.5)':C.border}` }}>
+                    {r.ticker}
+                  </button>
+                );
+              })}
+              <span style={{ fontFamily:'monospace', fontSize:9.5, color:C.textDim, alignSelf:'center', marginLeft:4 }}>
+                {picked.length}/5 · min 1
+              </span>
             </div>
-            <div style={{ fontSize:10.5, color:C.text, marginBottom:24, lineHeight:1.5 }}>
-              {ahead ? `${ticker} is ahead of the group over the full window` : `${ticker} trails the group over the full window`}
-              {relPerf.windows.length && relPerf.windows[0].relative_pts != null
-                ? `, and ${relPerf.windows[0].relative_pts >= 0 ? 'ahead' : 'behind'} by ${Math.abs(relPerf.windows[0].relative_pts)}pts over the last month.`
-                : '.'}
-              {' '}{relPerf.note}
+            <div style={{ fontSize:10, color:C.textDim, marginBottom:22, fontFamily:'monospace' }}>
+              {relPerf.n_sessions} sessions stored — the window extends as the nightly sync accumulates history.
             </div>
           </>
         );
