@@ -799,13 +799,19 @@ class QuantEdgeAnalyzerV6:
 
             # ── LAYER 7: GOVERNANCE ───────────────────────────
             try:
-                sharpe = float(returns.mean() / returns.std() * np.sqrt(252))
-                skew = float(returns.skew())
-                kurt = float(returns.kurtosis() + 3)
+                # Bailey & Lopez de Prado work in the periodicity of the
+                # observations: a DAILY Sharpe against a daily n. Passing the
+                # annualised figure inflates z by sqrt(252) and saturates the
+                # normal CDF at 1.0 regardless of the input.
+                _r = returns.tail(252)
+                sharpe_daily = float(_r.mean() / _r.std())
+                sharpe = float(sharpe_daily * np.sqrt(252))   # display only
+                skew = float(_r.skew())
+                kurt = float(_r.kurtosis() + 3)
                 dsr = self.dsr.compute(
-                    sharpe=sharpe,
+                    sharpe=sharpe_daily,
                     n_trials=8,
-                    n_obs=min(len(returns), 252),
+                    n_obs=len(_r),
                     skewness=skew,
                     kurtosis=kurt,
                 )
@@ -827,6 +833,15 @@ class QuantEdgeAnalyzerV6:
                     "is_genuine_alpha": self.dsr.is_genuine(dsr),
                     "sharpe_ratio_raw": float(sharpe),
                     "n_models_tested": 8,
+                    # DSR corrects for selection across strategies. This series is
+                    # one ticker's buy-and-hold return, not a strategy chosen from
+                    # a set, so the deflation has little to correct and the figure
+                    # runs high. Present as a distributional check on the Sharpe
+                    # (skew/kurtosis-adjusted), not as evidence of alpha.
+                    "dsr_caveat": "buy_and_hold_series_no_strategy_selection",
+                    "n_obs": int(min(len(returns), 252)),
+                    "skewness": round(skew, 3),
+                    "kurtosis": round(kurt, 3),
                     "pbo": pbo_result,
                     "labeling": {
                         "n_events": labeling_result.get("n_events", 0),

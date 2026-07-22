@@ -12,7 +12,6 @@ import {
   interpretRegime,
   interpretMaxDrawdown,
   interpretVol,
-  interpretFFAlpha,
   interpretPE,
   interpretMLConsensus,
   buildThesis,
@@ -167,72 +166,54 @@ function ThesisBlock({ label, text, accent }: { label: string; text: string; acc
   );
 }
 
-// ── Fama-French decomposition ────────────────────────────────
-function FamaFrenchTable({ data }: { data: any }) {
+// ── CAPM market exposure ─────────────────────────────────────
+// Single-factor regression against SPY. Not Fama-French: there is no
+// SMB/HML/RMW/CMA in this stack, so nothing here claims one.
+function CapmPanel({ data }: { data: any }) {
+  if (data.capm_available !== true) {
+    return (
+      <div>
+        <SectionHeader label="MARKET EXPOSURE — CAPM VS SPY" />
+        <div style={{ fontFamily: fontSans, fontSize: 12, color: COLORS.textDim }}>
+          Not computed — requires 60 overlapping sessions with SPY.
+        </div>
+      </div>
+    );
+  }
+  const n = data.capm_n_obs;
   const rows = [
-    { factor: 'MKT (Market)',     value: data.ff_mkt_beta, neutral: 1.0,
-      desc: 'Exposure to broad market moves. 1.0 = moves with S&P; 0 = uncorrelated.' },
-    { factor: 'SMB (Size)',       value: data.ff_smb,      neutral: 0.0,
-      desc: 'Small-minus-big. Positive = small-cap tilt; negative = large-cap tilt.' },
-    { factor: 'HML (Value)',      value: data.ff_hml,      neutral: 0.0,
-      desc: 'High-minus-low book/market. Positive = value tilt; negative = growth tilt.' },
-    { factor: 'RMW (Profit)',     value: data.ff_rmw,      neutral: 0.0,
-      desc: 'Robust-minus-weak profitability. Positive = profitable firms; negative = weak.' },
-    { factor: 'CMA (Investment)', value: data.ff_cma,      neutral: 0.0,
-      desc: 'Conservative-minus-aggressive investment. Positive = low-capex; negative = high-capex.' },
-    { factor: 'WML (Momentum)',   value: data.ff_wml,      neutral: 0.0,
-      desc: 'Winners-minus-losers. Positive = riding momentum; negative = contrarian.' },
+    { k: 'BETA', v: data.capm_beta?.toFixed(2),
+      d: 'Slope against SPY excess returns. 1.0 moves with the market.' },
+    { k: 'ALPHA (ANN.)', v: data.capm_alpha != null ? `${(data.capm_alpha * 100).toFixed(2)}%` : null,
+      d: 'Annualised intercept. Return not explained by market exposure.' },
+    { k: 'R-SQUARED', v: data.capm_r_squared != null ? `${(data.capm_r_squared * 100).toFixed(0)}%` : null,
+      d: 'Share of price movement the market explains. The rest is company-specific.' },
+    { k: 'IDIO VOL', v: data.capm_idio_risk != null ? `${(data.capm_idio_risk * 100).toFixed(1)}%` : null,
+      d: 'Annualised volatility of the regression residual.' },
   ];
-
-  const alphaInsight = data.ff_alpha != null
-    ? interpretFFAlpha(data.ff_alpha, data.ff_r_squared)
-    : null;
-
   return (
     <div>
-      <SectionHeader label="FAMA–FRENCH 6-FACTOR DECOMPOSITION" />
-      {alphaInsight && (
-        <div style={{
-          fontFamily: fontSans, fontSize: 12, color: COLORS.textDim,
-          marginBottom: 12, lineHeight: 1.6,
-        }}>
-          {alphaInsight.headline}
-        </div>
-      )}
-      <div style={{
-        display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8,
-      }}>
-        {rows.map(row => {
-          const v = row.value;
-          if (v == null || isNaN(v)) return null;
-          const diff = v - row.neutral;
-          const color = Math.abs(diff) < 0.1 ? COLORS.textDim
-            : diff > 0 ? COLORS.green : COLORS.red;
-          return (
-            <div key={row.factor} style={{
-              background: COLORS.panelAlt,
-              border: `1px solid ${COLORS.borderLt}`,
-              borderRadius: 4,
-              padding: '10px 12px',
-              display: 'flex', flexDirection: 'column', gap: 4,
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{
-                  fontFamily: fontMono, fontSize: 9, letterSpacing: 1.5,
-                  color: COLORS.textFaint,
-                }}>
-                  {row.factor}
-                </span>
-                <InfoTip text={row.desc} />
-              </div>
-              <div style={{
-                fontFamily: fontMono, fontSize: 15, fontWeight: 600, color: color,
-              }}>
-                {v >= 0 ? '+' : ''}{v.toFixed(3)}
-              </div>
+      <SectionHeader label="MARKET EXPOSURE — CAPM VS SPY" />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+        {rows.map(r => r.v == null ? null : (
+          <div key={r.k} style={{
+            background: COLORS.panelAlt, border: `1px solid ${COLORS.borderLt}`,
+            borderRadius: 4, padding: '10px 12px',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontFamily: fontMono, fontSize: 9, letterSpacing: 1.5, color: COLORS.textFaint }}>
+                {r.k}
+              </span>
+              <InfoTip text={r.d} />
             </div>
-          );
-        })}
+            <div style={{ fontFamily: fontMono, fontSize: 15, fontWeight: 600, color: COLORS.text, marginTop: 4 }}>
+              {r.v}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div style={{ fontFamily: fontMono, fontSize: 9, color: COLORS.textFaint, marginTop: 8, letterSpacing: 1 }}>
+        {n} ALIGNED SESSIONS · RF 5.3% · SINGLE-FACTOR, NOT FAMA-FRENCH
       </div>
     </div>
   );
@@ -487,8 +468,8 @@ export default function OverviewV2({
         </div>
       </div>
 
-      {/* ── FAMA-FRENCH ─────────────────────────────────────── */}
-      <FamaFrenchTable data={data} />
+      {/* ── MARKET EXPOSURE (CAPM vs SPY) ───────────────────── */}
+      <CapmPanel data={data} />
 
       {/* ── HONESTY (Deflated Sharpe + PBO) ─────────────────── */}
       <HonestyPanel data={data} />
