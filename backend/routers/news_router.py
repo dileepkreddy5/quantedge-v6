@@ -84,6 +84,8 @@ async def compute_news_intelligence(ticker: str, api_key: str) -> Dict[str,Any]:
             "sentiment_dist":feats.get("_sentiment_dist"),
             "brief":feats.get("_brief"),
             "recent_headlines":feats.get("_recent_headlines"),
+            "key_facts":feats.get("_key_facts"),
+            "key_facts":feats.get("_key_facts"),
             "tree":tree,
             "key_metrics":{k:feats.get(k) for k in
                 ["net_sentiment","positive_ratio","negative_ratio","sentiment_trend",

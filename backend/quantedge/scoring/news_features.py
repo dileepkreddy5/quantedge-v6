@@ -113,6 +113,87 @@ _EVENT_KINDS = (
     ("CAPITAL",    ("buyback","repurchase","dividend","split","offering","debt")),
 )
 
+# Which bucket a stated fact belongs in.
+_FACT_GROUPS = (
+    ("FINANCIAL",   ("margin","revenue","earnings","eps","profit","loss","cash flow","valuation",
+                     "p/e","forward earnings","guidance","cost","expense","tax","yield")),
+    ("OPERATIONAL", ("deliver","shipment","unit","production","capacity","subscriber","user",
+                     "customer","device","store","order","backlog","supply","inventory","fab")),
+    ("CAPITAL",     ("buyback","repurchase","dividend","debt","offering","split","stake",
+                     "acquisition","investment","capex")),
+    ("STRATEGIC",   ("partnership","agreement","deal","contract","launch","expansion","program",
+                     "approval","license","patent","entry","exit")),
+)
+_HEDGE = ("could","would","might","may ","expects","projected","forecast","if ","should",
+          "potential","possible","likely to","aims to","plans to","hopes")
+
+def _extract_facts(arts):
+    """Pull stated, quantified facts out of the article summaries.
+    A fact needs either a figure or a concrete directional claim, and must be
+    asserted rather than speculated: 'gross margins declined for two consecutive
+    quarters' qualifies, 'could be going into business together' does not."""
+    import re as _re
+    out, seen = [], set()
+    _num = _re.compile(
+        r"(\$\s?[\d,.]+\s*(?:billion|million|trillion|bn|b\b|m\b)?"
+        r"|[\d,.]+\s?%"
+        r"|[\d,.]+\s?(?:x\b|times)"
+        r"|[\d,.]+\s*(?:billion|million|thousand)\b"
+        r"|\bQ[1-4]\s?20\d\d\b)", _re.I)
+    _qual = _re.compile(
+        r"\b(declin\w+|fell|rose|surg\w+|dropp\w+|beat|missed|record|consecutive|"
+        r"all-time|highest|lowest|announc\w+|secur\w+|signed|launch\w+)\b", _re.I)
+
+    for a in sorted(arts, key=lambda x: -x.get("_mat", 0)):
+        txt = (a.get("reason") or "").strip()
+        if not txt:
+            continue
+        for sent in _re.split(r"(?<=[.;])\s+|\s+\(\d\)\s*", txt):
+            s = _re.sub(r"^\s*\(\d+\)\s*", "", sent)
+            s = _re.sub(r"^(however|while|although|but|and|also|meanwhile|additionally|"
+                        r"further(?:more)?|though)[,\s]+", "", s, flags=_re.I)
+            s = s.strip(" .,;")
+            if len(s) < 25 or len(s) > 200:
+                continue
+            if _re.match(r"^(the article|the piece|this article|it |they |which |that |where )", s, _re.I):
+                continue
+            if not (_num.search(s) or _qual.search(s)):
+                continue
+            low = s.lower()
+            if any(h in low for h in _HEDGE):
+                continue
+            key = _re.sub(r"[^a-z0-9]", "", low)[:55]
+            if key in seen:
+                continue
+
+            # Score every group and take the strongest. Financial vocabulary is
+            # ubiquitous, so it needs a clear margin rather than a first-match win.
+            scores = {}
+            for g, words in _FACT_GROUPS:
+                scores[g] = sum(1 for w in words if w in low)
+            if scores.get("FINANCIAL"):
+                scores["FINANCIAL"] = max(0, scores["FINANCIAL"] - 1)
+            best = max(scores.values()) if scores else 0
+            if best <= 0:
+                continue
+            grp = max(scores, key=lambda g: scores[g])
+
+            seen.add(key)
+            out.append({
+                "fact": s[0].upper() + s[1:],
+                "group": grp,
+                "source": a.get("pub", ""),
+                "date": a["dt"].strftime("%Y-%m-%d"),
+                "url": a.get("url", ""),
+                "headline": a.get("title", ""),
+                "weight": round(a.get("_mat", 0)),
+            })
+            if len(out) >= 24:
+                break
+        if len(out) >= 24:
+            break
+    return out
+
 def _classify(title: str, reason: str, publisher: str) -> dict:
     """Is this a reported event, an analyst action, or commentary about one?
     The distinction matters: most financial coverage is opinion about events,
@@ -375,7 +456,11 @@ def compute_news_features(articles, ticker, price_return_30d=None):
         f["top10_sentiment"] = round(sum(m * s for m, s in _top) / _tsum, 4)
         f["material_vs_broad_gap"] = round(f["material_sentiment"] - f.get("sentiment_score_mean", 0), 4)
 
-    f["_recent_headlines"]=[{"title":a["title"],"sentiment":a["sent"],"reason":a["reason"][:160],
+    f["_key_facts"] = _extract_facts([a for a in arts if a.get("is_en") and a["rel_w"] >= 1.0])
+
+    f["_key_facts"] = _extract_facts([a for a in arts if a.get("is_en") and a["rel_w"] >= 1.0])
+
+    f["_recent_headlines"]=[{"title":a["title"],"sentiment":a["sent"],"reason":a["reason"][:400],
                              "publisher":a["pub"],"date":a["dt"].strftime("%Y-%m-%d"),"url":a["url"],
                              "materiality":round(a["_mat"]),"materiality_why":a["_mat_why"],
                              "about_company":a["rel_w"]>=1.0,
