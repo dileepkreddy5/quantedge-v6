@@ -374,7 +374,7 @@ export default function OverviewV2({
     api.get(`/api/v7/conviction/${ticker}`).then(r => setConv(r.data?.data || null)).catch(() => setConv(null));
   }, [ticker]);
 
-  const thesis = buildThesis(data, ticker);
+  const thesis = buildThesis(data, ticker, conv);
   const score = data.overall_score ?? 50;
   const scoreInsight = interpretCompositeScore(score, data.overall_signal);
   const scoreColor = sentimentColor(scoreInsight.sentiment);

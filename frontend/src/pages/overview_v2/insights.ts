@@ -324,7 +324,7 @@ export interface ThesisParagraphs {
   forward: string;
 }
 
-export function buildThesis(data: any, ticker: string): ThesisParagraphs {
+export function buildThesis(data: any, ticker: string, conv?: any): ThesisParagraphs {
   const score = data.overall_score ?? 50;
   const signal = data.overall_signal ?? 'NEUTRAL';
   const regime = data.current_regime ?? '';
@@ -338,7 +338,23 @@ export function buildThesis(data: any, ticker: string): ThesisParagraphs {
 
   const compInsight = interpretCompositeScore(score, signal);
   const regimeInsight = interpretRegime(regime, regimeConf);
-  const shortThesis = `${ticker} shows ${compInsight.label.toLowerCase()} factor alignment. ${compInsight.headline} ${regimeInsight.headline}`;
+  // Thesis derives from the 16-module conviction when available, so the narrative
+  // never contradicts the headline verdict. Falls back to factor language otherwise.
+  let shortThesis: string;
+  if (conv && conv.conviction_score != null && Array.isArray(conv.modules)) {
+    const mods = conv.modules.filter((m: any) => m.score != null);
+    const byContrib = [...mods].sort((a: any, b: any) => (b.score * b.weight) - (a.score * a.weight));
+    const leaders = byContrib.slice(0, 3).map((m: any) => m.label.replace(' Intelligence', ''));
+    const laggards = mods.filter((m: any) => m.score < 45).map((m: any) => m.label.replace(' Intelligence', ''));
+    const verdict = (conv.verdict || 'NEUTRAL').replace('_', ' ');
+    const cs = Math.round(conv.conviction_score);
+    shortThesis = `${ticker} earns a ${verdict} conviction of ${cs}/100 across 16 weighted intelligence modules. ` +
+      `The case is led by ${leaders.join(', ')}` +
+      (laggards.length ? `, while ${laggards.join(' and ')} ${laggards.length > 1 ? 'remain' : 'remains'} the principal drag. ` : '. ') +
+      `${regimeInsight.headline}`;
+  } else {
+    shortThesis = `${ticker} shows ${compInsight.label.toLowerCase()} factor alignment. ${compInsight.headline} ${regimeInsight.headline}`;
+  }
 
   const volInsight = interpretVol(annualVol);
   const ddInsight = interpretMaxDrawdown(maxDD);
