@@ -265,6 +265,47 @@ async def lifespan(app: FastAPI):
             )
             logger.info("✅ Ascent Radar scans scheduled (hourly 10:05-15:05 ET + 16:30 ET EOD)")
 
+        # Daily bars — one grouped-daily call covers every US ticker for a session.
+        # Keeping prices local means correlation and peer work read from Postgres
+        # instead of making thousands of API calls per request.
+        async def _sync_bars():
+            try:
+                from services.bars_store import BarsStore
+                bs = BarsStore(app.state.db)
+                await bs.ensure_tables()
+                n = await bs.sync_day()
+                logger.info(f"daily bars synced: {n} rows")
+            except Exception as e:
+                logger.error(f"bars sync failed: {e}")
+
+        async def _refresh_universe():
+            try:
+                from services.bars_store import BarsStore
+                bs = BarsStore(app.state.db)
+                await bs.ensure_tables()
+                n = await bs.refresh_universe()
+                r = await bs.enrich_universe(limit=800)
+                logger.info(f"universe refreshed: {n} tickers, enriched {r}")
+            except Exception as e:
+                logger.error(f"universe refresh failed: {e}")
+
+        if getattr(app.state, "db", None):
+            scheduler.add_job(
+                _sync_bars,
+                trigger=CronTrigger(day_of_week="mon-fri", hour=17, minute=30, timezone=et),
+                id="daily_bars_sync",
+                name="Daily bars sync 17:30 ET",
+                replace_existing=True, max_instances=1, coalesce=True,
+            )
+            scheduler.add_job(
+                _refresh_universe,
+                trigger=CronTrigger(day_of_week="sat", hour=6, minute=0, timezone=et),
+                id="universe_refresh",
+                name="Weekly universe refresh",
+                replace_existing=True, max_instances=1, coalesce=True,
+            )
+            logger.info("daily bars sync + weekly universe refresh scheduled")
+
         # News briefings — pre-build each morning for popular tickers (warms cache)
         async def _refresh_news():
             try:
@@ -297,12 +338,12 @@ async def lifespan(app: FastAPI):
         if app.state.peer_job:
             scheduler.add_job(
                 app.state.peer_job.run,
-                trigger=CronTrigger(day_of_week="mon-fri", hour=6, minute=30, timezone=et),
+                trigger=CronTrigger(day_of_week="mon-fri", hour=18, minute=15, timezone=et),
                 id="peer_daily_scan",
                 name="Daily peer stats scan",
                 replace_existing=True, max_instances=1, coalesce=True,
             )
-            logger.info("✅ Peer stats scan scheduled (06:30 ET daily)")
+            logger.info("✅ Peer stats scan scheduled (18:15 ET, after bars sync)")
 
         # Multibagger full-universe scan — nightly at 02:00 ET (zero traffic);
         # 30-60 min job, re-ranks live caps, refreshes the /scan/tiers artifact.
