@@ -186,6 +186,7 @@ const PeerPanel: React.FC<Props> = ({ ticker: tickerProp, data: analysisData, on
         })}
         <div style={{ position:'absolute', bottom:4, left:6, fontSize:9, color:C.textDim }}>weaker</div>
         <div style={{ position:'absolute', bottom:4, right:6, fontSize:9, color:C.textDim }}>stronger →</div>
+        <div style={{ position:'absolute', top:4, left:'50%', transform:'translateX(-50%)', fontSize:9, color:C.gold }}>● {ticker}</div>
       </div>
       {eco && eco.movers?.length > 0 && (() => {
         const floor = eco.significance_floor ?? 0.25;
@@ -257,8 +258,6 @@ const PeerPanel: React.FC<Props> = ({ ticker: tickerProp, data: analysisData, on
         );
       })()}
 
-        <div style={{ position:'absolute', top:4, left:'50%', transform:'translateX(-50%)', fontSize:9, color:C.gold }}>● {ticker}</div>
-      </div>
 
       {/* Peer table */}
       <div style={{ color:C.gold, fontWeight:700, fontSize:13, marginBottom:8 }}>PEERS — RANKED BY {factorLabels[factorKey].toUpperCase()}</div>
