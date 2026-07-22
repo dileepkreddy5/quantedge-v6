@@ -542,6 +542,7 @@ function TickerHeader({ data, ticker }: { data: any; ticker: string }) {
 function StockSnapshot({ data }: { data: any }) {
   const f = data.fundamentals || {};
   const ar = data.analyst_ratings || {};
+  const cons = ar.consensus || {};
   const price = data.price ?? 0;
   const hi = data.week_52_high ?? f.week_52_high;
   const lo = data.week_52_low ?? f.week_52_low;
@@ -598,16 +599,20 @@ function StockSnapshot({ data }: { data: any }) {
       </div>
       <div>
         <ColHead t="THE STREET" />
-        {ar.recommendation_summary || ar.buy != null ? (
+        {cons && cons.n_analysts ? (
           <>
-            <Cell label="Buy" value={`${ar.strong_buy != null ? (ar.strong_buy+ (ar.buy||0)) : (ar.buy ?? '—')}`} color="#22c55e" />
-            <Cell label="Hold" value={`${ar.hold ?? '—'}`} color="#f59e0b" />
-            <Cell label="Sell" value={`${ar.sell != null ? (ar.sell + (ar.strong_sell||0)) : (ar.sell ?? '—')}`} color="#ef4444" />
-            <Cell label="Consensus" value={ar.consensus || ar.recommendation || '—'} />
+            <Cell label={`Buy (${cons.n_analysts} analysts)`} value={`${cons.buy_count ?? '—'}`} color="#22c55e" />
+            <Cell label="Hold" value={`${cons.hold_count ?? '—'}`} color="#f59e0b" />
+            <Cell label="Sell" value={`${cons.sell_count ?? '—'}`} color="#ef4444" />
+            <Cell label="Consensus" value={cons.label || '—'} color={cons.label?.includes('BUY') ? '#22c55e' : cons.label?.includes('SELL') ? '#ef4444' : '#f59e0b'} />
+            <Cell label="Avg Target" value={cons.avg_target != null ? `$${Number(cons.avg_target).toFixed(0)}` : 'n/a'} />
+            {(cons.upgrades_30d || cons.downgrades_30d) ? (
+              <Cell label="30d Revisions" value={`+${cons.upgrades_30d||0} / -${cons.downgrades_30d||0}`} />
+            ) : null}
           </>
         ) : (
           <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:10, color:'#8a7560', lineHeight:1.5, paddingTop:4 }}>
-            Analyst coverage shown in the Wall Street tab. Named-firm price targets require a data tier upgrade.
+            No analyst coverage available for this ticker.
           </div>
         )}
       </div>
