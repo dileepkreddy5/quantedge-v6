@@ -69,7 +69,10 @@ const PeerPanel: React.FC<Props> = ({ ticker: tickerProp, data: analysisData, on
   // distribution: map peers' values to positions
   const vals = pd.peers.map(valueOf).filter(v => v != null) as number[];
   const minV = Math.min(...vals), maxV = Math.max(...vals), range = (maxV - minV) || 1;
-  const sortedPeers = [...pd.peers].sort((a,b) => ((valueOf(b) ?? -1e9) - (valueOf(a) ?? -1e9)));
+  // The searched ticker is the reference point, not a competitor to itself.
+  // Its standing against this group is already stated in the header percentiles.
+  const sortedPeers = pd.peers.filter((p: any) => !p.is_me)
+    .sort((a,b) => ((valueOf(b) ?? -1e9) - (valueOf(a) ?? -1e9)));
 
   return (
     <div style={{ color: C.text }}>
@@ -188,75 +191,7 @@ const PeerPanel: React.FC<Props> = ({ ticker: tickerProp, data: analysisData, on
         <div style={{ position:'absolute', bottom:4, right:6, fontSize:9, color:C.textDim }}>stronger →</div>
         <div style={{ position:'absolute', top:4, left:'50%', transform:'translateX(-50%)', fontSize:9, color:C.gold }}>● {ticker}</div>
       </div>
-      {eco && eco.movers?.length > 0 && (() => {
-        const floor = eco.significance_floor ?? 0.25;
-        const strength = (c:number) =>
-          c >= 0.6 ? { t:'moves closely', col:C.green }
-          : c >= 0.4 ? { t:'moderate', col:C.gold }
-          : c >= floor ? { t:'loose', col:C.textDim }
-          : { t:'weak — mostly market', col:C.textDim };
-        const top = eco.movers[0]?.correlation ?? 0;
-        const allWeak = top < floor;
-        return (
-          <div style={{ marginTop:22 }}>
-            <div style={{ color:C.gold, fontWeight:700, fontSize:13, marginBottom:4 }}>MOVES WITH THIS STOCK</div>
-            <div style={{ color:C.textDim, fontSize:11, lineHeight:1.55, marginBottom:12 }}>
-              Measured co-movement of daily returns over the past year across {eco.n_compared} companies.
-              This is an observed association, not an asserted business relationship — two stocks may move
-              together because one supplies the other, because they share customers, or simply because both
-              track the market.
-            </div>
 
-            {allWeak && (
-              <div style={{ padding:'10px 12px', background:'rgba(212,149,108,0.05)', borderLeft:`2px solid ${C.gold}`,
-                borderRadius:4, marginBottom:12, fontSize:11.5, color:C.text, lineHeight:1.55 }}>
-                Nothing in the universe moves closely with {ticker} right now — the strongest association is only{' '}
-                {top.toFixed(2)}. Over this window it has been trading on its own news rather than with any group,
-                which usually means company-specific events are dominating.
-              </div>
-            )}
-
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(230px, 1fr))', gap:8 }}>
-              {eco.movers.slice(0,12).map((m:any) => {
-                const s = strength(m.correlation);
-                return (
-                  <div key={m.ticker} style={{ background:'#1a0f0a', borderRadius:6, padding:'9px 11px',
-                    borderLeft:`2px solid ${s.col}55` }}>
-                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline' }}>
-                      <span style={{ fontFamily:"'Fira Code',monospace", fontSize:12, fontWeight:700, color:C.text }}>{m.ticker}</span>
-                      <span style={{ fontFamily:"'Fira Code',monospace", fontSize:13, fontWeight:700, color:s.col }}>
-                        {m.correlation.toFixed(2)}
-                      </span>
-                    </div>
-                    <div style={{ fontSize:10, color:C.textDim, marginTop:2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{m.name}</div>
-                    <div style={{ display:'flex', justifyContent:'space-between', marginTop:4 }}>
-                      <span style={{ fontSize:9, color:s.col }}>{s.t}</span>
-                      <span style={{ fontSize:9, color:C.textDim }}>
-                        {m.same_sector ? 'same industry' : m.sector}
-                        {m.beta_to_this != null ? ` · β ${m.beta_to_this}` : ''}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {eco.inverse?.length > 0 && eco.inverse[0].correlation < -0.15 && (
-              <div style={{ marginTop:14 }}>
-                <div style={{ color:C.gold, fontSize:11, letterSpacing:1, marginBottom:6 }}>MOVES AGAINST IT</div>
-                <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-                  {eco.inverse.filter((m:any)=>m.correlation < -0.15).slice(0,6).map((m:any)=>(
-                    <div key={m.ticker} style={{ background:'#1a0f0a', borderRadius:5, padding:'6px 10px' }}>
-                      <span style={{ fontFamily:"'Fira Code',monospace", fontSize:11, color:C.text }}>{m.ticker}</span>
-                      <span style={{ fontFamily:"'Fira Code',monospace", fontSize:11, color:C.red, marginLeft:8 }}>{m.correlation.toFixed(2)}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        );
-      })()}
 
 
       {/* Peer table */}
