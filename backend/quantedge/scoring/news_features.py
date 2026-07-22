@@ -264,6 +264,17 @@ def compute_news_features(articles, ticker, price_return_30d=None):
                      key=lambda x:-x["_mat"])
         feed_arts=feed_arts+_rest[:6-len(feed_arts)]
     feed_arts=sorted(feed_arts, key=lambda x:(-x["_mat"], -x["dt"].timestamp()))
+    # Sentiment weighted by materiality — the aggregate should reflect the articles
+    # that matter, not be dominated by the filler the ranking already demoted.
+    _mw = [(a["_mat"], a["sval"]) for a in arts if a.get("is_en") and a.get("_mat") is not None]
+    if _mw:
+        _wsum = sum(m for m, _ in _mw) or 1
+        f["material_sentiment"] = round(sum(m * s for m, s in _mw) / _wsum, 4)
+        _top = sorted(_mw, key=lambda x: -x[0])[:10]
+        _tsum = sum(m for m, _ in _top) or 1
+        f["top10_sentiment"] = round(sum(m * s for m, s in _top) / _tsum, 4)
+        f["material_vs_broad_gap"] = round(f["material_sentiment"] - f.get("sentiment_score_mean", 0), 4)
+
     f["_recent_headlines"]=[{"title":a["title"],"sentiment":a["sent"],"reason":a["reason"][:160],
                              "publisher":a["pub"],"date":a["dt"].strftime("%Y-%m-%d"),"url":a["url"],
                              "materiality":a["_mat"],"materiality_why":a["_mat_why"],

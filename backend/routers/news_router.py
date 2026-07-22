@@ -88,7 +88,8 @@ async def compute_news_intelligence(ticker: str, api_key: str) -> Dict[str,Any]:
             "key_metrics":{k:feats.get(k) for k in
                 ["net_sentiment","positive_ratio","negative_ratio","sentiment_trend",
                  "article_count_7d","tier1_source_share","contrarian_signal","fraud_litigation_flag",
-                 "price_return_30d","news_velocity"]}}
+                 "price_return_30d","news_velocity",
+                 "material_sentiment","top10_sentiment","material_vs_broad_gap"]}}
 
 @router.get("/news/{ticker}")
 async def get_news(ticker: str, http_request: Request,
