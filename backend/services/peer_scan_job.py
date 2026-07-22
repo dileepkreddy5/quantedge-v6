@@ -45,7 +45,7 @@ class PeerScanJob:
             try:
                 async with pool.acquire() as conn:
                     urows = await conn.fetch(
-                        "SELECT ticker, name, sic, sic_code, market_cap FROM universe "
+                        "SELECT ticker, name, sic, sic_code, cik, market_cap FROM universe "
                         "WHERE sic IS NOT NULL AND active "
                         "ORDER BY market_cap DESC NULLS LAST LIMIT $1", universe_size)
                 from services.peer_store import is_shell
@@ -54,7 +54,7 @@ class PeerScanJob:
                         continue
                     tickers.append(r["ticker"])
                     meta[r["ticker"]] = {"name": r["name"], "sic": r["sic"],
-                                         "sic_code": r["sic_code"],
+                                         "sic_code": r["sic_code"], "cik": r["cik"],
                                          "market_cap": r["market_cap"]}
                 logger.info(f"universe table supplied {len(tickers)} classified tickers")
             except Exception as e:
@@ -89,7 +89,10 @@ class PeerScanJob:
                     # Only reach for details when the universe table lacks them.
                     details = e if e.get("sic") else await _fetch_details(tk, session, self.api_key)
                     # enrich with fundamental factors from the local bulk companyfacts file
-                    _cik = cik_map.get(tk)
+                    # The universe table already holds CIKs from Polygon's reference
+                    # data; re-deriving them over the API was failing at this scale
+                    # and silently dropping every fundamental factor.
+                    _cik = e.get("cik") or cik_map.get(tk)
                     _mcap_for_fund = details.get("market_cap")
                     if _cik:
                         try:

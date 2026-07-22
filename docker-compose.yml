@@ -50,6 +50,7 @@ services:
       MODEL_DIR:    /app/models
     volumes:
       - model_data:/app/models
+      - edgar_data:/app/data
     depends_on:
       postgres: { condition: service_healthy }
       redis:    { condition: service_healthy }
@@ -88,6 +89,7 @@ services:
     restart: unless-stopped
 
 volumes:
+  edgar_data:
   postgres_data:
   model_data:
   caddy_data:

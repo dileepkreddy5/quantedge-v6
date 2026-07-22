@@ -293,6 +293,21 @@ async def lifespan(app: FastAPI):
             except Exception as e:
                 logger.error(f"universe refresh failed: {e}")
 
+        # The EDGAR bulk file has silently vanished on rebuild more than once,
+        # taking every fundamental factor with it. Failing loudly beats writing
+        # empty peer stats and leaving five dashes on the page as the only clue.
+        try:
+            import os as _os
+            _zp = "/app/data/edgar_bulk/companyfacts.zip"
+            if _os.path.exists(_zp):
+                _sz = _os.path.getsize(_zp) / 1e9
+                logger.info(f"EDGAR bulk file present ({_sz:.2f}GB)")
+            else:
+                logger.error("EDGAR bulk file MISSING — peer and multibagger "
+                             "fundamentals will be empty until it is downloaded")
+        except Exception:
+            pass
+
         if getattr(app.state, "db", None):
             scheduler.add_job(
                 _sync_bars,
