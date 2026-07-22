@@ -31,7 +31,7 @@ const PeerPanel: React.FC<Props> = ({ ticker: tickerProp, data: analysisData, on
   const [err, setErr] = useState(false);
   const [factorKey, setFactorKey] = useState('mom_3m');
   const [scoreData, setScoreData] = useState<any>(null);
-  const [eco, setEco] = useState<any>(null);
+  const [rel, setRel] = useState<any>(null);
 
   const load = useCallback(async () => {
     if (!ticker) { setLoading(false); return; }
@@ -44,9 +44,9 @@ const PeerPanel: React.FC<Props> = ({ ticker: tickerProp, data: analysisData, on
         if (sr.data?.data?.available) setScoreData(sr.data.data);
       } catch { /* score is optional enhancement */ }
       try {
-        const er = await api.get(`/api/v6/ecosystem/${ticker}`);
-        if (er.data?.data?.available) setEco(er.data.data);
-      } catch { /* correlation view is optional */ }
+        const rr = await api.get(`/api/v6/relationships/${ticker}`);
+        if (rr.data?.data?.available) setRel(rr.data.data);
+      } catch { /* filing coverage is uneven */ }
     } catch { setErr(true); }
     finally { setLoading(false); }
   }, [ticker]);
@@ -113,23 +113,45 @@ const PeerPanel: React.FC<Props> = ({ ticker: tickerProp, data: analysisData, on
         Percentile = share of sector peers this stock ranks above on each factor. Higher is stronger. Contextual, not predictive.
       </div>
 
-      {/* Percentile bars (all factors) */}
-      <div style={{ display:'flex', flexDirection:'column', gap:10, marginBottom:24 }}>
-        {pd.factors.map(f => (
-          <div key={f.key} style={{ display:'flex', alignItems:'center', gap:12 }}>
-            <div style={{ width:120, fontSize:12, color:C.text, textAlign:'right' }}>{f.label}</div>
-            <div style={{ flex:1, position:'relative', height:22, background:'#120a07', borderRadius:5, overflow:'hidden' }}>
-              <div style={{ position:'absolute', left:0, top:0, bottom:0, width:`${f.percentile}%`, background:`${pctColor(f.percentile)}33`, borderRight:`2px solid ${pctColor(f.percentile)}` }} />
-              <div style={{ position:'absolute', left:8, top:0, bottom:0, display:'flex', alignItems:'center', fontSize:11, color:C.textDim }}>
-                val {f.value} · median {f.peer_median}
-              </div>
-            </div>
-            <div style={{ width:54, textAlign:'right', fontFamily:"'Fira Code',monospace", fontWeight:700, fontSize:14, color:pctColor(f.percentile) }}>
-              {f.percentile}%
-            </div>
+      {/* What actually separates this company from its group */}
+      {(() => {
+        const ff = pd.fund_factors || [];
+        const get = (k: string) => ff.find((x: any) => x.key === k);
+        const fmtPct = (v: any) => v == null ? null : `${(Number(v) * 100).toFixed(1)}%`;
+        const strengths = ff.filter((x: any) => x.percentile >= 70)
+                            .sort((a: any, b: any) => b.percentile - a.percentile);
+        const weaknesses = ff.filter((x: any) => x.percentile <= 30)
+                             .sort((a: any, b: any) => a.percentile - b.percentile);
+        const pe = get('fund_pe');
+        const mom = (pd.factors || []).find((x: any) => x.key === 'mom_3m');
+        if (!ff.length) return null;
+        const phrase = (x: any) => `${x.label.replace(' (cheap)','')} ${x.value} against a peer median of ${x.peer_median}`;
+        return (
+          <div style={{ background:'#241510', border:`1px solid ${C.border}`, borderRadius:8,
+            padding:'14px 18px', marginBottom:22, lineHeight:1.65, fontSize:12.5, color:C.text }}>
+            {strengths.length > 0 && (
+              <>Stands out on <b style={{color:C.green}}>{strengths.slice(0,3).map((x:any)=>x.label.replace(' (cheap)','').toLowerCase()).join(', ')}</b>
+                {' '}— {phrase(strengths[0])}. </>
+            )}
+            {weaknesses.length > 0 && (
+              <>Weakest on <b style={{color:C.red}}>{weaknesses.slice(0,2).map((x:any)=>x.label.replace(' (cheap)','').toLowerCase()).join(' and ')}</b>
+                {' '}— {phrase(weaknesses[0])}. </>
+            )}
+            {pe && pe.value != null && pe.peer_median != null && Number(pe.peer_median) > 0 && (
+              <>The market prices it at <b style={{color: Number(pe.value) > Number(pe.peer_median) * 1.3 ? C.red : C.textDim}}>
+                {(Number(pe.value) / Number(pe.peer_median)).toFixed(1)}×</b> the peer P/E
+                {Number(pe.value) > Number(pe.peer_median) * 1.3
+                  ? ' — the premium is the trade-off for the strengths above.'
+                  : Number(pe.value) < Number(pe.peer_median) * 0.7
+                    ? ' — cheaper than the group, which is worth understanding before assuming it is a bargain.'
+                    : ', broadly in line with the group.'} </>
+            )}
+            {mom && mom.percentile != null && (
+              <>Recent three-month momentum sits at the <b>{mom.percentile}th percentile</b> of the group.</>
+            )}
           </div>
-        ))}
-      </div>
+        );
+      })()}
 
       {/* Fundamental percentile bars (quality / profitability / growth / valuation vs peers) */}
       {pd.fund_factors && pd.fund_factors.length > 0 && (
@@ -164,35 +186,54 @@ const PeerPanel: React.FC<Props> = ({ ticker: tickerProp, data: analysisData, on
         </>
       )}
 
-      {/* Interactive distribution strip */}
-      <div style={{ marginBottom:8, display:'flex', gap:6, flexWrap:'wrap', alignItems:'center' }}>
-        <span style={{ fontSize:11, color:C.textDim, marginRight:4 }}>DISTRIBUTION:</span>
-        {['mom_3m','mom_6m','pct_above_ma200'].map(k => (
-          <button key={k} onClick={() => setFactorKey(k)}
-            style={{ fontSize:10, padding:'4px 9px', borderRadius:4, cursor:'pointer',
-              border:`1px solid ${factorKey===k?C.gold:C.border}`, background: factorKey===k?`${C.gold}18`:'transparent',
-              color: factorKey===k?C.gold:C.textDim, fontFamily:"'Fira Code',monospace" }}>
-            {factorLabels[k]}
-          </button>
-        ))}
-      </div>
-      <div style={{ position:'relative', height:54, background:'#120a07', borderRadius:6, marginBottom:24, padding:'0 2px' }}>
-        {pd.peers.map((p,i) => {
-          const v = valueOf(p); if (v == null) return null;
-          const x = ((v - minV) / range) * 96 + 2;
-          const isMe = p.is_me;
-          return <div key={i} title={`${p.ticker}: ${v}`} style={{
-            position:'absolute', left:`${x}%`, top: isMe?6:'50%', transform: isMe?'translateX(-50%)':'translate(-50%,-50%)',
-            width: isMe?12:6, height: isMe?12:6, borderRadius:'50%',
-            background: isMe?C.me:`${C.textDim}99`, border: isMe?`2px solid ${C.gold}`:'none',
-            zIndex: isMe?5:1, boxShadow: isMe?`0 0 8px ${C.gold}`:'none' }} />;
-        })}
-        <div style={{ position:'absolute', bottom:4, left:6, fontSize:9, color:C.textDim }}>weaker</div>
-        <div style={{ position:'absolute', bottom:4, right:6, fontSize:9, color:C.textDim }}>stronger →</div>
-        <div style={{ position:'absolute', top:4, left:'50%', transform:'translateX(-50%)', fontSize:9, color:C.gold }}>● {ticker}</div>
-      </div>
-
-
+      {rel && (() => {
+        const groups = [
+          { key:'supplies_this',    label:'SUPPLIES THIS COMPANY',
+            note:'Companies whose own filings name this one as a customer — they benefit when it grows.' },
+          { key:'buys_from',        label:'NAMED AS ITS CUSTOMERS',
+            note:'Companies this one describes buying from or selling to in its filing.' },
+          { key:'competitors',      label:'NAMED AS COMPETITORS',
+            note:'Rivals this company identifies in its own filing.' },
+          { key:'named_as_rival_by',label:'NAME IT AS A RIVAL',
+            note:'Companies that list this one as competition.' },
+        ].filter(g => (rel[g.key] || []).length > 0);
+        if (!groups.length) return null;
+        return (
+          <div style={{ marginBottom:26 }}>
+            <div style={{ color:C.gold, fontWeight:700, fontSize:13, marginBottom:4 }}>DISCLOSED RELATIONSHIPS</div>
+            <div style={{ fontSize:11, color:C.textDim, marginBottom:14, lineHeight:1.55 }}>
+              Read from 10-K filings, with the disclosing sentence kept as evidence. Suppliers must report customer
+              concentration, so they name their buyers; the buyers rarely name anyone. Absence here means nothing was
+              disclosed, not that no relationship exists.
+            </div>
+            {groups.map(g => (
+              <div key={g.key} style={{ marginBottom:14 }}>
+                <div style={{ fontSize:10, color:C.gold, letterSpacing:1.5, marginBottom:2 }}>{g.label}</div>
+                <div style={{ fontSize:10, color:C.textDim, marginBottom:7 }}>{g.note}</div>
+                <div style={{ display:'flex', gap:7, flexWrap:'wrap' }}>
+                  {(rel[g.key] || []).slice(0,14).map((x:any,i:number) => (
+                    <div key={i} title={x.evidence || ''}
+                      onClick={() => x.ticker && onAnalyze && onAnalyze(x.ticker)}
+                      style={{ background:'#1a0f0a', border:`1px solid ${C.border}`, borderRadius:5,
+                        padding:'6px 10px', cursor: x.ticker && onAnalyze ? 'pointer':'default', maxWidth:230 }}>
+                      <div style={{ fontFamily:"'Fira Code',monospace", fontSize:11,
+                        color: x.ticker ? C.gold : C.textDim }}>
+                        {x.ticker || '—'}
+                      </div>
+                      <div style={{ fontSize:10, color:C.text, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                        {x.name}
+                      </div>
+                      {x.filing_date && (
+                        <div style={{ fontSize:8.5, color:C.textDim }}>{x.filing_date}</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
 
       {/* Peer table */}
       <div style={{ color:C.gold, fontWeight:700, fontSize:13, marginBottom:8 }}>PEERS — RANKED BY {factorLabels[factorKey].toUpperCase()}</div>
