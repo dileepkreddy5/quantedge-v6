@@ -320,6 +320,7 @@ export function MLModelsPanel({ data }: { data: any }) {
             <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:12, color:'#d4c4b0', lineHeight:1.5 }}>
               {majority} of {nTotal} models agree on a {direction.toLowerCase()} 21-day lean
               {mlCollapsed ? ' (the three return-forecasting models produced near-identical output — a sign they found no distinguishing signal — so they count once, not three times)' : ''}
+              {mlCollapsed ? ' (the three return-forecasting models produced near-identical output — a sign they found no distinguishing signal — so they count once, not three times)' : ''}
               {nTotal - majority > 0 ? `, ${nTotal - majority} disagree` : ''}.
               {' '}Conviction measures <b style={{color:'#d4c4b0'}}>agreement across models</b>, not predictive accuracy.
             </div>
