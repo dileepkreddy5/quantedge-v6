@@ -246,8 +246,10 @@ export function MLModelsPanel({ data }: { data: any }) {
         <Card style={{ gridColumn:'span 3' }}>
           <SectionTitle>MULTI-HORIZON ML FORECAST — CROSS-SECTIONAL PANEL MODEL</SectionTitle>
           <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:11, color:'#8a7560', marginBottom:12, lineHeight:1.5 }}>
-            Gradient-boosted ensemble (XGBoost + LightGBM) trained cross-sectionally on the US universe with point-in-time fundamentals.
-            Each horizon independently validated out-of-sample. Predictions are model-implied return leans, honestly labeled by measured reliability.
+            Gradient-boosted ensemble (XGBoost + LightGBM) trained cross-sectionally on the US universe with point-in-time
+            fundamentals. Struck-through horizons failed validation — with five years of history there are too few
+            independent windows at those lengths to measure whether the model has any skill, so those figures are shown
+            only for completeness and should not be read as forecasts.
           </div>
           <div style={{ display:'grid', gridTemplateColumns:'repeat(6, 1fr)', gap:8 }}>
             {['5d','10d','21d','63d','126d','252d'].map((hk) => {
@@ -265,9 +267,15 @@ export function MLModelsPanel({ data }: { data: any }) {
               const badgeCol = strong ? '#22c55e' : (reliableFlag && icNum != null && icNum > 0.02) ? '#eab308' : '#8a7560';
               const badgeTxt = strong ? 'VALIDATED' : (reliableFlag && icNum != null && icNum > 0.02) ? 'MODERATE' : (reliableFlag ? 'NO EDGE' : 'UNVALIDATED');
               return (
-                <div key={hk} style={{ border:'1px solid #3a2f28', borderRadius:8, padding:'10px 8px', background:'#1a1512', textAlign:'center' }}>
+                <div key={hk} style={{ border:'1px solid #3a2f28', borderRadius:8, padding:'10px 8px',
+                  background:'#1a1512', textAlign:'center', opacity: reliableFlag ? 1 : 0.45 }}>
                   <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:10, color:'#8a7560', letterSpacing:1, marginBottom:6 }}>{h.label}</div>
-                  <div style={{ fontFamily:"'Fira Code',monospace", fontSize:20, fontWeight:800, color:col, lineHeight:1 }}>
+                  {/* An unvalidated horizon rests on a single independent window. Rendering
+                      it at the same weight as a measured one invites the reader to trust a
+                      number the data cannot support, so it is struck through and greyed. */}
+                  <div style={{ fontFamily:"'Fira Code',monospace", fontSize: reliableFlag ? 20 : 15,
+                    fontWeight:800, color: reliableFlag ? col : '#6b5d52', lineHeight:1,
+                    textDecoration: reliableFlag ? 'none' : 'line-through' }}>
                     {pv > 0 ? '+' : ''}{pv.toFixed(1)}%
                   </div>
                   <div style={{ fontFamily:"'Fira Code',monospace", fontSize:9, color:'#8a7560', marginTop:6 }}>
