@@ -339,14 +339,14 @@ async def lifespan(app: FastAPI):
                         LEFT JOIN (SELECT DISTINCT src_ticker FROM relationships) r
                           ON r.src_ticker = u.ticker
                         WHERE u.cik IS NOT NULL AND u.active AND r.src_ticker IS NULL
-                        ORDER BY u.market_cap DESC NULLS LAST LIMIT 120
+                        ORDER BY u.market_cap DESC NULLS LAST LIMIT 60
                     """)
                 ok = 0
                 for row in rows:
                     res = await ex.extract_for(row["ticker"], row["cik"])
                     if res.get("found"):
                         ok += 1
-                    await asyncio.sleep(1.2)   # well inside SEC's rate limit
+                    await asyncio.sleep(2.5)   # each ticker also pulls a multi-MB filing
                 logger.info(f"relationships: {ok}/{len(rows)} tickers yielded links")
             except Exception as e:
                 logger.error(f"relationship extraction failed: {e}")

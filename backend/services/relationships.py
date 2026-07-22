@@ -129,7 +129,13 @@ class RelationshipExtractor:
     async def _latest_10k(self, client: httpx.AsyncClient, cik: str) -> Optional[Tuple[str, str, str]]:
         c10 = str(cik).zfill(10)
         r = await client.get(f"https://data.sec.gov/submissions/CIK{c10}.json")
+        if r.status_code == 429:
+            # SEC throttles for minutes at a time. Backing off once beats silently
+            # recording the ticker as having no filing and never revisiting it.
+            await asyncio.sleep(10)
+            r = await client.get(f"https://data.sec.gov/submissions/CIK{c10}.json")
         if r.status_code != 200:
+            logger.warning(f"submissions CIK{c10}: HTTP {r.status_code}")
             return None
         rec = (r.json().get("filings") or {}).get("recent") or {}
         for i, form in enumerate(rec.get("form", [])):
