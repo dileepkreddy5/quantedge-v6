@@ -500,6 +500,82 @@ class QuantEdgeAnalyzerV6:
             except Exception as _e:
                 logger.info(f"volatility intel skipped: {_e}")
 
+            # ── Regime context: how long in this state, and what happened last time? ──
+            # The HMM gives the current state; this reconstructs a comparable history
+            # from the same features so the current reading has something to sit against.
+            try:
+                import numpy as _np
+                _c3 = price_data["close"].dropna()
+                if len(_c3) >= 300:
+                    _r3 = _c3.pct_change().dropna()
+                    _v3 = (_r3.rolling(21).std() * _np.sqrt(252)).dropna()
+                    _t3 = (_c3 / _c3.rolling(63).mean() - 1).dropna()
+                    _idx = _v3.index.intersection(_t3.index)
+                    _v3, _t3 = _v3.loc[_idx], _t3.loc[_idx]
+                    _vmed = float(_v3.median())
+
+                    def _state(v, t):
+                        hi = v > _vmed
+                        if t > 0.02:   return "BULL_HIGH_VOL" if hi else "BULL_LOW_VOL"
+                        if t < -0.02:  return "BEAR_HIGH_VOL" if hi else "BEAR_LOW_VOL"
+                        return "MEAN_REVERT"
+
+                    _lab = [_state(float(_v3.loc[d]), float(_t3.loc[d])) for d in _idx]
+                    _fwd = _c3.pct_change().shift(-1).reindex(_idx)
+
+                    # Statistics conditional on each regime
+                    _stats = {}
+                    for _s in set(_lab):
+                        _m = _np.array([l == _s for l in _lab])
+                        _fr = _fwd.values[_m]
+                        _fr = _fr[~_np.isnan(_fr)]
+                        if len(_fr) >= 20:
+                            _stats[_s] = {
+                                "days_observed": int(_m.sum()),
+                                "share_of_time_pct": round(float(_m.mean()*100), 1),
+                                "avg_daily_return_pct": round(float(_np.mean(_fr)*100), 3),
+                                "annualised_return_pct": round(float(_np.mean(_fr)*252*100), 1),
+                                "daily_vol_pct": round(float(_np.std(_fr)*100), 2),
+                                "win_rate_pct": round(float((_fr > 0).mean()*100), 1),
+                                "worst_day_pct": round(float(_np.min(_fr)*100), 2),
+                                "best_day_pct": round(float(_np.max(_fr)*100), 2),
+                            }
+
+                    # Segment into episodes
+                    _eps, _cs3, _cl3, _n3 = [], _idx[0], _lab[0], 1
+                    for _i in range(1, len(_lab)):
+                        if _lab[_i] != _cl3:
+                            if _n3 >= 5:
+                                _p0, _p1 = float(_c3.loc[_cs3]), float(_c3.loc[_idx[_i-1]])
+                                _eps.append({"regime": _cl3, "start": str(_cs3)[:10], "end": str(_idx[_i-1])[:10],
+                                             "days": _n3, "return_pct": round((_p1/_p0-1)*100, 1)})
+                            _cl3, _cs3, _n3 = _lab[_i], _idx[_i], 1
+                        else:
+                            _n3 += 1
+                    _p0, _p1 = float(_c3.loc[_cs3]), float(_c3.iloc[-1])
+                    _eps.append({"regime": _cl3, "start": str(_cs3)[:10], "end": str(_idx[-1])[:10],
+                                 "days": _n3, "return_pct": round((_p1/_p0-1)*100, 1), "ongoing": True})
+
+                    _cur_ep = _eps[-1]
+                    _same = [e for e in _eps[:-1] if e["regime"] == _cur_ep["regime"]]
+                    _med_dur = float(_np.median([e["days"] for e in _same])) if _same else None
+
+                    result["regime_context"] = {
+                        "inferred_state": _cl3,
+                        "days_in_current": _cur_ep["days"],
+                        "current_episode_return_pct": _cur_ep["return_pct"],
+                        "median_duration_for_state": round(_med_dur, 0) if _med_dur else None,
+                        "past_episodes_of_state": len(_same),
+                        "conditional_stats": _stats,
+                        "episodes": _eps[-14:],
+                        "vol_threshold_pct": round(_vmed*100, 1),
+                        "note": ("Regimes are inferred from trend and volatility on the same price history the HMM uses. "
+                                 "They are a classification of past behaviour, not a forecast — but knowing how this stock "
+                                 "has behaved in similar conditions is more useful than the current label alone."),
+                    }
+            except Exception as _e:
+                logger.info(f"regime context skipped: {_e}")
+
             # ── LAYER 2: FEATURES ─────────────────────────────
             try:
                 feature_matrix = self.feature_pipeline.build_feature_matrix(
