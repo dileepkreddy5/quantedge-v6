@@ -32,11 +32,15 @@ const PeerPanel: React.FC<Props> = ({ ticker: tickerProp, data: analysisData, on
   const [factorKey, setFactorKey] = useState('mom_3m');
   const [scoreData, setScoreData] = useState<any>(null);
   const [rel, setRel] = useState<any>(null);
+  const [relPerf, setRelPerf] = useState<any>(null);
 
   const load = useCallback(async () => {
     if (!ticker) { setLoading(false); return; }
     setLoading(true); setErr(false);
     try {
+      api.get(`/api/v6/peers/${ticker}/relative`)
+        .then(r => setRelPerf(r.data?.data?.available ? r.data.data : null))
+        .catch(() => setRelPerf(null));
       const res = await api.get(`/api/v6/peers/${ticker}`);
       setPd(res.data?.data || null);
       try {
@@ -221,6 +225,124 @@ const PeerPanel: React.FC<Props> = ({ ticker: tickerProp, data: analysisData, on
               <>Recent three-month momentum sits at the <b>{mom.percentile}th percentile</b> of the group.</>
             )}
           </div>
+        );
+      })()}
+
+      {relPerf && relPerf.series?.length > 20 && (() => {
+        const W = 900, H = 260, PAD = { l: 52, r: 16, t: 14, b: 26 };
+        const s = relPerf.series;
+        const vals = s.flatMap((p:any) => [p.t, p.med, p.p25, p.p75].filter((v:any)=>v!=null));
+        const lo = Math.min(...vals), hi = Math.max(...vals);
+        const pad = (hi - lo) * 0.08 || 1;
+        const yLo = lo - pad, yHi = hi + pad;
+        const sx = (i:number) => PAD.l + (i/(s.length-1)) * (W-PAD.l-PAD.r);
+        const sy = (v:number) => H-PAD.b - ((v-yLo)/(yHi-yLo)) * (H-PAD.t-PAD.b);
+        const path = (k:string) => s.map((p:any,i:number)=> (p[k]==null?null:`${i===0?'M':'L'}${sx(i).toFixed(1)},${sy(p[k]).toFixed(1)}`)).filter(Boolean).join(' ');
+        const band = s.map((p:any,i:number)=>`${i===0?'M':'L'}${sx(i).toFixed(1)},${sy(p.p75).toFixed(1)}`).join(' ')
+          + ' ' + s.slice().reverse().map((p:any,i:number)=>`L${sx(s.length-1-i).toFixed(1)},${sy(p.p25).toFixed(1)}`).join(' ') + ' Z';
+        const last = s[s.length-1];
+        const ahead = last.t != null && last.t > last.med;
+        return (
+          <>
+            <div style={{ color:C.gold, fontWeight:700, fontSize:13, marginBottom:4, marginTop:4 }}>PERFORMANCE VS PEER GROUP</div>
+            <div style={{ fontSize:11, color:C.textDim, marginBottom:10, fontStyle:'italic' }}>
+              Cumulative return since {s[0].d}, rebased to zero. Shaded band spans the 25th-75th percentile of {relPerf.n_peers} peers.
+              A stock rising with its industry is not outperforming it.
+            </div>
+            <svg viewBox={`0 0 ${W} ${H}`} style={{ width:'100%', display:'block', marginBottom:8 }}>
+              <line x1={PAD.l} y1={sy(0)} x2={W-PAD.r} y2={sy(0)} stroke={C.border} strokeDasharray="3 4" />
+              <path d={band} fill="rgba(212,149,108,0.10)" stroke="none" />
+              <path d={path('med')} fill="none" stroke="rgba(212,149,108,0.75)" strokeWidth={1.4} />
+              <path d={path('t')} fill="none" stroke={C.gold} strokeWidth={2} />
+              {[yLo, (yLo+yHi)/2, yHi].map((v,i)=>(
+                <text key={i} x={PAD.l-8} y={sy(v)+3} fill={C.textDim} fontSize="10" fontFamily="monospace" textAnchor="end">
+                  {v>=0?'+':''}{v.toFixed(0)}%
+                </text>
+              ))}
+              <text x={PAD.l} y={H-8} fill={C.textDim} fontSize="9.5" fontFamily="monospace">{s[0].d}</text>
+              <text x={W-PAD.r} y={H-8} fill={C.textDim} fontSize="9.5" fontFamily="monospace" textAnchor="end">{last.d}</text>
+              <text x={W-PAD.r-4} y={sy(last.t)-6} fill={C.gold} fontSize="11" fontFamily="monospace" textAnchor="end" fontWeight="700">
+                {ticker} {last.t>=0?'+':''}{last.t?.toFixed(0)}%
+              </text>
+              <text x={W-PAD.r-4} y={sy(last.med)+14} fill="rgba(212,149,108,0.8)" fontSize="10" fontFamily="monospace" textAnchor="end">
+                peer median {last.med>=0?'+':''}{last.med.toFixed(0)}%
+              </text>
+            </svg>
+            <div style={{ display:'grid', gridTemplateColumns:`repeat(${relPerf.windows.length}, 1fr)`, gap:8, marginBottom:8 }}>
+              {relPerf.windows.map((w:any)=>(
+                <div key={w.window} style={{ background:'rgba(212,149,108,0.04)', borderRadius:4, padding:'8px 10px' }}>
+                  <div style={{ fontFamily:'monospace', fontSize:9, color:C.textDim, letterSpacing:1 }}>{w.window}</div>
+                  <div style={{ fontFamily:'monospace', fontSize:15, fontWeight:700, marginTop:2,
+                    color: w.relative_pts>=0 ? C.green : C.red }}>
+                    {w.relative_pts>=0?'+':''}{w.relative_pts}pts
+                  </div>
+                  <div style={{ fontFamily:'monospace', fontSize:9.5, color:C.textDim }}>
+                    {w.target_pct>=0?'+':''}{w.target_pct}% vs {w.peer_median_pct>=0?'+':''}{w.peer_median_pct}%
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{ fontSize:10.5, color:C.text, marginBottom:24, lineHeight:1.5 }}>
+              {ahead ? `${ticker} is ahead of the group over the full window` : `${ticker} trails the group over the full window`}
+              {relPerf.windows.length && relPerf.windows[0].relative_pts != null
+                ? `, and ${relPerf.windows[0].relative_pts >= 0 ? 'ahead' : 'behind'} by ${Math.abs(relPerf.windows[0].relative_pts)}pts over the last month.`
+                : '.'}
+              {' '}{relPerf.note}
+            </div>
+          </>
+        );
+      })()}
+
+      {/* Growth ranking against the ten largest peers */}
+      {pd.peers && pd.peers.length > 2 && (() => {
+        const rows = pd.peers
+          .filter(p => p.revenue_growth != null && p.market_cap != null)
+          .sort((a, b) => (b.market_cap || 0) - (a.market_cap || 0))
+          .slice(0, 10)
+          .sort((a, b) => (b.revenue_growth || 0) - (a.revenue_growth || 0));
+        if (rows.length < 3) return null;
+        const meIn = rows.some(r => r.is_me);
+        const meRow = pd.peers.find(p => p.is_me && p.revenue_growth != null);
+        const all = meIn || !meRow ? rows : [...rows, meRow].sort((a,b)=>(b.revenue_growth||0)-(a.revenue_growth||0));
+        const vals = all.map(r => r.revenue_growth as number);
+        const lo = Math.min(0, ...vals), hi = Math.max(...vals);
+        const span = (hi - lo) || 1;
+        const zero = ((0 - lo) / span) * 100;
+        const meRank = all.findIndex(r => r.is_me) + 1;
+
+        return (
+          <>
+            <div style={{ color:C.gold, fontWeight:700, fontSize:13, marginBottom:4, marginTop:4 }}>GROWTH VS LARGEST RIVALS</div>
+            <div style={{ fontSize:11, color:C.textDim, marginBottom:10, fontStyle:'italic' }}>
+              Revenue growth for the ten biggest companies in the group, ranked.
+              {meRank > 0 ? ` ${ticker} places ${meRank} of ${all.length}.` : ''}
+            </div>
+            <div style={{ marginBottom:24 }}>
+              {all.map(r => {
+                const v = r.revenue_growth as number;
+                const w = (Math.abs(v) / span) * 100;
+                const left = v >= 0 ? zero : zero - w;
+                return (
+                  <div key={r.ticker} title={`${r.ticker} — ${r.name}\ngrowth ${(v*100).toFixed(1)}%  ·  cap ${fmtCap(r.market_cap)}`}
+                    style={{ display:'grid', gridTemplateColumns:'58px 1fr 72px 62px', gap:10, alignItems:'center', marginBottom:4, cursor:'default' }}>
+                    <span style={{ fontFamily:'monospace', fontSize:11, fontWeight: r.is_me?700:400, color: r.is_me?C.gold:C.text }}>{r.ticker}</span>
+                    <div style={{ position:'relative', height:16, background:'rgba(212,149,108,0.05)', borderRadius:2 }}>
+                      <div style={{ position:'absolute', left:`${zero}%`, top:0, bottom:0, width:1, background:C.border }} />
+                      <div style={{ position:'absolute', left:`${left}%`, width:`${w}%`, top:3, bottom:3, borderRadius:2,
+                        background: r.is_me ? C.gold : v>=0 ? 'rgba(34,197,94,0.45)' : 'rgba(239,68,68,0.45)' }} />
+                    </div>
+                    <span style={{ fontFamily:'monospace', fontSize:11, textAlign:'right', color: r.is_me?C.gold:(v>=0?C.green:C.red) }}>
+                      {v>=0?'+':''}{(v*100).toFixed(1)}%
+                    </span>
+                    <span style={{ fontFamily:'monospace', fontSize:10, textAlign:'right', color:C.textDim }}>{fmtCap(r.market_cap)}</span>
+                  </div>
+                );
+              })}
+              <div style={{ fontSize:10, color:C.textDim, marginTop:8, fontFamily:'monospace' }}>
+                Ten largest of {pd.peers.length} peers by market cap · hover a row for detail
+              </div>
+            </div>
+          </>
         );
       })()}
 

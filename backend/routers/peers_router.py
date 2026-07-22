@@ -47,6 +47,108 @@ def _percentile(value: float, population: List[float]) -> float:
     return round(pct, 1)
 
 
+@router.get("/peers/{ticker}/relative")
+async def get_peer_relative(
+    ticker: str,
+    http_request: Request,
+    current_user: Optional[CognitoUser] = Depends(get_optional_user),
+):
+    """
+    Cumulative return of the ticker against its peer group over time.
+
+    Every other figure on the Peers tab is a snapshot: today's margin, today's
+    percentile. None of them say whether the position is improving or eroding.
+    A stock up 40% while its industry is up 45% is losing ground, and no
+    single-name chart shows that.
+
+    Returns the target's rebased cumulative return alongside the peer median and
+    the 25th/75th percentile band, plus per-window relative figures.
+    """
+    ticker = ticker.upper().strip()
+    if not ticker.replace("-", "").replace(".", "").isalnum() or len(ticker) > 10:
+        raise HTTPException(422, "Invalid ticker")
+
+    store = getattr(http_request.app.state, "peer_store", None)
+    if store is None:
+        raise HTTPException(503, "peer store unavailable")
+    meta = await store.get_peers(ticker)
+    if not meta.get("available", True) or not meta.get("peers"):
+        return {"data": {"available": False, "reason": meta.get("reason", "no peer group")}}
+
+    tickers = sorted({p["ticker"] for p in meta["peers"]} | {ticker})
+    pool = http_request.app.state.db
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT ticker, d, c FROM daily_bars WHERE ticker = ANY($1::text[]) ORDER BY d",
+            list(tickers))
+    if not rows:
+        return {"data": {"available": False, "reason": "no price history"}}
+
+    import pandas as _pd
+    df = _pd.DataFrame([(r["ticker"], r["d"], float(r["c"])) for r in rows],
+                       columns=["ticker", "d", "c"])
+    wide = df.pivot(index="d", columns="ticker", values="c").sort_index().ffill()
+    if ticker not in wide.columns or len(wide) < 30:
+        return {"data": {"available": False, "reason": "insufficient overlapping history"}}
+
+    WINDOWS = [("1M", 21), ("3M", 63), ("6M", 126), ("1Y", 252), ("2Y", 504)]
+    windows = []
+    for label, n in WINDOWS:
+        if len(wide) < n + 1:
+            continue
+        seg = wide.iloc[-(n + 1):]
+        # A peer that listed part-way through the window would rebase off a
+        # forward-filled value and drag the median toward zero. Require a real
+        # price at the window start.
+        valid = [c for c in seg.columns if _pd.notna(seg[c].iloc[0]) and _pd.notna(seg[c].iloc[-1])]
+        if ticker not in valid or len(valid) < 3:
+            continue
+        rets = {c: float(seg[c].iloc[-1] / seg[c].iloc[0] - 1) for c in valid}
+        peer_rets = sorted(v for k, v in rets.items() if k != ticker)
+        med = peer_rets[len(peer_rets) // 2] if peer_rets else None
+        windows.append({
+            "window": label,
+            "target_pct": round(rets[ticker] * 100, 2),
+            "peer_median_pct": round(med * 100, 2) if med is not None else None,
+            "relative_pts": round((rets[ticker] - med) * 100, 2) if med is not None else None,
+            "n_peers": len(peer_rets),
+        })
+
+    # Series for the chart: longest window that has data.
+    span = min(len(wide) - 1, 504)
+    seg = wide.iloc[-(span + 1):]
+    valid = [c for c in seg.columns if _pd.notna(seg[c].iloc[0])]
+    base = seg[valid].iloc[0]
+    rebased = (seg[valid] / base - 1) * 100
+    peer_cols = [c for c in valid if c != ticker]
+    series = []
+    for d, row in rebased.iterrows():
+        pv = sorted(float(row[c]) for c in peer_cols if _pd.notna(row[c]))
+        if not pv:
+            continue
+        series.append({
+            "d": str(d),
+            "t": round(float(row[ticker]), 2) if ticker in row and _pd.notna(row[ticker]) else None,
+            "med": round(pv[len(pv) // 2], 2),
+            "p25": round(pv[int(len(pv) * 0.25)], 2),
+            "p75": round(pv[min(len(pv) - 1, int(len(pv) * 0.75))], 2),
+        })
+
+    return {"data": {
+        "available": True,
+        "ticker": ticker,
+        "group_label": meta.get("bucket"),
+        "n_peers": len(peer_cols),
+        "n_sessions": len(series),
+        "series": series,
+        "windows": windows,
+        "note": ("Cumulative return rebased to zero at the window start. The band "
+                 "spans the 25th to 75th percentile of the peer group. With a small "
+                 "group the median moves in steps and the band is wide — read the "
+                 "direction of the gap, not its precise width."),
+    }}
+
+
 @router.get("/peers/{ticker}")
 async def get_peers(
     ticker: str,

@@ -127,6 +127,11 @@ export default function NewsPanel({ ticker, data }:{ ticker:string; data?:any })
       </div>
 
       {(() => {
+        // The parent keeps `data` across ticker changes, so this block would
+        // render the previous company's earnings until the new analyze lands.
+        // META showed GOOG's 2.01-vs-1.9884 for exactly that reason.
+        if (data?.analyst_ratings?.ticker &&
+            data.analyst_ratings.ticker.toUpperCase() !== ticker.toUpperCase()) return null;
         const er = data?.analyst_ratings?.earnings;
         const an = data?.analyst_ratings?.analytics;
         const hist = (er?.surprise_history || []).filter((s:any)=>s?.surprise_percent!=null);
