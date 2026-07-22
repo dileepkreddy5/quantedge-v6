@@ -399,6 +399,7 @@ export default function Dashboard() {
           <>
             {/* ── Ticker header ── */}
             <TickerHeader data={data} ticker={ticker} />
+            <StockSnapshot data={data} />
 
             {/* ── Tabs ── */}
             <div className="qe-tabscroll" style={{ borderBottom: '1px solid rgba(212,149,108,0.12)', marginBottom: 20 }}>
@@ -532,6 +533,83 @@ function TickerHeader({ data, ticker }: { data: any; ticker: string }) {
       {/* Data quality */}
       <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 9, color: '#8a7560', letterSpacing: 1 }}>
         DATA {data.data_quality?.score || 0}% · {data.analysis_duration_seconds || 0}s
+      </div>
+    </div>
+  );
+}
+
+// ── Institutional Snapshot (fundamentals · valuation · positioning · street) ──
+function StockSnapshot({ data }: { data: any }) {
+  const f = data.fundamentals || {};
+  const ar = data.analyst_ratings || {};
+  const price = data.price ?? 0;
+  const hi = data.week_52_high ?? f.week_52_high;
+  const lo = data.week_52_low ?? f.week_52_low;
+  const rangePos = (hi && lo && hi > lo) ? Math.max(0, Math.min(100, ((price - lo) / (hi - lo)) * 100)) : null;
+
+  const fmtPct = (v:any) => v == null ? '—' : `${(Number(v)*100).toFixed(1)}%`;
+  const fmtX = (v:any) => v == null ? '—' : `${Number(v).toFixed(1)}x`;
+  const fmtBig = (v:any) => { if (v == null) return '—'; const n=Number(v); if(n>=1e12)return `$${(n/1e12).toFixed(2)}T`; if(n>=1e9)return `$${(n/1e9).toFixed(1)}B`; if(n>=1e6)return `$${(n/1e6).toFixed(0)}M`; return `$${n.toFixed(0)}`; };
+  const col = (good:boolean|null) => good == null ? '#d4c4b0' : good ? '#22c55e' : '#ef4444';
+
+  const Cell = ({label, value, color}:{label:string; value:string; color?:string}) => (
+    <div style={{ display:'flex', justifyContent:'space-between', padding:'3px 0', fontSize:11 }}>
+      <span style={{ fontFamily:"'Outfit',sans-serif", color:'#8a7560' }}>{label}</span>
+      <span style={{ fontFamily:"'Fira Code',monospace", color: color||'#d4c4b0', fontWeight:600 }}>{value}</span>
+    </div>
+  );
+  const ColHead = ({t}:{t:string}) => (
+    <div style={{ fontFamily:"'Fira Code',monospace", fontSize:9, color:'#daa520', letterSpacing:2, marginBottom:6, borderBottom:'1px solid rgba(212,149,108,0.15)', paddingBottom:4 }}>{t}</div>
+  );
+
+  return (
+    <div style={{ background:'#241510', border:'1px solid rgba(212,149,108,0.12)', borderRadius:8, padding:'16px 20px', marginBottom:20,
+      display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:24 }}>
+      <div>
+        <ColHead t="FUNDAMENTALS" />
+        <Cell label="Revenue TTM" value={fmtBig(f.revenue_ttm)} />
+        <Cell label="Rev Growth" value={fmtPct(f.revenue_growth)} color={col(f.revenue_growth>0.1)} />
+        <Cell label="Gross Margin" value={fmtPct(f.gross_margin)} color={col(f.gross_margin>0.4)} />
+        <Cell label="Net Margin" value={fmtPct(f.net_margin)} color={col(f.net_margin>0.1)} />
+        <Cell label="ROE" value={fmtPct(f.roe)} color={col(f.roe>0.15)} />
+        <Cell label="Debt/Equity" value={f.debt_to_equity != null ? Number(f.debt_to_equity).toFixed(2) : '—'} color={col(f.debt_to_equity != null ? f.debt_to_equity < 1.5 : null)} />
+      </div>
+      <div>
+        <ColHead t="VALUATION" />
+        <Cell label="P/E" value={fmtX(f.pe_ratio ?? data.pe_ratio)} />
+        <Cell label="Forward P/E" value={fmtX(data.forward_pe ?? f.eps_forward)} />
+        <Cell label="P/S" value={fmtX(f.price_to_sales)} />
+        <Cell label="EV/EBITDA" value={fmtX(f.ev_ebitda)} />
+        <Cell label="PEG" value={data.peg_ratio != null ? Number(data.peg_ratio).toFixed(2) : '—'} />
+        <Cell label="FCF Yield" value={fmtPct(data.fcf_yield)} color={col(data.fcf_yield>0.04)} />
+      </div>
+      <div>
+        <ColHead t="POSITIONING" />
+        <Cell label="52W High" value={hi != null ? `$${Number(hi).toFixed(2)}` : '—'} />
+        <Cell label="52W Low" value={lo != null ? `$${Number(lo).toFixed(2)}` : '—'} />
+        <Cell label="Range Pos" value={rangePos != null ? `${rangePos.toFixed(0)}%` : '—'} color={rangePos != null ? (rangePos>70?'#22c55e':rangePos<30?'#ef4444':'#d4c4b0') : undefined} />
+        {rangePos != null && (
+          <div style={{ height:6, background:'#1a0f0a', borderRadius:3, overflow:'hidden', margin:'6px 0' }}>
+            <div style={{ height:'100%', width:`${rangePos}%`, background:'linear-gradient(90deg,#8a7560,#daa520)', borderRadius:3 }} />
+          </div>
+        )}
+        <Cell label="Sharpe" value={data.sharpe_ratio != null ? Number(data.sharpe_ratio).toFixed(2) : '—'} color={col(data.sharpe_ratio>0.6)} />
+        <Cell label="Ann Vol" value={fmtPct(data.annual_vol)} />
+      </div>
+      <div>
+        <ColHead t="THE STREET" />
+        {ar.recommendation_summary || ar.buy != null ? (
+          <>
+            <Cell label="Buy" value={`${ar.strong_buy != null ? (ar.strong_buy+ (ar.buy||0)) : (ar.buy ?? '—')}`} color="#22c55e" />
+            <Cell label="Hold" value={`${ar.hold ?? '—'}`} color="#f59e0b" />
+            <Cell label="Sell" value={`${ar.sell != null ? (ar.sell + (ar.strong_sell||0)) : (ar.sell ?? '—')}`} color="#ef4444" />
+            <Cell label="Consensus" value={ar.consensus || ar.recommendation || '—'} />
+          </>
+        ) : (
+          <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:10, color:'#8a7560', lineHeight:1.5, paddingTop:4 }}>
+            Analyst coverage shown in the Wall Street tab. Named-firm price targets require a data tier upgrade.
+          </div>
+        )}
       </div>
     </div>
   );
