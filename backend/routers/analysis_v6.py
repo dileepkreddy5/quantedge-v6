@@ -123,6 +123,11 @@ class QuantEdgeAnalyzerV6:
 
     def __init__(self):
         self.market_feed = MarketDataFeed()
+        # SPY is the CAPM benchmark for every ticker. Fetching it per request
+        # got the analyzer throttled by Polygon, so the regression silently
+        # failed for all but the first name in any burst. Cached per process.
+        self._spy_cache = None
+        self._spy_cached_at = None
         self.fund_feed = FundamentalDataFeed()
         self.options_feed = OptionsDataFeed()
         self.sentiment_feed = SentimentDataFeed()
@@ -213,11 +218,12 @@ class QuantEdgeAnalyzerV6:
                 logger.warning(
                     f"{ticker}: dropped {_n} bar(s) with implausible daily moves "
                     f"(max {returns.abs().max():.1%}) — likely unadjusted split data")
+                # Drop the bad returns but leave `close` alone. Rebuilding the price
+                # series from surviving returns re-indexes it in a way that breaks
+                # every downstream join — the CAPM regression against SPY collapsed
+                # to zero aligned rows for most tickers. The bad bar affects return
+                # statistics, not the price level, so filtering returns is enough.
                 returns = returns[~_bad]
-                # Rebuild the price series from the surviving returns so anything
-                # deriving prices rather than returns is consistent with them.
-                _keep = close.index.isin(returns.index) | (close.index == close.index[0])
-                close = close[_keep]
 
             log_returns = np.log(close / close.shift(1)).dropna()
             log_returns = log_returns[log_returns.abs() < 0.47]   # ln(1.6)
@@ -910,11 +916,26 @@ class QuantEdgeAnalyzerV6:
             # R-squared, and idiosyncratic risk. (Full Fama-French 5-factor
             # attribution requires Ken French daily factor data — roadmap.)
             try:
-                spy_data = await self.market_feed.get_price_history("SPY")
-                if spy_data is not None and "close" in spy_data and len(spy_data["close"]) > 60:
-                    spy_close = spy_data["close"]
+                # SPY was fetched over HTTP on every analyze request, so Polygon
+                # throttled it under any burst and the regression silently failed
+                # for all but the first ticker. It is already in daily_bars.
+                import time as _t
+                _now = _t.time()
+                if (self._spy_cache is None or self._spy_cached_at is None
+                        or _now - self._spy_cached_at > 3600):
+                    _sd = await self.market_feed.get_price_history("SPY")
+                    if _sd is not None and "close" in _sd and len(_sd["close"]) > 60:
+                        self._spy_cache = _sd["close"]
+                        self._spy_cached_at = _now
+                spy_close = self._spy_cache
+                if spy_close is not None and len(spy_close) > 60:
                     spy_ret = spy_close.pct_change().dropna()
-                    aligned = pd.concat([returns.rename("stock"), spy_ret.rename("mkt")], axis=1, join="inner").dropna()
+                    # Feed bars carry a 04:00 UTC stamp, local bars midnight, so a
+                    # direct join on the raw index yields nothing. Compare on the date.
+                    _s = returns.copy(); _m = spy_ret.copy()
+                    _s.index = pd.to_datetime(_s.index).tz_localize(None).normalize()
+                    _m.index = pd.to_datetime(_m.index).tz_localize(None).normalize()
+                    aligned = pd.concat([_s.rename("stock"), _m.rename("mkt")], axis=1, join="inner").dropna()
                     aligned = aligned.tail(252)
                     if len(aligned) >= 60:
                         rf = 0.053 / 252
@@ -937,11 +958,13 @@ class QuantEdgeAnalyzerV6:
                         result["capm_n_obs"] = int(len(aligned))
                         result["capm_available"] = True
                     else:
+                        logger.warning(f"CAPM {ticker}: only {len(aligned)} aligned rows, need 60")
                         result["capm_available"] = False
                 else:
+                    logger.warning(f"CAPM {ticker}: no usable SPY series")
                     result["capm_available"] = False
             except Exception as e:
-                logger.warning(f"CAPM market regression error: {e}")
+                logger.warning(f"CAPM {ticker} regression error: {type(e).__name__}: {e}")
                 result["capm_available"] = False
 
             result["scenarios"] = self._build_scenarios(
