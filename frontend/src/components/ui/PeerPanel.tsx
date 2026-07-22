@@ -186,47 +186,6 @@ const PeerPanel: React.FC<Props> = ({ ticker: tickerProp, data: analysisData, on
         })}
         <div style={{ position:'absolute', bottom:4, left:6, fontSize:9, color:C.textDim }}>weaker</div>
         <div style={{ position:'absolute', bottom:4, right:6, fontSize:9, color:C.textDim }}>stronger →</div>
-        <div style={{ position:'absolute', top:4, left:'50%', transform:'translateX(-50%)', fontSize:9, color:C.gold }}>● {ticker}</div>
-      </div>
-
-      {/* Peer table */}
-      <div style={{ color:C.gold, fontWeight:700, fontSize:13, marginBottom:8 }}>PEERS — RANKED BY {factorLabels[factorKey].toUpperCase()}</div>
-      <div style={{ maxHeight:320, overflowY:'auto' }}>
-        <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
-          <thead>
-            <tr style={{ color:C.textDim, fontSize:10, textAlign:'left' }}>
-              <th style={{ padding:'6px 8px' }}>TICKER</th><th style={{ padding:'6px 8px' }}>NAME</th>
-              <th style={{ padding:'6px 8px', textAlign:'right' }}>MKT CAP</th>
-              <th style={{ padding:'6px 8px', textAlign:'right' }}>{factorLabels[factorKey]}</th>
-              <th style={{ padding:'6px 8px', textAlign:'right' }}>ROIC</th>
-              <th style={{ padding:'6px 8px', textAlign:'right' }}>NET MGN</th>
-              <th style={{ padding:'6px 8px', textAlign:'right' }}>REV GR</th>
-              <th style={{ padding:'6px 8px', textAlign:'right' }}>P/E</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sortedPeers.slice(0,40).map((p,i) => {
-              const v = valueOf(p);
-              return (
-                <tr key={i} onClick={() => onAnalyze && onAnalyze(p.ticker)}
-                  style={{ cursor: onAnalyze?'pointer':'default', background: p.is_me?`${C.gold}14`:'transparent',
-                    borderBottom:`1px solid ${C.border}` }}>
-                  <td style={{ padding:'7px 8px', fontWeight:700, color: p.is_me?C.gold:C.text }}>{p.ticker}{p.is_me?' ★':''}</td>
-                  <td style={{ padding:'7px 8px', color:C.textDim }}>{p.name}</td>
-                  <td style={{ padding:'7px 8px', textAlign:'right', color:C.textDim }}>{fmtCap(p.market_cap)}</td>
-                  <td style={{ padding:'7px 8px', textAlign:'right', fontFamily:"'Fira Code',monospace",
-                    color: (v??0)>=0?C.green:C.red }}>{v!=null?`${v>0?'+':''}${Number(v).toFixed(1)}%`:'—'}</td>
-                  <td style={{ padding:'7px 8px', textAlign:'right', fontFamily:"'Fira Code',monospace", color: p.roic==null?C.textDim:(p.roic>=0.1?C.green:p.roic>=0?C.text:C.red) }}>{p.roic==null?'—':(p.roic*100).toFixed(0)+'%'}</td>
-                  <td style={{ padding:'7px 8px', textAlign:'right', fontFamily:"'Fira Code',monospace", color: p.net_margin==null?C.textDim:(p.net_margin>=0.1?C.green:p.net_margin>=0?C.text:C.red) }}>{p.net_margin==null?'—':(p.net_margin*100).toFixed(1)+'%'}</td>
-                  <td style={{ padding:'7px 8px', textAlign:'right', fontFamily:"'Fira Code',monospace", color: p.revenue_growth==null?C.textDim:(p.revenue_growth>=0.1?C.green:p.revenue_growth>=0?C.text:C.red) }}>{p.revenue_growth==null?'—':(p.revenue_growth>=0?'+':'')+(p.revenue_growth*100).toFixed(0)+'%'}</td>
-                  <td style={{ padding:'7px 8px', textAlign:'right', fontFamily:"'Fira Code',monospace", color: p.pe==null?C.textDim:(p.pe>0&&p.pe<20?C.green:p.pe>40?C.red:C.text) }}>{p.pe==null?'—':p.pe.toFixed(0)}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-
       {eco && eco.movers?.length > 0 && (() => {
         const floor = eco.significance_floor ?? 0.25;
         const strength = (c:number) =>
@@ -296,6 +255,48 @@ const PeerPanel: React.FC<Props> = ({ ticker: tickerProp, data: analysisData, on
           </div>
         );
       })()}
+
+        <div style={{ position:'absolute', top:4, left:'50%', transform:'translateX(-50%)', fontSize:9, color:C.gold }}>● {ticker}</div>
+      </div>
+
+      {/* Peer table */}
+      <div style={{ color:C.gold, fontWeight:700, fontSize:13, marginBottom:8 }}>PEERS — RANKED BY {factorLabels[factorKey].toUpperCase()}</div>
+      <div style={{ maxHeight:320, overflowY:'auto' }}>
+        <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+          <thead>
+            <tr style={{ color:C.textDim, fontSize:10, textAlign:'left' }}>
+              <th style={{ padding:'6px 8px' }}>TICKER</th><th style={{ padding:'6px 8px' }}>NAME</th>
+              <th style={{ padding:'6px 8px', textAlign:'right' }}>MKT CAP</th>
+              <th style={{ padding:'6px 8px', textAlign:'right' }}>{factorLabels[factorKey]}</th>
+              <th style={{ padding:'6px 8px', textAlign:'right' }}>ROIC</th>
+              <th style={{ padding:'6px 8px', textAlign:'right' }}>NET MGN</th>
+              <th style={{ padding:'6px 8px', textAlign:'right' }}>REV GR</th>
+              <th style={{ padding:'6px 8px', textAlign:'right' }}>P/E</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sortedPeers.slice(0,40).map((p,i) => {
+              const v = valueOf(p);
+              return (
+                <tr key={i} onClick={() => onAnalyze && onAnalyze(p.ticker)}
+                  style={{ cursor: onAnalyze?'pointer':'default', background: p.is_me?`${C.gold}14`:'transparent',
+                    borderBottom:`1px solid ${C.border}` }}>
+                  <td style={{ padding:'7px 8px', fontWeight:700, color: p.is_me?C.gold:C.text }}>{p.ticker}{p.is_me?' ★':''}</td>
+                  <td style={{ padding:'7px 8px', color:C.textDim }}>{p.name}</td>
+                  <td style={{ padding:'7px 8px', textAlign:'right', color:C.textDim }}>{fmtCap(p.market_cap)}</td>
+                  <td style={{ padding:'7px 8px', textAlign:'right', fontFamily:"'Fira Code',monospace",
+                    color: (v??0)>=0?C.green:C.red }}>{v!=null?`${v>0?'+':''}${Number(v).toFixed(1)}%`:'—'}</td>
+                  <td style={{ padding:'7px 8px', textAlign:'right', fontFamily:"'Fira Code',monospace", color: p.roic==null?C.textDim:(p.roic>=0.1?C.green:p.roic>=0?C.text:C.red) }}>{p.roic==null?'—':(p.roic*100).toFixed(0)+'%'}</td>
+                  <td style={{ padding:'7px 8px', textAlign:'right', fontFamily:"'Fira Code',monospace", color: p.net_margin==null?C.textDim:(p.net_margin>=0.1?C.green:p.net_margin>=0?C.text:C.red) }}>{p.net_margin==null?'—':(p.net_margin*100).toFixed(1)+'%'}</td>
+                  <td style={{ padding:'7px 8px', textAlign:'right', fontFamily:"'Fira Code',monospace", color: p.revenue_growth==null?C.textDim:(p.revenue_growth>=0.1?C.green:p.revenue_growth>=0?C.text:C.red) }}>{p.revenue_growth==null?'—':(p.revenue_growth>=0?'+':'')+(p.revenue_growth*100).toFixed(0)+'%'}</td>
+                  <td style={{ padding:'7px 8px', textAlign:'right', fontFamily:"'Fira Code',monospace", color: p.pe==null?C.textDim:(p.pe>0&&p.pe<20?C.green:p.pe>40?C.red:C.text) }}>{p.pe==null?'—':p.pe.toFixed(0)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
     </div>
   );
 };
