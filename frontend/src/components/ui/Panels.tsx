@@ -144,6 +144,11 @@ export function MLModelsPanel({ data }: { data: any }) {
   const panelPred = data.panel_prediction?.horizons?.['21d']?.pred_pct;
   const panelDir = panelPred != null ? Math.sign(Number(panelPred)) : null;
 
+  // Only DIRECTIONAL, non-derived signals get a vote.
+  //  - GARCH is excluded: it forecasts volatility, not direction. Low vol is not bullish.
+  //  - Monte Carlo is excluded: its drift is derived from the ML ensemble, so it would
+  //    double-count that signal rather than add an independent view.
+  // Both are still displayed in the model matrix as context.
   const modelDirs = [
     { name: 'LSTM',      v: lstm.pred_21d != null ? Math.sign(Number(lstm.pred_21d)) : null },
     { name: 'XGBoost',   v: xgb.pred_21d != null ? Math.sign(Number(xgb.pred_21d)) : null },
@@ -151,8 +156,6 @@ export function MLModelsPanel({ data }: { data: any }) {
     { name: 'Kalman',    v: kalmanDir },
     { name: 'Regime',    v: regimeDir },
     { name: 'Sentiment', v: sentVal != null ? Math.sign(Number(sentVal)) : null },
-    { name: 'GARCH',     v: garchDir },
-    { name: 'MonteCarlo',v: mcDir },
     { name: 'Panel-CS',  v: panelDir },
     { name: 'Options',   v: gexDir },
   ].filter(m => m.v != null) as { name: string; v: number }[];
@@ -214,9 +217,12 @@ export function MLModelsPanel({ data }: { data: any }) {
   const majority = nBull >= nBear ? nBull : nBear;
   const agreement = majority / nTotal;                    // 0.5 (split) .. 1.0 (unanimous)
   const direction = nBull > nBear ? 'BULLISH' : nBull < nBear ? 'BEARISH' : 'MIXED';
-  // Conviction scales agreement above the 50% baseline -> 0..100
-  const conviction = Math.round(Math.max(0, (agreement - 0.5) * 2) * 100);
-  const convLabel = conviction >= 66 ? 'High conviction' : conviction >= 33 ? 'Moderate' : 'Low conviction';
+  // Agreement maps to conviction, but capped at 85. Equity signals are correlated —
+  // even unanimous agreement among them does not justify a claim of certainty, and a
+  // 100/100 score would imply exactly that. The cap keeps the scale honest.
+  const CONVICTION_CAP = 85;
+  const conviction = Math.round(Math.max(0, (agreement - 0.5) * 2) * CONVICTION_CAP);
+  const convLabel = conviction >= 65 ? 'Strong agreement' : conviction >= 35 ? 'Moderate agreement' : conviction > 0 ? 'Weak agreement' : 'No agreement';
   const convColor = direction === 'MIXED' ? '#8a7560' : direction === 'BULLISH' ? '#22c55e' : '#ef4444';
 
   return (
