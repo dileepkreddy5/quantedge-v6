@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS universe (
     ticker       TEXT PRIMARY KEY,
     name         TEXT,
     sic          TEXT,
+    sic_code     TEXT,
     cik          TEXT,
     exchange     TEXT,
     type         TEXT,
@@ -122,7 +123,8 @@ class BarsStore:
                         sic = d.get("sic_description")
                         if not sic:
                             miss += 1; return
-                        got.append((sic, d.get("weighted_shares_outstanding"),
+                        got.append((sic, str(d.get("sic_code") or "") or None,
+                                    d.get("weighted_shares_outstanding"),
                                     d.get("market_cap"), tk))
                     except Exception:
                         miss += 1
@@ -132,8 +134,8 @@ class BarsStore:
                 if got:
                     async with self.pool.acquire() as conn:
                         await conn.executemany(
-                            "UPDATE universe SET sic=$1, shares_out=$2, market_cap=$3,"
-                            " updated_at=NOW() WHERE ticker=$4", got)
+                            "UPDATE universe SET sic=$1, sic_code=$2, shares_out=$3,"
+                            " market_cap=$4, updated_at=NOW() WHERE ticker=$5", got)
                     got.clear()
                 logger.info(f"enriched {min(i+250, len(tickers))}/{len(tickers)} · {miss} without sic")
         return {"processed": len(tickers), "no_sic": miss}

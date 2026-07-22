@@ -114,6 +114,23 @@ _SUB_RULES = [
 _EXCLUDE_SIC = ("BLANK CHECK",)
 
 
+# SIC is hierarchical: 4 digits is the specific industry, 3 the group, 2 the
+# major sector. Grouping on the code rather than on keyword rules gives real
+# granularity — Meta and Alphabet share 7370 while Datadog and Snowflake sit at
+# 7372, a distinction no amount of keyword matching recovers.
+SIC_MIN_GROUP = 8
+
+
+def sic_levels(code: Optional[str]) -> List[str]:
+    """Progressively broader keys for a SIC code, most specific first."""
+    if not code:
+        return []
+    c = str(code).strip().zfill(4)[:4]
+    if not c.isdigit():
+        return []
+    return [c, c[:3], c[:2]]
+
+
 def is_shell(sic: Optional[str]) -> bool:
     """SPACs and blank-check vehicles hold cash and nothing else."""
     return bool(sic) and any(k in sic.upper() for k in _EXCLUDE_SIC)
@@ -158,10 +175,10 @@ class PeerStore:
                 for r in rows:
                     await conn.execute(
                         """INSERT INTO peer_stats
-                           (scan_time, ticker, name, sic, bucket, market_cap, factors)
-                           VALUES ($1,$2,$3,$4,$5,$6,$7)""",
+                           (scan_time, ticker, name, sic, sic_code, bucket, market_cap, factors)
+                           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)""",
                         scan_time, r["ticker"], r.get("name", ""), r.get("sic", ""),
-                        bucket_for(r.get("sic", "")), r.get("market_cap"),
+                        r.get("sic_code"), bucket_for(r.get("sic", "")), r.get("market_cap"),
                         json.dumps(r.get("factors", {})),
                     )
                 # keep only the 3 most recent scan_times to bound table growth
@@ -189,16 +206,42 @@ class PeerStore:
 
         # Nine broad buckets put carmakers alongside railroads. Narrow to the real
         # industry when there are enough companies for percentiles to mean anything.
-        # The scanned universe is a few hundred names, so industry groups are small.
-        # Eight is the floor at which a percentile still carries information.
-        MIN_GROUP = 8
-        my_sub = sub_bucket_for(me["sic"])
+        # Walk down the SIC hierarchy: the exact 4-digit industry first, then the
+        # 3-digit group, then the 2-digit sector. Keyword buckets put Meta with
+        # Snowflake; SIC 7370 puts it with Alphabet, which is the real comparison.
+        # Five companies that genuinely make computers is a better comparison than
+        # thirty that merely share a leading digit, so the exact-industry threshold
+        # is lower than the one for broader fallbacks.
+        MIN_EXACT, MIN_GROUP = 4, 8
         group_label, group_kind = me["bucket"], "sector"
-        if my_sub:
-            narrowed = [p for p in peers if sub_bucket_for(p["sic"]) == my_sub]
-            if len(narrowed) >= MIN_GROUP:
-                peers = narrowed
-                group_label, group_kind = my_sub, "industry"
+        my_code = (me.get("sic_code") or "")
+        if my_code:
+            for depth, kind, floor in ((4, "industry", MIN_EXACT), (3, "group", MIN_GROUP), (2, "sector-sic", MIN_GROUP)):
+                key = my_code[:depth]
+                narrowed = [p for p in peers
+                            if (p.get("sic_code") or "")[:depth] == key]
+                if len(narrowed) >= floor:
+                    peers = narrowed
+                    # Name the group after what the company actually does.
+                    group_label = (me.get("sic") or me["bucket"]).title()
+                    if depth < 4:
+                        group_label = sub_bucket_for(me["sic"]) or group_label
+                    group_kind = kind
+                    break
+            else:
+                my_sub = sub_bucket_for(me["sic"])
+                if my_sub:
+                    narrowed = [p for p in peers if sub_bucket_for(p["sic"]) == my_sub]
+                    if len(narrowed) >= MIN_GROUP:
+                        peers = narrowed
+                        group_label, group_kind = my_sub, "industry"
+        else:
+            my_sub = sub_bucket_for(me["sic"])
+            if my_sub:
+                narrowed = [p for p in peers if sub_bucket_for(p["sic"]) == my_sub]
+                if len(narrowed) >= MIN_GROUP:
+                    peers = narrowed
+                    group_label, group_kind = my_sub, "industry"
 
         # "Other" is not a peer group — it is everything the classifier could not
         # place, including companies with no SIC at all. Ranking against it is noise.

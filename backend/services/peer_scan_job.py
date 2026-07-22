@@ -24,7 +24,7 @@ from quantedge.fundamentals.edgar_bulk import company_facts_from_bulk
 from quantedge.fundamentals.peer_fundamentals import compute_peer_fundamentals
 from quantedge.fundamentals.universe_full import ticker_cik_map
 
-PEER_UNIVERSE_SIZE = 500
+PEER_UNIVERSE_SIZE = 3000
 
 
 class PeerScanJob:
@@ -36,10 +36,36 @@ class PeerScanJob:
         t0 = time.time()
         logger.info(f"🧬 Peer stats scan starting (universe={universe_size})")
 
-        builder = UniverseBuilder(api_key=self.api_key)
-        entries = await builder.build(max_tickers=universe_size)
-        meta = {e.ticker: e for e in entries}
-        tickers = [e.ticker for e in entries]
+        # Name, SIC and market cap already live in the universe table, refreshed from
+        # Polygon's reference data. Reading them locally avoids one detail call per
+        # ticker, which is what previously kept this capped at 500 names.
+        meta, tickers = {}, []
+        pool = getattr(self, "pool", None) or getattr(self.store, "pool", None)
+        if pool is not None:
+            try:
+                async with pool.acquire() as conn:
+                    urows = await conn.fetch(
+                        "SELECT ticker, name, sic, sic_code, market_cap FROM universe "
+                        "WHERE sic IS NOT NULL AND active "
+                        "ORDER BY market_cap DESC NULLS LAST LIMIT $1", universe_size)
+                from services.peer_store import is_shell
+                for r in urows:
+                    if is_shell(r["sic"]):
+                        continue
+                    tickers.append(r["ticker"])
+                    meta[r["ticker"]] = {"name": r["name"], "sic": r["sic"],
+                                         "sic_code": r["sic_code"],
+                                         "market_cap": r["market_cap"]}
+                logger.info(f"universe table supplied {len(tickers)} classified tickers")
+            except Exception as e:
+                logger.warning(f"universe table unavailable ({e}), falling back to builder")
+
+        if not tickers:
+            builder = UniverseBuilder(api_key=self.api_key)
+            entries = await builder.build(max_tickers=universe_size)
+            meta = {e.ticker: {"name": getattr(e, "name", ""), "sic": getattr(e, "sector", ""),
+                               "market_cap": getattr(e, "market_cap", None)} for e in entries}
+            tickers = [e.ticker for e in entries]
 
         # ticker->CIK map for reading fundamentals from the local bulk file (no API calls)
         try:
@@ -59,8 +85,9 @@ class PeerScanJob:
             async def _process(tk, payload):
                 async with sem:
                     metrics = dict(payload.get("metrics", {}))
-                    e = meta.get(tk)
-                    details = await _fetch_details(tk, session, self.api_key)
+                    e = meta.get(tk) or {}
+                    # Only reach for details when the universe table lacks them.
+                    details = e if e.get("sic") else await _fetch_details(tk, session, self.api_key)
                     # enrich with fundamental factors from the local bulk companyfacts file
                     _cik = cik_map.get(tk)
                     _mcap_for_fund = details.get("market_cap")
@@ -72,13 +99,14 @@ class PeerScanJob:
                                 metrics.update(_fund)  # merge fundamental factors alongside technical
                         except Exception as _fe:
                             logger.debug(f"fundamentals failed for {tk}: {_fe}")
-                    _name = details.get("name") or (getattr(e, "name", "") if e else "")
-                    _sic = details.get("sector") or (getattr(e, "sector", "") if e else "")
-                    _mcap = details.get("market_cap") if details.get("market_cap") is not None else (getattr(e, "market_cap", None) if e else None)
+                    _name = details.get("name") or e.get("name") or ""
+                    _sic = details.get("sic") or details.get("sector") or e.get("sic") or ""
+                    _mcap = details.get("market_cap") if details.get("market_cap") is not None else e.get("market_cap")
                     return {
                         "ticker": tk,
                         "name": _name,
                         "sic": _sic,
+                        "sic_code": e.get("sic_code"),
                         "market_cap": _mcap,
                         "factors": metrics,
                     }
