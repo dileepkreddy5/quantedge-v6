@@ -505,6 +505,8 @@ class QuantEdgeAnalyzerV6:
             # from the same features so the current reading has something to sit against.
             try:
                 import numpy as _np
+                import pandas as _pdm
+                _pd_ts = lambda s: _pdm.Timestamp(s)
                 _c3 = price_data["close"].dropna()
                 if len(_c3) >= 300:
                     _r3 = _c3.pct_change().dropna()
@@ -560,7 +562,45 @@ class QuantEdgeAnalyzerV6:
                     _same = [e for e in _eps[:-1] if e["regime"] == _cur_ep["regime"]]
                     _med_dur = float(_np.median([e["days"] for e in _same])) if _same else None
 
+                    # Where does this state usually lead, and what follows entry?
+                    _exits = {}
+                    for _i in range(len(_eps) - 1):
+                        if _eps[_i]["regime"] == _cl3:
+                            _nx = _eps[_i + 1]["regime"]
+                            _exits[_nx] = _exits.get(_nx, 0) + 1
+                    _tot_ex = sum(_exits.values())
+                    _exit_tbl = {k: {"count": v, "share_pct": round(v / _tot_ex * 100, 1)}
+                                 for k, v in sorted(_exits.items(), key=lambda x: -x[1])} if _tot_ex else {}
+
+                    _fwd_tbl = {}
+                    for _h in (5, 10, 21, 63):
+                        _rs = []
+                        for _e in _eps[:-1]:
+                            if _e["regime"] != _cl3:
+                                continue
+                            try:
+                                _ts = _pdm.Timestamp(_e["start"])
+                                if _c3.index.tz is not None and _ts.tz is None:
+                                    _ts = _ts.tz_localize(_c3.index.tz)
+                                _p = int(_c3.index.get_indexer([_ts], method="nearest")[0])
+                                if 0 <= _p and _p + _h < len(_c3):
+                                    _rs.append(float(_c3.iloc[_p + _h] / _c3.iloc[_p] - 1))
+                            except Exception:
+                                continue
+                        if len(_rs) >= 4:
+                            _a = _np.array(_rs)
+                            _fwd_tbl[str(_h)] = {
+                                "median_pct": round(float(_np.median(_a)) * 100, 2),
+                                "mean_pct": round(float(_a.mean()) * 100, 2),
+                                "positive_pct": round(float((_a > 0).mean()) * 100, 0),
+                                "worst_pct": round(float(_a.min()) * 100, 1),
+                                "best_pct": round(float(_a.max()) * 100, 1),
+                                "n": len(_rs),
+                            }
+
                     result["regime_context"] = {
+                        "exit_analysis": {"transitions": _exit_tbl},
+                        "forward_returns": _fwd_tbl,
                         "inferred_state": _cl3,
                         "days_in_current": _cur_ep["days"],
                         "current_episode_return_pct": _cur_ep["return_pct"],
