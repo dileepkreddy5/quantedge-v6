@@ -1447,6 +1447,124 @@ export function RiskPanel({ data }: { data: any }) {
         </div>
       </Card>
 
+      {data.risk_shape?.underwater?.length > 0 && (() => {
+        const rs = data.risk_shape;
+        const uw = rs.underwater;
+        const worst = Math.min(...uw.map((p: any) => p.v));
+        const cur = rs.current_drawdown_pct;
+        const H = 120;
+        const w = 100 / Math.max(1, uw.length - 1);
+        const pathD = uw.map((p: any, i: number) =>
+          `${i === 0 ? 'M' : 'L'} ${(i * w).toFixed(3)} ${((p.v / worst) * H).toFixed(2)}`).join(' ');
+        const areaD = `${pathD} L 100 0 L 0 0 Z`;
+        return (
+          <Card style={{ gridColumn:'span 3' }}>
+            <SectionTitle>TIME UNDERWATER — HOW FAR BELOW THE PEAK, AND FOR HOW LONG</SectionTitle>
+            <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:11, color:'#9d8b7a', lineHeight:1.55, marginBottom:14 }}>
+              A maximum drawdown of {Math.abs(worst).toFixed(0)}% is one number; this is its shape. Every point shows how
+              far below the prior high the price sat on that day — the depth of each fall, and how long it took to get back.
+            </div>
+            <div style={{ position:'relative', marginBottom:6 }}>
+              <svg viewBox={`0 0 100 ${H}`} preserveAspectRatio="none" style={{ width:'100%', height:150, display:'block' }}>
+                <defs>
+                  <linearGradient id="uwg" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#ef4444" stopOpacity="0.05" />
+                    <stop offset="100%" stopColor="#ef4444" stopOpacity="0.45" />
+                  </linearGradient>
+                </defs>
+                <path d={areaD} fill="url(#uwg)" />
+                <path d={pathD} fill="none" stroke="#ef4444" strokeWidth="0.4" vectorEffect="non-scaling-stroke" />
+                {[0.25, 0.5, 0.75].map(f => (
+                  <line key={f} x1="0" x2="100" y1={H * f} y2={H * f}
+                    stroke="#3a2f28" strokeWidth="0.3" vectorEffect="non-scaling-stroke" />
+                ))}
+              </svg>
+              <div style={{ position:'absolute', top:0, left:4, fontFamily:"'Fira Code',monospace", fontSize:9, color:'#6b5d52' }}>peak</div>
+              <div style={{ position:'absolute', bottom:2, left:4, fontFamily:"'Fira Code',monospace", fontSize:9, color:'#ef4444' }}>
+                {worst.toFixed(0)}%
+              </div>
+            </div>
+            <div style={{ display:'flex', justifyContent:'space-between', fontFamily:"'Fira Code',monospace",
+              fontSize:9, color:'#6b5d52', marginBottom:14 }}>
+              <span>{uw[0]?.d}</span>
+              <span style={{ color: cur < -1 ? '#ef4444' : '#22c55e' }}>
+                currently {cur.toFixed(1)}% below peak
+              </span>
+              <span>{uw[uw.length-1]?.d}</span>
+            </div>
+
+            {rs.episodes?.length > 0 && (
+              <>
+                <div style={{ fontFamily:"'Fira Code',monospace", fontSize:9, color:'#daa520', letterSpacing:2, marginBottom:8 }}>
+                  DEEPEST FALLS AND WHAT RECOVERY COST
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns:'90px 1fr 150px 110px', gap:'4px 12px', alignItems:'center' }}>
+                  {['DEPTH','','PERIOD','RECOVERY'].map((h,i) => (
+                    <div key={i} style={{ fontFamily:"'Fira Code',monospace", fontSize:8, color:'#6b5d52', letterSpacing:1 }}>{h}</div>
+                  ))}
+                  {rs.episodes.map((e: any, i: number) => (
+                    <React.Fragment key={i}>
+                      <div style={{ fontFamily:"'Fira Code',monospace", fontSize:13, fontWeight:700, color:'#ef4444' }}>
+                        {e.depth_pct.toFixed(1)}%
+                      </div>
+                      <div style={{ height:9, background:'#1a0f0a', borderRadius:2, overflow:'hidden' }}>
+                        <div style={{ height:'100%', width:`${(Math.abs(e.depth_pct) / Math.abs(worst)) * 100}%`,
+                          background:'#ef4444', opacity: e.recovered ? 0.4 : 0.75, borderRadius:2 }} />
+                      </div>
+                      <div style={{ fontFamily:"'Fira Code',monospace", fontSize:9.5, color:'#9d8b7a' }}>
+                        {e.start} → {e.trough}
+                      </div>
+                      <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:10,
+                        color: e.recovered ? '#8a7560' : '#f59e0b' }}>
+                        {e.recovered ? `${e.recovery_days}d back` : 'still underwater'}
+                      </div>
+                    </React.Fragment>
+                  ))}
+                </div>
+              </>
+            )}
+          </Card>
+        );
+      })()}
+
+      {data.risk_shape?.distribution?.mids?.length > 0 && (() => {
+        const di = data.risk_shape.distribution;
+        const mx = Math.max(...di.actual, ...di.normal);
+        const H = 90;
+        return (
+          <Card style={{ gridColumn:'span 3' }}>
+            <SectionTitle>DAILY RETURNS AGAINST THE NORMAL CURVE</SectionTitle>
+            <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:11, color:'#9d8b7a', lineHeight:1.55, marginBottom:14 }}>
+              Bars are what actually happened; the line is what a normal distribution at {di.sd.toFixed(2)}% daily
+              volatility would predict. Where bars rise above the line at the edges, extreme days happened more
+              often than the standard risk models assume — which is why VaR built on a normal assumption understates
+              the tail.
+            </div>
+            <svg viewBox={`0 0 ${di.mids.length * 4} ${H}`} preserveAspectRatio="none"
+              style={{ width:'100%', height:130, display:'block' }}>
+              {di.actual.map((v: number, i: number) => {
+                const h = (v / mx) * H;
+                const tail = di.mids[i] < -2 * di.sd || di.mids[i] > 2 * di.sd;
+                return <rect key={i} x={i * 4 + 0.4} y={H - h} width={3.2} height={h}
+                  fill={tail ? '#ef4444' : '#daa520'} opacity={tail ? 0.75 : 0.4} />;
+              })}
+              <path d={di.normal.map((v: number, i: number) =>
+                `${i === 0 ? 'M' : 'L'} ${i * 4 + 2} ${H - (v / mx) * H}`).join(' ')}
+                fill="none" stroke="#9d8b7a" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+            </svg>
+            <div style={{ display:'flex', justifyContent:'space-between', fontFamily:"'Fira Code',monospace",
+              fontSize:9, color:'#6b5d52', marginTop:4 }}>
+              <span>{di.mids[0]}% day</span>
+              <span>0%</span>
+              <span>+{di.mids[di.mids.length-1]}% day</span>
+            </div>
+            <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:9.5, color:'#6b5d52', marginTop:8, lineHeight:1.5 }}>
+              Red bars mark days beyond two standard deviations — the ones a normal model treats as rare.
+            </div>
+          </Card>
+        );
+      })()}
+
       <Card>
         <SectionTitle>RISK-ADJUSTED RETURN</SectionTitle>
         {[
