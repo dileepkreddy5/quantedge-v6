@@ -393,10 +393,19 @@ class GJRGARCHModel:
             # Long-run variance
             persistence = alpha + gamma / 2 + beta
             if persistence < 1:
-                long_run_var = omega / (1 - persistence)
-                long_run_vol = np.sqrt(long_run_var * 252)
+                # arch scales returns by 100, so omega is in percent-squared
+                # units. current_var and vol_forecasts both divide by 10000 to
+                # get back to decimals; this one did not, which is why
+                # long_run_annual_vol arrived ~100x its siblings and the
+                # frontend had to guess the scale at render time.
+                long_run_var = (omega / (1 - persistence)) / 10000
+                long_run_vol = float(np.sqrt(long_run_var * 252))
             else:
-                long_run_vol = np.sqrt(current_var * 252) * 1.1
+                # Persistence at or above 1 means the long-run variance is
+                # undefined - the process has no level to revert to. Previously
+                # this returned current vol x 1.1, a fabricated number wearing
+                # the model's name. Report it as unavailable instead.
+                long_run_vol = None
 
             # VaR from GJR-GARCH
             daily_vol = np.sqrt(current_var)
@@ -419,7 +428,7 @@ class GJRGARCHModel:
                 "persistence": float(persistence),
                 "current_daily_vol": float(daily_vol),
                 "current_annual_vol": float(np.sqrt(current_var * 252)),
-                "long_run_annual_vol": float(long_run_vol),
+                "long_run_annual_vol": (float(long_run_vol) if long_run_vol is not None else None),
                 "forecast_vol_5d": float(vol_forecasts[4] if len(vol_forecasts) > 4 else vol_forecasts[-1]),
                 "forecast_vol_21d": float(vol_forecasts[-1]),
                 "var_95_daily": float(var_95_daily),
@@ -471,7 +480,7 @@ class GJRGARCHModel:
                 "persistence": float(alpha + beta),
                 "current_daily_vol": float(daily_vol),
                 "current_annual_vol": float(daily_vol * np.sqrt(252)),
-                "long_run_annual_vol": float(daily_vol * np.sqrt(252)),
+                "long_run_annual_vol": None,   # no GARCH fit here, so no long-run level
                 "var_95_daily": float(-1.645 * daily_vol),
                 "var_99_daily": float(-2.326 * daily_vol),
                 "cvar_95_daily": float(-2.063 * daily_vol),

@@ -353,6 +353,9 @@ export function MLModelsPanel({ data }: { data: any }) {
               {mlCollapsed ? ' (the three return-forecasting models produced near-identical output — a sign they found no distinguishing signal — so they count once, not three times)' : ''}
               {nTotal - majority > 0 ? `, ${nTotal - majority} disagree` : ''}.
               {' '}This is <b style={{color:'var(--latte)'}}>agreement across models</b>, not predictive accuracy — and separate from the QuantEdge conviction score in the header, which weighs 16 intelligence modules.
+              <div style={{ marginTop:6, fontSize:11, color:'var(--cocoa)' }}>
+                Nine models run; {nTotal} vote. GARCH forecasts volatility rather than direction, and Monte Carlo takes its drift from the ML ensemble, so neither casts an independent vote{mlCollapsed ? '; the three return models collapsed to one' : ''}.
+              </div>
             </div>
           </div>
           <div style={{ display:'flex', gap:6, flexWrap:'wrap', minWidth:160 }}>
@@ -530,12 +533,11 @@ export function VolatilityPanel({ data }: { data: any }) {
   const g = data.garch || {};
   const risk = data.risk_metrics || {};
 
-  // long_run_annual_vol arrives already expressed as a percent, while
-  // current_annual_vol arrives as a fraction. Normalise both to percent.
+  // All GARCH vol fields arrive as fractions. long_run_annual_vol is null when
+  // persistence >= 1, where the long-run variance is undefined and there is no
+  // level to report.
   const curVol = (g.current_annual_vol || 0) * 100;
-  const longRun = g.long_run_annual_vol != null
-    ? (Math.abs(g.long_run_annual_vol) > 3 ? g.long_run_annual_vol : g.long_run_annual_vol * 100)
-    : null;
+  const longRun = g.long_run_annual_vol != null ? g.long_run_annual_vol * 100 : null;
   const f5  = (g.forecast_vol_5d || 0) * 100;
   const f21 = (g.forecast_vol_21d || 0) * 100;
   const persistence = g.persistence || 0;

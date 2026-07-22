@@ -488,7 +488,7 @@ class QuantEdgeAnalyzerV6:
                         "label": "Very stable" if _stab >= 75 else "Stable" if _stab >= 55 else "Unsettled" if _stab >= 35 else "Rapidly changing",
                         "vol_of_vol_pct": round(_vov, 1) if _vov else None,
                         "trend_pct_per_quarter": round(_slpct, 1),
-                        "note": "How steady the volatility level itself has been over the last quarter. Low scores mean risk is moving quickly, which makes position sizing unreliable.",
+                        "note": "How steady the volatility level itself has been this quarter, scored 0-100. Below 50 means the level is still moving materially, so the GARCH estimates above are indicative rather than precise \u2014 read them as a range, and size positions off the wider end.",
                     }
 
                     # Percentile timeline — gradual drift or one abnormal stretch?
