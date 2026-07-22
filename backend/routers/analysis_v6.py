@@ -217,18 +217,72 @@ class QuantEdgeAnalyzerV6:
             # 0.410, which annualises to 650% volatility and corrupts Sharpe, VaR,
             # position sizing and every Monte Carlo path downstream. Equities do not
             # move 60% in a session; anything beyond that is a data error.
+            # A >60% single-session move is not a real return. For META the
+            # feed returns two incompatible series concatenated: split-adjusted
+            # prices to 2022-01-28 (~$12), then unadjusted from 2022-06-09
+            # (~$184), with the four months between them missing entirely.
+            # Dropping bars cannot fix that — removing the seam just makes the
+            # next pair adjacent and regenerates the jump, which is why an
+            # iterative filter converged on nothing.
+            #
+            # Everything before the last such discontinuity is on a different
+            # basis and is unusable. Keep only the segment after it and say so.
+            _jump = returns.abs() > 0.60
+            if _jump.any():
+                _cut = _jump[_jump].index[-1]
+                _kept = int((close.index >= _cut).sum())
+                _lost = int(len(close) - _kept)
+                logger.warning(
+                    f"{ticker}: price basis changes at {_cut.date()} "
+                    f"({returns.abs().max():.0%} single-session move) — dropping "
+                    f"{_lost} earlier bars, {_kept} retained")
+                close = close[close.index >= _cut]
+                try:
+                    price_data = price_data[price_data.index >= _cut]
+                except (AttributeError, TypeError):
+                    for _k in ("close", "volume", "open", "high", "low"):
+                        if _k in price_data and price_data[_k] is not None:
+                            _s = price_data[_k]
+                            price_data[_k] = _s[_s.index >= _cut]
+                returns = close.pct_change().dropna()
+                result["price_history_truncated"] = {
+                    "at": str(_cut.date()), "bars_dropped": _lost, "bars_kept": _kept,
+                    "reason": "feed returned an adjustment-basis discontinuity; "
+                              "earlier history is not comparable",
+                }
+
             _bad = returns.abs() > 0.60
             if _bad.any():
                 _n = int(_bad.sum())
                 logger.warning(
                     f"{ticker}: dropped {_n} bar(s) with implausible daily moves "
                     f"(max {returns.abs().max():.1%}) — likely unadjusted split data")
-                # Drop the bad returns but leave `close` alone. Rebuilding the price
-                # series from surviving returns re-indexes it in a way that breaks
-                # every downstream join — the CAPM regression against SPY collapsed
-                # to zero aligned rows for most tickers. The bad bar affects return
-                # statistics, not the price level, so filtering returns is enough.
+                # Drop the offending bars from BOTH the returns and the close
+                # series. An earlier version filtered only `returns`, on the
+                # reasoning that the bad bar affects return statistics and not
+                # price levels. That was wrong twice over: the regime, flow and
+                # forward-return paths each rebuild returns from `close` and so
+                # never saw the filter — META's +1394% print reached the regime
+                # table as a 96.98% daily vol and a +1765.7% annualised return —
+                # and any window spanning the bad bar has a wrong price level too.
+                #
+                # Dropping ROWS is safe. What broke the SPY join previously was
+                # RECONSTRUCTING prices from surviving returns, which re-indexed
+                # the series. Removing rows leaves the DatetimeIndex intact, so
+                # joins still align on date.
                 returns = returns[~_bad]
+                _bad_dates = _bad[_bad].index
+                close = close.drop(_bad_dates, errors="ignore")
+                # price_data may be a DataFrame or a dict of Series. An
+                # isinstance(dict) guard here silently skipped the whole block
+                # for DataFrames while price_data["close"] still worked, so the
+                # regime path kept reading the uncleaned series.
+                try:
+                    price_data = price_data.drop(_bad_dates, errors="ignore")
+                except AttributeError:
+                    for _k in ("close", "volume", "open", "high", "low"):
+                        if _k in price_data and price_data[_k] is not None:
+                            price_data[_k] = price_data[_k].drop(_bad_dates, errors="ignore")
 
             log_returns = np.log(close / close.shift(1)).dropna()
             log_returns = log_returns[log_returns.abs() < 0.47]   # ln(1.6)
