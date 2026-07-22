@@ -499,78 +499,193 @@ export function MLModelsPanel({ data }: { data: any }) {
 export function VolatilityPanel({ data }: { data: any }) {
   const g = data.garch || {};
   const risk = data.risk_metrics || {};
-  const k = data.kalman || {};
+
+  // long_run_annual_vol arrives already expressed as a percent, while
+  // current_annual_vol arrives as a fraction. Normalise both to percent.
+  const curVol = (g.current_annual_vol || 0) * 100;
+  const longRun = g.long_run_annual_vol != null
+    ? (Math.abs(g.long_run_annual_vol) > 3 ? g.long_run_annual_vol : g.long_run_annual_vol * 100)
+    : null;
+  const f5  = (g.forecast_vol_5d || 0) * 100;
+  const f21 = (g.forecast_vol_21d || 0) * 100;
+  const persistence = g.persistence || 0;
+  const gamma = g.gamma_asymmetry || 0;
+  const alpha = g.alpha || 0;
+
+  const ratio = (longRun && longRun > 0) ? curVol / longRun : null;
+  const stance = ratio == null ? null
+    : ratio > 1.15 ? { t: 'ELEVATED', c: '#ef4444', s: 'trading above its structural level — expect mean reversion downward in vol, and size positions smaller than usual' }
+    : ratio < 0.85 ? { t: 'COMPRESSED', c: '#f59e0b', s: 'trading below its structural level — quiet periods often precede expansion, so tail risk is understated by recent history' }
+    : { t: 'IN LINE', c: '#22c55e', s: 'close to its own structural level — recent history is a reasonable guide to near-term risk' };
+
+  // Leverage ratio: how much more a down shock moves vol than an up shock.
+  const levRatio = alpha > 0 ? (alpha + gamma) / alpha : null;
+
+  const estimators = [
+    { l: 'Close-to-Close', v: (data.annual_vol || 0) * 100, n: 'Simplest — uses closing prices only, ignores intraday range' },
+    { l: 'Parkinson',      v: (data.parkinson_vol || 0) * 100, n: 'Uses high/low range, about 5× more efficient than close-to-close' },
+    { l: 'Garman-Klass',   v: (data.garman_klass_vol || 0) * 100, n: 'Uses open, high, low and close — most efficient on continuous trading' },
+    { l: 'Yang-Zhang',     v: (data.yang_zhang_vol || 0) * 100, n: 'Handles overnight gaps, generally the best choice for daily equity data' },
+  ].filter(e => e.v > 0);
 
   return (
     <div className="qe-grid-3">
-      <Card style={{ gridColumn:'span 1' }}>
-        <SectionTitle>GJR-GARCH(1,1) PARAMETERS</SectionTitle>
-        <Row label="ω (omega)" value={fmtN(g.omega,6)} />
-        <Row label="α (arch)" value={fmtN(g.alpha,4)} />
-        <Row label="γ (asymmetry)" value={fmtN(g.gamma_asymmetry,4)} highlight={g.gamma_asymmetry > 0 ? '#ef4444' : undefined} />
-        <Row label="β (garch)" value={fmtN(g.beta,4)} />
-        <Row label="ν Student-t df" value={fmtN(g.nu_student_t,1)} />
-        <Row label="Persistence α+β" value={fmtN(g.persistence,4)} highlight={(g.persistence||0) > 0.95 ? '#f59e0b' : undefined} />
-        <Row label="Leverage Effect" value={g.leverage_effect ? '✓ YES' : 'NO'} highlight={g.leverage_effect ? '#ef4444' : undefined} />
-      </Card>
-
-      <Card>
-        <SectionTitle>VOLATILITY FORECASTS (Annualized)</SectionTitle>
-        <Row label="Current Daily Vol" value={fmtN((g.current_daily_vol||0)*100,3)+'%'} />
-        <Row label="Annual Vol" value={fmtN((g.current_annual_vol||0)*100,1)+'%'} />
-        <Row label="5d Forecast" value={fmtN((g.forecast_vol_5d||0)*100,1)+'%'} />
-        <Row label="21d Forecast" value={fmtN((g.forecast_vol_21d||0)*100,1)+'%'} />
-        <Row label="Long-Run Vol" value={fmtN((g.long_run_annual_vol||0)*100,1)+'%'} />
-        <Row label="Vol Regime" value={g.vol_regime||'—'} />
-        <div style={{ fontFamily:"'Fira Code',monospace", fontSize:8, color:'#8a7560', marginTop:12, lineHeight:1.6 }}>
-          GJR-GARCH: γ&gt;0 means bad news (negative returns) increases<br/>
-          volatility more than good news — the "leverage effect"
+      <Card style={{ gridColumn:'span 2' }}>
+        <SectionTitle>VOLATILITY — CURRENT VERSUS STRUCTURAL</SectionTitle>
+        {stance && (
+          <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:12, color:'#b8a894', lineHeight:1.6, marginBottom:14 }}>
+            Volatility is <b style={{ color: stance.c }}>{stance.t.toLowerCase()}</b> — {stance.s}.
+          </div>
+        )}
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:10, marginBottom:14 }}>
+          {[
+            { l:'CURRENT', v:curVol, n:'annualised, from GARCH' },
+            { l:'STRUCTURAL', v:longRun, n:'long-run GARCH level' },
+            { l:'5-DAY FCST', v:f5, n:'near-term path' },
+            { l:'21-DAY FCST', v:f21, n:'one-month path' },
+          ].map(x => (
+            <div key={x.l} style={{ background:'#1a0f0a', borderRadius:8, padding:'12px 10px', textAlign:'center' }}>
+              <div style={{ fontFamily:"'Fira Code',monospace", fontSize:8, color:'#8a7560', letterSpacing:2 }}>{x.l}</div>
+              <div style={{ fontFamily:"'Fira Code',monospace", fontSize:19, fontWeight:800, color:'#d4c4b0', marginTop:5 }}>
+                {x.v != null && x.v > 0 ? `${x.v.toFixed(1)}%` : '—'}
+              </div>
+              <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:8.5, color:'#6b5d52', marginTop:3 }}>{x.n}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:11, color:'#9d8b7a', lineHeight:1.6, padding:'10px 12px', background:'#1a0f0a', borderRadius:6, borderLeft:'2px solid #daa520' }}>
+          <b style={{ color:'#d4c4b0' }}>Downside asymmetry.</b>{' '}
+          {gamma > 0
+            ? <>The GJR term is positive (γ = {gamma.toFixed(3)}), confirming the leverage effect: a negative shock raises
+               volatility {levRatio ? `roughly ${levRatio.toFixed(1)}×` : 'considerably'} more than an equally sized positive
+               shock. Downside risk is structurally worse than a symmetric model would suggest.</>
+            : <>The GJR term is not positive, so this name does not show the usual leverage effect — up and down shocks move
+               volatility similarly.</>}
+          {persistence > 0.97 && (
+            <> Persistence is {persistence.toFixed(4)}, close to unity, so volatility shocks decay slowly and the long-run
+              estimate should be treated as indicative rather than precise.</>
+          )}
+        </div>
+        <div style={{ fontFamily:"'Fira Code',monospace", fontSize:8, color:'#6b5d52', marginTop:10, letterSpacing:0.5 }}>
+          GJR-GARCH(1,1) · ω {fmtN(g.omega,6)} · α {fmtN(g.alpha,4)} · γ {fmtN(g.gamma_asymmetry,4)} · β {fmtN(g.beta,4)} · ν {fmtN(g.nu_student_t,1)} · persistence {fmtN(g.persistence,4)}
         </div>
       </Card>
 
       <Card>
-        <SectionTitle>VaR & CVaR (Student-t)</SectionTitle>
-        <Row label="VaR 95% (1d)" value={fmtN((g.var_95_daily||0)*100,2)+'%'} highlight="#ef4444" />
-        <Row label="VaR 99% (1d)" value={fmtN((g.var_99_daily||0)*100,2)+'%'} highlight="#ef4444" />
-        <Row label="CVaR 95% (1d)" value={fmtN((g.cvar_95_daily||0)*100,2)+'%'} highlight="#ef4444" />
-        <Row label="CVaR 99% (1d)" value={fmtN((g.cvar_99_daily||0)*100,2)+'%'} highlight="#ef4444" />
-        <Row label="Max Drawdown" value={fmtN((risk.max_drawdown||0)*100,1)+'%'} highlight="#ef4444" />
-        <Row label="Hurst Exponent" value={fmtN(data.hurst_exponent,3)} highlight={(data.hurst_exponent||0.5)>0.55?'#22c55e':'#8b5cf6'} />
-        <div style={{ fontFamily:"'Fira Code',monospace", fontSize:8, color:'#8a7560', marginTop:12, lineHeight:1.6 }}>
-          CVaR = Expected loss given VaR is breached<br/>
-          More conservative than VaR (Basel III preferred measure)
+        <SectionTitle>ESTIMATOR CROSS-CHECK</SectionTitle>
+        <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:10.5, color:'#9d8b7a', lineHeight:1.5, marginBottom:12 }}>
+          Four ways of measuring the same thing. Wide disagreement between them usually means gappy or illiquid trading.
         </div>
-      </Card>
-
-      <Card>
-        <SectionTitle>KALMAN FILTER — TREND DECOMPOSITION</SectionTitle>
-        <Row label="SNR (Signal/Noise)" value={fmtN(k.snr,4)} highlight={(k.snr||0)>0.05?'#22c55e':undefined} />
-        <Row label="R² (Trend Fit)" value={fmtN(k.r_squared,4)} />
-        <Row label="Process Noise Q" value={fmtN(k.process_noise_Q,6)} />
-        <Row label="Observation Noise R" value={fmtN(k.observation_noise_R,4)} />
-        <Row label="Kalman Gain" value={fmtN(k.current_kalman_gain,4)} />
-        <Row label="Trend Slope" value={fmtN(k.trend_slope,4)} highlight={(k.trend_slope||0)>0?'#22c55e':'#ef4444'} />
-        <Row label="Signal Type" value={k.signal_interpretation?.replace(/_/g,' ')||'—'} />
-      </Card>
-
-      <Card>
-        <SectionTitle>REALIZED VOLATILITY (Historical)</SectionTitle>
-        {[5,10,21,63,126,252].map(d => (
-          <Row key={d} label={`${d}d Realized Vol`} value={fmtN((data.risk_metrics?.[`realized_vol_${d}d`]||0)*100,1)+'%'} />
+        {estimators.map(e => (
+          <div key={e.l} style={{ marginBottom:9 }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline' }}>
+              <span style={{ fontFamily:"'Outfit',sans-serif", fontSize:11, color:'#d4c4b0' }}>{e.l}</span>
+              <span style={{ fontFamily:"'Fira Code',monospace", fontSize:12, color:'#d4c4b0', fontWeight:600 }}>{e.v.toFixed(1)}%</span>
+            </div>
+            <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:9, color:'#6b5d52', lineHeight:1.4 }}>{e.n}</div>
+          </div>
         ))}
+        {estimators.length > 1 && (() => {
+          const vs = estimators.map(e => e.v);
+          const spread = Math.max(...vs) - Math.min(...vs);
+          return (
+            <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:10, color:'#7a6b5d', marginTop:12, paddingTop:10, borderTop:'1px solid rgba(212,149,108,0.12)', lineHeight:1.5 }}>
+              Spread of {spread.toFixed(1)} points across estimators —{' '}
+              {spread < 4 ? 'tight agreement, the volatility reading is well determined.'
+                          : 'material disagreement, likely from overnight gaps or thin intraday liquidity.'}
+            </div>
+          );
+        })()}
       </Card>
 
-      <Card>
-        <SectionTitle>VOLATILITY ESTIMATORS</SectionTitle>
-        <Row label="Close-to-Close" value={fmtN((data.annual_vol||0)*100,1)+'%'} />
-        <Row label="Parkinson" value={fmtN((data.parkinson_vol||0)*100,1)+'%'} />
-        <Row label="Garman-Klass" value={fmtN((data.garman_klass_vol||0)*100,1)+'%'} />
-        <Row label="Yang-Zhang" value={fmtN((data.yang_zhang_vol||0)*100,1)+'%'} />
-        <div style={{ fontFamily:"'Fira Code',monospace", fontSize:8, color:'#8a7560', marginTop:12, lineHeight:1.7 }}>
-          Parkinson: uses H/L only (5× efficient)<br/>
-          Garman-Klass: uses O,H,L,C (most efficient)<br/>
-          Yang-Zhang: handles overnight gaps (best for daily)
+      {data.volatility_history && (() => {
+        const vh = data.volatility_history;
+        const span = (vh.range_high - vh.range_low) || 1;
+        const posOf = (v:number) => ((v - vh.range_low) / span) * 100;
+        const pct = vh.percentile;
+        const verdict = pct >= 80 ? { t:'unusually turbulent', c:'#ef4444' }
+                      : pct >= 60 ? { t:'above its normal range', c:'#f59e0b' }
+                      : pct >= 40 ? { t:'about normal', c:'#22c55e' }
+                      : pct >= 20 ? { t:'quieter than usual', c:'#22c55e' }
+                      : { t:'unusually calm', c:'#f59e0b' };
+        const order = ['1d','3d','1w','2w','1mo','2mo','3mo','6mo','1y','2y','3y','5y'];
+        const rows = order.filter(k => vh.changes[k]).map(k => ({ k, ...vh.changes[k] }));
+        return (
+          <Card style={{ gridColumn:'span 3' }}>
+            <SectionTitle>IS VOLATILITY CHANGING?</SectionTitle>
+            <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:12, color:'#b8a894', lineHeight:1.6, marginBottom:14 }}>
+              Rolling 21-day volatility is <b style={{color:'#d4c4b0'}}>{vh.current}%</b>, which sits at the{' '}
+              <b style={{ color: verdict.c }}>{pct}th percentile</b> of this stock&apos;s own history — {verdict.t}.
+              Its median over the period is {vh.median}%.
+            </div>
+
+            <div style={{ marginBottom:18 }}>
+              <div style={{ position:'relative', height:30 }}>
+                <div style={{ position:'absolute', top:12, left:0, right:0, height:6,
+                  background:'linear-gradient(90deg,#22c55e44,#f59e0b44,#ef444444)', borderRadius:3 }} />
+                <div style={{ position:'absolute', top:6, left:`${posOf(vh.median)}%`, width:1, height:18, background:'#9d8b7a88' }} />
+                <div style={{ position:'absolute', top:3, left:`${posOf(vh.current)}%`, transform:'translateX(-50%)' }}>
+                  <div style={{ width:3, height:24, background:'#daa520', borderRadius:1 }} />
+                </div>
+              </div>
+              <div style={{ display:'flex', justifyContent:'space-between', fontFamily:"'Fira Code',monospace", fontSize:9, color:'#8a7560', marginTop:2 }}>
+                <span>{vh.range_low}% low</span>
+                <span style={{ color:'#6b5d52' }}>median {vh.median}%</span>
+                <span>{vh.range_high}% high</span>
+              </div>
+            </div>
+
+            <div style={{ display:'grid', gridTemplateColumns:`repeat(${Math.min(rows.length,6)}, 1fr)`, gap:8 }}>
+              {rows.map(r => {
+                const up = r.change > 0;
+                const c = Math.abs(r.change) < 0.5 ? '#8a7560' : up ? '#ef4444' : '#22c55e';
+                return (
+                  <div key={r.k} style={{ background:'#1a0f0a', borderRadius:6, padding:'9px 6px', textAlign:'center' }}>
+                    <div style={{ fontFamily:"'Fira Code',monospace", fontSize:8, color:'#8a7560', letterSpacing:1 }}>{r.k.toUpperCase()} AGO</div>
+                    <div style={{ fontFamily:"'Fira Code',monospace", fontSize:11, color:'#9d8b7a', marginTop:3 }}>{r.then}%</div>
+                    <div style={{ fontFamily:"'Fira Code',monospace", fontSize:13, fontWeight:700, color:c, marginTop:3 }}>
+                      {r.change > 0 ? '+' : ''}{r.change.toFixed(1)}pt
+                    </div>
+                    <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:8.5, color:'#6b5d52', marginTop:1 }}>
+                      {r.change_pct != null ? `${r.change_pct > 0 ? '+' : ''}${r.change_pct}%` : ''}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:10, color:'#7a6b5d', marginTop:12, lineHeight:1.5 }}>
+              Red means volatility has risen since that point, green that it has fallen. Rising volatility signals growing
+              disagreement or uncertainty — it does not indicate direction, and spikes accompany panic selling as readily
+              as aggressive buying. {vh.observations} daily observations available.
+            </div>
+          </Card>
+        );
+      })()}
+
+      <Card style={{ gridColumn:'span 3' }}>
+        <SectionTitle>REALIZED VOLATILITY — TERM STRUCTURE</SectionTitle>
+        <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:10.5, color:'#9d8b7a', marginBottom:12 }}>
+          What actually happened, measured over increasing lookbacks. A rising curve means volatility has been climbing recently.
         </div>
+        {(() => {
+          const pts = [5,10,21,63,126,252]
+            .map(d => ({ d, v: (risk[`realized_vol_${d}d`] || 0) * 100 }))
+            .filter(p => p.v > 0);
+          if (!pts.length) return <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:11, color:'#8a7560' }}>Realized volatility unavailable.</div>;
+          const mx = Math.max(...pts.map(p => p.v));
+          return (
+            <div style={{ display:'grid', gridTemplateColumns:`repeat(${pts.length}, 1fr)`, gap:10, alignItems:'end' }}>
+              {pts.map(p => (
+                <div key={p.d} style={{ textAlign:'center' }}>
+                  <div style={{ fontFamily:"'Fira Code',monospace", fontSize:12, color:'#d4c4b0', fontWeight:600, marginBottom:5 }}>{p.v.toFixed(1)}%</div>
+                  <div style={{ height:Math.max(4, (p.v/mx)*70), background:'linear-gradient(180deg,#daa52099,#daa52033)', borderRadius:'3px 3px 0 0' }} />
+                  <div style={{ fontFamily:"'Fira Code',monospace", fontSize:9, color:'#8a7560', marginTop:5 }}>{p.d}d</div>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
       </Card>
     </div>
   );
