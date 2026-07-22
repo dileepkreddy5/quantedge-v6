@@ -1401,65 +1401,136 @@ export function SentimentPanel({ data }: { data: any }) {
 // ══════════════════════════════════════════════════════════════
 export function RiskPanel({ data }: { data: any }) {
   const risk = data.risk_metrics || {};
+  const pct = (v: any, d = 1) => v == null ? '—' : `${(Number(v) * 100).toFixed(d)}%`;
+  const num = (v: any, d = 2) => v == null ? '—' : Number(v).toFixed(d);
 
-  const ratios = [
-    { label: 'Sharpe Ratio', value: risk.sharpe_ratio, good: v => v > 1, fmt: (v:any)=>fmtN(v,3) },
-    { label: 'Sortino Ratio', value: risk.sortino_ratio, good: v => v > 1, fmt: (v:any)=>fmtN(v,3) },
-    { label: 'Calmar Ratio', value: risk.calmar_ratio, good: v => v > 0.5, fmt: (v:any)=>fmtN(v,3) },
-    { label: 'Omega Ratio', value: risk.omega_ratio, good: v => v > 1, fmt: (v:any)=>fmtN(v,3) },
-    { label: 'Sterling Ratio', value: risk.sterling_ratio, good: v => v > 0.5, fmt: (v:any)=>fmtN(v,3) },
-    { label: 'Tail Ratio', value: risk.tail_ratio, good: v => v > 1, fmt: (v:any)=>fmtN(v,3) },
-  ];
+  const ret = risk.annual_return, vol = risk.annual_volatility;
+  const sharpe = risk.sharpe_ratio, sortino = risk.sortino_ratio;
+  const dd = risk.max_drawdown, kurt = risk.excess_kurtosis, skew = risk.skewness;
+  const var95 = risk.var_95, cvar95 = risk.cvar_95;
+  const beta = data.capm_beta, r2 = data.capm_r_squared;
+  const idio = data.capm_idio_risk, alpha = data.capm_alpha;
+  const hurst = data.hurst_exponent;
+
+  // Recovering from a drawdown takes more than the fall: down 50% needs +100%.
+  const recovery = dd != null && Number(dd) < 0 ? (1 / (1 + Number(dd)) - 1) : null;
 
   return (
     <div className="qe-grid-3">
+      <Card style={{ gridColumn:'span 3' }}>
+        <SectionTitle>WHAT THE RISK NUMBERS SAY</SectionTitle>
+        <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:12.5, color:'#d4c4b0', lineHeight:1.7 }}>
+          {ret != null && vol != null && (
+            <>This returned <b style={{color: Number(ret) > 0 ? '#22c55e' : '#ef4444'}}>{pct(ret)}</b> a year
+              at <b>{pct(vol)}</b> volatility, so <b>{num(sharpe)}</b> units of return for each unit of risk
+              {sharpe != null && (Number(sharpe) > 1 ? ' — strong.' : Number(sharpe) > 0.5 ? ' — respectable but not exceptional.' : Number(sharpe) > 0 ? ' — thin compensation for the risk taken.' : ' — the risk was not rewarded.')}
+              {' '}</>
+          )}
+          {sortino != null && sharpe != null && (
+            <>Sortino of <b>{num(sortino)}</b> against Sharpe {num(sharpe)}
+              {Number(sortino) > Number(sharpe) * 1.2
+                ? ' means the volatility skews toward upside moves rather than losses, which is the better kind of turbulence. '
+                : Number(sortino) < Number(sharpe)
+                  ? ' means downside moves dominate — the volatility is mostly working against you. '
+                  : ' means gains and losses are roughly symmetric. '}</>
+          )}
+          {dd != null && (
+            <>Worst peak-to-trough fall was <b style={{color:'#ef4444'}}>{pct(dd)}</b>
+              {recovery != null && <>, which needs <b>+{(recovery * 100).toFixed(0)}%</b> to recover</>}. </>
+          )}
+          {kurt != null && (
+            <>Excess kurtosis of <b>{num(kurt)}</b>
+              {Number(kurt) > 1
+                ? ' means extreme days arrive far more often than a normal distribution predicts, so the VaR figures below understate genuine tail risk.'
+                : ' is close to normal, so standard risk measures are a fair guide.'}</>
+          )}
+        </div>
+      </Card>
+
       <Card>
-        <SectionTitle>RISK-ADJUSTED PERFORMANCE</SectionTitle>
-        {ratios.map(r => (
-          <Row key={r.label} label={r.label} value={r.value != null ? r.fmt(r.value) : '—'} highlight={r.value != null ? (r.good(r.value) ? '#22c55e' : '#ef4444') : undefined} />
+        <SectionTitle>RISK-ADJUSTED RETURN</SectionTitle>
+        {[
+          { l:'Sharpe',  v:sharpe,  n:'return per unit of total volatility', hi:1.0 },
+          { l:'Sortino', v:sortino, n:'return per unit of downside volatility', hi:1.0 },
+          { l:'Calmar',  v:risk.calmar_ratio, n:'return against worst drawdown', hi:0.5 },
+          { l:'Omega',   v:risk.omega_ratio,  n:'gains weighed against losses', hi:1.0 },
+        ].map(x => (
+          <div key={x.l} style={{ display:'grid', gridTemplateColumns:'1fr auto', gap:8, padding:'7px 0',
+            borderBottom:'1px solid rgba(212,149,108,0.07)' }}>
+            <div>
+              <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:12, color:'#d4c4b0' }}>{x.l}</div>
+              <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:9.5, color:'#6b5d52' }}>{x.n}</div>
+            </div>
+            <div style={{ fontFamily:"'Fira Code',monospace", fontSize:15, fontWeight:700, alignSelf:'center',
+              color: x.v == null ? '#6b5d52' : Number(x.v) >= x.hi ? '#22c55e' : Number(x.v) > 0 ? '#f59e0b' : '#ef4444' }}>
+              {num(x.v)}
+            </div>
+          </div>
         ))}
+        <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:9.5, color:'#6b5d52', marginTop:10, lineHeight:1.5 }}>
+          Above 1.0 is generally considered good for Sharpe and Sortino; these are historical and say nothing
+          about what comes next.
+        </div>
       </Card>
 
       <Card>
-        <SectionTitle>RETURN STATISTICS</SectionTitle>
-        <Row label="Annual Return" value={`${((risk.annual_return||0)*100).toFixed(1)}%`} highlight={(risk.annual_return||0)>0?'#22c55e':'#ef4444'} />
-        <Row label="Annual Volatility" value={`${((risk.annual_volatility||0)*100).toFixed(1)}%`} />
-        <Row label="Max Drawdown" value={`${((risk.max_drawdown||0)*100).toFixed(1)}%`} highlight="#ef4444" />
-        <Row label="Skewness" value={fmtN(risk.skewness,3)} highlight={(risk.skewness||0)>0?'#22c55e':'#ef4444'} />
-        <Row label="Excess Kurtosis" value={fmtN(risk.excess_kurtosis,3)} />
-        <Row label="Ulcer Index" value={fmtN(risk.ulcer_index,4)} />
-        <Row label="Hurst Exponent" value={fmtN(data.hurst_exponent,4)} />
+        <SectionTitle>LOSS PROFILE</SectionTitle>
+        {[
+          { l:'Daily VaR 95%',  v:pct(var95, 2),  n:'exceeded one day in twenty' },
+          { l:'Daily CVaR 95%', v:pct(cvar95, 2), n:'average loss when VaR breaks' },
+          { l:'Max drawdown',   v:pct(dd),        n:'worst peak-to-trough' },
+          { l:'Recovery needed',v: recovery != null ? `+${(recovery*100).toFixed(0)}%` : '—', n:'to regain the high' },
+          { l:'Ulcer index',    v:num(risk.ulcer_index, 3), n:'depth and duration of drawdowns' },
+        ].map(x => (
+          <Row key={x.l} label={x.l} value={x.v} />
+        ))}
+        <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:9.5, color:'#6b5d52', marginTop:10, lineHeight:1.5 }}>
+          CVaR is the more honest of the two: VaR says how far a bad day reaches, CVaR says how bad it gets
+          once that line is crossed.
+        </div>
       </Card>
 
       <Card>
-        <SectionTitle>MARKET MODEL — CAPM (vs SPY)</SectionTitle>
-        {data.capm_available ? (
+        <SectionTitle>MARKET EXPOSURE</SectionTitle>
+        {beta != null ? (
           <>
-            <Row label="Market Beta (β)" value={fmtN(data.capm_beta,3)} />
-            <Row label="Alpha (annualized)" value={data.capm_alpha != null ? `${(data.capm_alpha*100).toFixed(2)}%` : '—'} />
-            <Row label="R² (market fit)" value={data.capm_r_squared != null ? `${(data.capm_r_squared*100).toFixed(1)}%` : '—'} />
-            <Row label="Idiosyncratic Risk" value={data.capm_idio_risk != null ? `${(data.capm_idio_risk*100).toFixed(1)}%` : '—'} />
-            <Row label="Observations" value={data.capm_n_obs != null ? `${data.capm_n_obs}d` : '—'} />
-            <div style={{fontSize:10,color:'#8a7560',marginTop:10,lineHeight:1.5,fontStyle:'italic'}}>
-              Single-factor regression of the stock's excess returns on the market's (SPY).
-              β&gt;1 = more volatile than market; R² = share of moves explained by the market;
-              the rest is stock-specific (idiosyncratic) risk. Full Fama-French 5-factor
-              decomposition is on the roadmap.
+            <div style={{ display:'flex', alignItems:'baseline', gap:10, marginBottom:10 }}>
+              <span style={{ fontFamily:"'Fira Code',monospace", fontSize:30, fontWeight:800,
+                color: Number(beta) > 1.3 ? '#ef4444' : Number(beta) < 0.8 ? '#22c55e' : '#daa520' }}>
+                {num(beta)}
+              </span>
+              <span style={{ fontFamily:"'Outfit',sans-serif", fontSize:11, color:'#9d8b7a' }}>
+                beta to the market
+              </span>
+            </div>
+            <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:11, color:'#b8a894', lineHeight:1.6, marginBottom:12 }}>
+              A 1% move in the S&P has historically come with a <b>{(Number(beta)).toFixed(2)}%</b> move here.
+              {r2 != null && <> The market explains <b>{pct(r2, 0)}</b> of the variation
+                — the other <b>{pct(1 - Number(r2), 0)}</b> is specific to this company
+                {Number(r2) < 0.3 ? ', so it moves largely on its own news.' : '.'}</>}
+            </div>
+            <Row label="Alpha (annualised)" value={alpha != null ? pct(alpha, 2) : '—'} />
+            <Row label="Idiosyncratic vol" value={idio != null ? pct(idio) : '—'} />
+            <Row label="Observations" value={data.capm_n_obs ? `${data.capm_n_obs}d` : '—'} />
+            <Row label="Skewness" value={num(skew, 2)} />
+            <Row label="Hurst exponent" value={num(hurst, 3)} />
+            <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:9.5, color:'#6b5d52', marginTop:10, lineHeight:1.5 }}>
+              {hurst != null && (Number(hurst) > 0.55
+                ? 'Hurst above 0.5 suggests moves tend to persist rather than revert.'
+                : Number(hurst) < 0.45
+                  ? 'Hurst below 0.5 suggests moves tend to reverse rather than persist.'
+                  : 'Hurst near 0.5 is consistent with a random walk.')}
             </div>
           </>
         ) : (
-          <div style={{fontSize:11,color:'#8a7560',padding:'8px 0',lineHeight:1.6}}>
-            Market regression unavailable for this name (insufficient overlapping history vs SPY).
+          <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:11, color:'#8a7560', lineHeight:1.6 }}>
+            Market regression unavailable — insufficient overlapping history against the S&P.
           </div>
         )}
       </Card>
     </div>
   );
 }
-
-// ══════════════════════════════════════════════════════════════
-// FUNDAMENTALS PANEL — Institutional Bloomberg-style
-// ══════════════════════════════════════════════════════════════
 export function FundamentalsPanel({ data }: { data: any }) {
   const f = (v: any, d=2) => v == null ? "—" : Number(v).toFixed(d);
   const fp = (v: any, d=2) => v == null ? "—" : `${(Number(v)*100).toFixed(d)}%`;
