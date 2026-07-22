@@ -116,6 +116,14 @@ class RelationshipExtractor:
             cand = " ".join(parts[:n])
             if len(cand) >= 5 and cand in self._name_index:
                 return self._name_index[cand]
+        # "Cisco Systems" against a universe entry of "Cisco", or the reverse:
+        # allow a match when one name is a prefix of the other and long enough
+        # to be unambiguous.
+        if len(k) >= 6:
+            hits = [t for nm, t in self._name_index.items()
+                    if len(nm) >= 5 and (nm.startswith(k) or k.startswith(nm))]
+            if len(set(hits)) == 1:
+                return hits[0]
         return None
 
     async def _latest_10k(self, client: httpx.AsyncClient, cik: str) -> Optional[Tuple[str, str, str]]:
@@ -159,8 +167,18 @@ class RelationshipExtractor:
         so the whole list is taken rather than the first match."""
         out, seen = [], set()
         name_re = re.compile(r"[A-Z][A-Za-z0-9&.\-]*(?:\s+[A-Z][A-Za-z0-9&.\-]*){0,3}")
+        # Geographies and industry shorthand are not companies. A supplier writing
+        # "customers include OEMs in Europe and Asia" is describing a market, and
+        # storing that as a relationship would be noise dressed as data.
         stop = {"the", "our", "we", "united states", "company", "inc", "and", "other",
-                "these", "such", "including", "certain", "various", "many", "some"}
+                "these", "such", "including", "certain", "various", "many", "some",
+                "oems", "odms", "oem", "odm", "europe", "asia", "america", "canada",
+                "germany", "japan", "china", "india", "australia", "france", "korea",
+                "mexico", "brazil", "africa", "u s", "us", "uk", "emea", "apac",
+                "north america", "south america", "latin america", "middle east",
+                "medicaid", "medicare", "government", "military", "federal",
+                "aerospace", "defense", "automotive", "industrial", "commercial",
+                "customers", "clients", "distributors", "retailers", "dealers"}
         for kind, pat in _PATTERNS:
             for m in re.finditer(pat, section, re.I):
                 tail = section[m.end(): m.end() + 420]
