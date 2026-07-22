@@ -375,7 +375,10 @@ async def lifespan(app: FastAPI):
                         await _extract_relationships()
                 except Exception as e:
                     logger.warning(f"relationship catch-up skipped: {e}")
-            asyncio.create_task(_catchup())
+            if os.getenv("RELATIONSHIP_CATCHUP") == "1":
+                asyncio.create_task(_catchup())
+            else:
+                logger.info("relationship catch-up disabled (set RELATIONSHIP_CATCHUP=1 to enable)")
 
         # News briefings — pre-build each morning for popular tickers (warms cache)
         async def _refresh_news():
