@@ -574,9 +574,9 @@ export function VolatilityPanel({ data }: { data: any }) {
         </div>
       </Card>
 
-      <Card>
+      <Card style={{ alignSelf:'start' }}>
         <details>
-        <summary style={{ cursor:'pointer', listStyle:'none' }}>
+        <summary style={{ cursor:'pointer', listStyle:'none', outline:'none' }}>
           <SectionTitle>ESTIMATOR CROSS-CHECK &nbsp;<span style={{ fontSize:9, color:'#6b5d52' }}>(advanced — click to expand)</span></SectionTitle>
         </summary>
         <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:10.5, color:'#9d8b7a', lineHeight:1.5, marginBottom:12 }}>
