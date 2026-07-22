@@ -374,52 +374,104 @@ export function MLModelsPanel({ data }: { data: any }) {
       </Card>
 
       {/* LSTM */}
-      <Card>
-        <SectionTitle>BIDIRECTIONAL LSTM</SectionTitle>
-        <div style={{ marginBottom:8 }}>
-          <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:10, color:'#9d8b7a', marginBottom:4 }}>Architecture: 512→256→128 BiLSTM + Temporal Attention</div>
-          <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:10, color:'#9d8b7a' }}>MC Dropout uncertainty quantification</div>
+      <Card style={{ gridColumn:'span 2' }}>
+        <SectionTitle>RETURN DISTRIBUTION — 1 MONTH</SectionTitle>
+        <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:11, color:'#9d8b7a', lineHeight:1.5, marginBottom:14 }}>
+          The realistic range of one-month outcomes, not a single guess. The <b style={{color:'#d4c4b0'}}>width</b> of this
+          band is well estimated — it comes from realized volatility. The <b style={{color:'#d4c4b0'}}>centre</b> inherits the
+          weaker per-ticker drift estimate, so read the spread with more confidence than the midpoint.
         </div>
-        {[{l:'5d Return',v:lstm.pred_5d,suf:'%'},{l:'21d Return',v:lstm.pred_21d,suf:'%'},{l:'252d Return',v:lstm.pred_252d,suf:'%'},{l:'Regime',v:lstm.regime},{l:'Uncertainty',v:lstm.uncertainty,suf:'%'}].map(r => (
-          <Row key={r.l} label={r.l} value={r.v != null ? `${typeof r.v==='number'&&r.v>0?'+':''}${typeof r.v==='number'?r.v.toFixed(1):''}${r.suf||''}${typeof r.v==='string'?r.v:''}` : '—'} />
-        ))}
-      </Card>
-
-      {/* XGBoost */}
-      <Card>
-        <SectionTitle>XGBOOST CROSS-SECTIONAL</SectionTitle>
-        <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:10, color:'#9d8b7a', marginBottom:8 }}>120 features · SHAP explanations · Walk-forward CV</div>
-        {[{l:'Signal Strength',v:xgb.signal_strength,suf:'%'},{l:'21d Alpha',v:xgb.pred_21d,suf:'%'},{l:'252d Alpha',v:xgb.pred_252d,suf:'%'},{l:'IC Estimate',v:preds.ic_estimate}].map(r => (
-          <Row key={r.l} label={r.l} value={r.v != null ? `${typeof r.v==='number'&&r.v>0?'+':''}${typeof r.v==='number'?r.v.toFixed(2):''}${r.suf||''}` : '—'} />
-        ))}
-        {shap.slice(0,3).length > 0 && (
-          <>
-            <div style={{ fontFamily:"'Fira Code',monospace", fontSize:8, color:'#daa520', letterSpacing:2, marginTop:10, marginBottom:6 }}>TOP SHAP DRIVERS</div>
-            {shap.slice(0,3).map((s: any, i: number) => (
-              <div key={i} style={{ display:'flex', justifyContent:'space-between', fontSize:10, padding:'3px 0', color:'#9d8b7a' }}>
-                <span style={{ fontFamily:"'Fira Code',monospace", fontSize:9 }}>{s.feature}</span>
-                <span style={{ color: s.impact > 0 ? '#22c55e' : '#ef4444', fontFamily:"'Fira Code',monospace" }}>{s.impact > 0 ? '+' : ''}{s.impact?.toFixed(3)}</span>
+        {Object.keys(quantile).length > 0 ? (() => {
+          const qs = [
+            { k:'q10_1m', l:'P10', d:'1-in-10 downside' },
+            { k:'q25_1m', l:'P25', d:'lower quartile' },
+            { k:'q50_1m', l:'P50', d:'median' },
+            { k:'q75_1m', l:'P75', d:'upper quartile' },
+            { k:'q90_1m', l:'P90', d:'1-in-10 upside' },
+          ].filter(q => quantile[q.k] != null);
+          if (!qs.length) return null;
+          const vals = qs.map(q => Number(quantile[q.k]));
+          const lo = Math.min(...vals), hi = Math.max(...vals);
+          const span = (hi - lo) || 1;
+          const posOf = (v:number) => ((v - lo) / span) * 100;
+          const zero = (lo <= 0 && hi >= 0) ? posOf(0) : null;
+          return (
+            <div>
+              <div style={{ position:'relative', height:38, marginBottom:10 }}>
+                <div style={{ position:'absolute', top:16, left:`${posOf(vals[0])}%`, width:`${posOf(vals[vals.length-1])-posOf(vals[0])}%`,
+                  height:6, background:'linear-gradient(90deg,#ef444455,#8a756055,#22c55e55)', borderRadius:3 }} />
+                {qs.length >= 4 && (
+                  <div style={{ position:'absolute', top:13, left:`${posOf(Number(quantile['q25_1m']))}%`,
+                    width:`${posOf(Number(quantile['q75_1m']))-posOf(Number(quantile['q25_1m']))}%`,
+                    height:12, background:'#daa52033', border:'1px solid #daa52066', borderRadius:3 }} />
+                )}
+                {zero != null && (
+                  <div style={{ position:'absolute', top:6, left:`${zero}%`, width:1, height:26, background:'#9d8b7a88' }} />
+                )}
+                {qs.map(q => {
+                  const v = Number(quantile[q.k]);
+                  const isMed = q.k === 'q50_1m';
+                  return (
+                    <div key={q.k} style={{ position:'absolute', left:`${posOf(v)}%`, top:isMed?8:12, transform:'translateX(-50%)' }}>
+                      <div style={{ width:isMed?3:2, height:isMed?22:14, background:isMed?'#daa520':'#9d8b7a', borderRadius:1 }} />
+                    </div>
+                  );
+                })}
               </div>
-            ))}
-          </>
+              <div style={{ display:'grid', gridTemplateColumns:`repeat(${qs.length}, 1fr)`, gap:6 }}>
+                {qs.map(q => {
+                  const v = Number(quantile[q.k]);
+                  const c = v > 0 ? '#22c55e' : v < 0 ? '#ef4444' : '#8a7560';
+                  return (
+                    <div key={q.k} style={{ textAlign:'center' }}>
+                      <div style={{ fontFamily:"'Fira Code',monospace", fontSize:8, color:'#8a7560', letterSpacing:1 }}>{q.l}</div>
+                      <div style={{ fontFamily:"'Fira Code',monospace", fontSize:15, fontWeight:700, color:c, marginTop:2 }}>
+                        {v>0?'+':''}{v.toFixed(1)}%
+                      </div>
+                      <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:8, color:'#6b5d52', marginTop:2 }}>{q.d}</div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:10, color:'#7a6b5d', marginTop:12, lineHeight:1.5 }}>
+                Eight in ten simulated outcomes fall between the P10 and P90 marks. The shaded box spans the middle 50%.
+              </div>
+            </div>
+          );
+        })() : (
+          <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:11, color:'#8a7560' }}>Quantile forecasts unavailable for this ticker.</div>
         )}
       </Card>
 
-      {/* LightGBM */}
       <Card>
-        <SectionTitle>LIGHTGBM + QUANTILE FORECASTS</SectionTitle>
-        <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:10, color:'#9d8b7a', marginBottom:8 }}>Leaf-wise growth · Cross-sectional ranking</div>
-        {[{l:'Rank Score',v:lgbm.rank_score,suf:'%'},{l:'21d Pred',v:lgbm.pred_21d,suf:'%'},{l:'252d Pred',v:lgbm.pred_252d,suf:'%'}].map(r => (
-          <Row key={r.l} label={r.l} value={r.v != null ? `${r.v>0?'+':''}${r.v.toFixed(1)}${r.suf||''}` : '—'} />
-        ))}
-        {Object.keys(quantile).length > 0 && (
-          <>
-            <div style={{ fontFamily:"'Fira Code',monospace", fontSize:8, color:'#daa520', letterSpacing:2, marginTop:10, marginBottom:6 }}>1M RETURN QUANTILES</div>
-            {[['q10_1m','P10'],['q25_1m','P25'],['q50_1m','P50 (Median)'],['q75_1m','P75'],['q90_1m','P90']].map(([k,l]) => (
-              <Row key={k} label={l} value={quantile[k] != null ? `${quantile[k]>0?'+':''}${quantile[k].toFixed(1)}%` : '—'} />
-            ))}
-          </>
-        )}
+        <SectionTitle>HOW THESE MODELS ARE BUILT</SectionTitle>
+        <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:10.5, color:'#9d8b7a', lineHeight:1.6 }}>
+          <div style={{ marginBottom:9 }}>
+            <span style={{ color:'#daa520', fontFamily:"'Fira Code',monospace", fontSize:9, letterSpacing:1 }}>LABELLING</span><br/>
+            Triple-barrier method — each sample is labelled by whether price hit an upper or lower volatility band first,
+            or neither within 21 days. Path-dependent, unlike a plain forward return.
+          </div>
+          <div style={{ marginBottom:9 }}>
+            <span style={{ color:'#daa520', fontFamily:"'Fira Code',monospace", fontSize:9, letterSpacing:1 }}>VALIDATION</span><br/>
+            Walk-forward splits by date with an embargo gap, so the model is never tested on periods adjacent to its
+            training data. Long-horizon rank-IC is measured only on non-overlapping windows.
+          </div>
+          <div style={{ marginBottom:9 }}>
+            <span style={{ color:'#daa520', fontFamily:"'Fira Code',monospace", fontSize:9, letterSpacing:1 }}>CROSS-SECTIONAL RANKING</span><br/>
+            Every feature is converted to its percentile within that day's universe. The model learns relative
+            positioning against peers rather than absolute levels.
+          </div>
+          <div style={{ marginBottom:9 }}>
+            <span style={{ color:'#daa520', fontFamily:"'Fira Code',monospace", fontSize:9, letterSpacing:1 }}>POINT-IN-TIME FUNDAMENTALS</span><br/>
+            Financial data is filtered by SEC filing date, so no sample can see a figure before it was public. This is
+            what separates a real backtest from an accidental look into the future.
+          </div>
+          <div>
+            <span style={{ color:'#daa520', fontFamily:"'Fira Code',monospace", fontSize:9, letterSpacing:1 }}>ARCHITECTURE</span><br/>
+            135 ranked features · XGBoost + LightGBM ensemble per horizon · 512→256→128 BiLSTM with temporal attention
+            and MC-dropout uncertainty.
+          </div>
+        </div>
       </Card>
     </div>
   );
