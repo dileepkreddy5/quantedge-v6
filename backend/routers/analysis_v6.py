@@ -20,6 +20,11 @@ import asyncio
 import json
 import time
 import numpy as np
+
+# Single risk-free rate for the whole pipeline. Previously 0.05 in
+# VolatilityFeatures.risk_metrics and 0.053 in the CAPM block, with the
+# governance Sharpe using none at all. Tracks the 3-month T-bill; set 2026-07.
+RISK_FREE_ANNUAL = 0.053
 import pandas as pd
 from typing import Optional, Dict, Any, List
 from loguru import logger
@@ -803,7 +808,10 @@ class QuantEdgeAnalyzerV6:
                 # observations: a DAILY Sharpe against a daily n. Passing the
                 # annualised figure inflates z by sqrt(252) and saturates the
                 # normal CDF at 1.0 regardless of the input.
-                _r = returns.tail(252)
+                # DSR assumes an EXCESS-return series. Subtract the daily
+                # risk-free before computing, or the ratio is mean/sigma rather
+                # than a Sharpe and the deflation is misspecified.
+                _r = (returns - RISK_FREE_ANNUAL / 252).tail(252)
                 sharpe_daily = float(_r.mean() / _r.std())
                 sharpe = float(sharpe_daily * np.sqrt(252))   # display only
                 skew = float(_r.skew())
@@ -1026,7 +1034,7 @@ class QuantEdgeAnalyzerV6:
                     aligned = pd.concat([_s.rename("stock"), _m.rename("mkt")], axis=1, join="inner").dropna()
                     aligned = aligned.tail(252)
                     if len(aligned) >= 60:
-                        rf = 0.053 / 252
+                        rf = RISK_FREE_ANNUAL / 252
                         y = aligned["stock"].values - rf
                         x = aligned["mkt"].values - rf
                         from numpy.linalg import lstsq
