@@ -184,3 +184,58 @@ async def get_ecosystem(
                  "that may reflect a supply relationship, shared customers, or simply common "
                  "sector exposure. It is a measured association, not an asserted business link."),
     }, "cached": False}
+
+
+@router.get("/relationships/{ticker}")
+async def get_relationships(
+    ticker: str,
+    http_request: Request,
+    current_user: Optional[CognitoUser] = Depends(get_optional_user),
+):
+    """Business relationships this company or its counterparties disclosed in
+    10-K filings. Suppliers name their customers because concentration is a
+    reportable risk; buyers rarely name anyone. So 'supplies_this' is read by
+    reversing the edges other companies filed, and is usually richer than
+    anything the company says about itself."""
+    ticker = ticker.upper().strip()
+    store = getattr(http_request.app.state, "peer_store", None)
+    if store is None:
+        raise HTTPException(503, "not available yet")
+
+    async with store.pool.acquire() as conn:
+        outgoing = await conn.fetch(
+            "SELECT kind, dst_name, dst_ticker, evidence, filing_date FROM relationships "
+            "WHERE src_ticker=$1 ORDER BY dst_ticker NULLS LAST", ticker)
+        incoming = await conn.fetch(
+            "SELECT src_ticker, kind, evidence, filing_date FROM relationships "
+            "WHERE dst_ticker=$1 ORDER BY src_ticker", ticker)
+        names = {}
+        tks = [r["src_ticker"] for r in incoming]
+        if tks:
+            for r in await conn.fetch(
+                    "SELECT ticker, name FROM universe WHERE ticker = ANY($1::text[])", tks):
+                names[r["ticker"]] = r["name"]
+
+    def pack(rows, key):
+        return [{"ticker": r[key], "name": names.get(r[key], r[key]) if key == "src_ticker" else r["dst_name"],
+                 "evidence": (r["evidence"] or "")[:320],
+                 "filing_date": str(r["filing_date"]) if r["filing_date"] else None} for r in rows]
+
+    supplies_this = pack([r for r in incoming if r["kind"] == "CUSTOMER_OF"], "src_ticker")
+    buys_from = pack([r for r in outgoing if r["kind"] == "CUSTOMER_OF"], "dst_ticker")
+    competitors = pack([r for r in outgoing if r["kind"] == "COMPETITOR"], "dst_ticker")
+    rivals_naming = pack([r for r in incoming if r["kind"] == "COMPETITOR"], "src_ticker")
+
+    total = len(supplies_this) + len(buys_from) + len(competitors) + len(rivals_naming)
+    return {"data": {
+        "available": total > 0,
+        "ticker": ticker,
+        "supplies_this": supplies_this,
+        "buys_from": buys_from,
+        "competitors": competitors,
+        "named_as_rival_by": rivals_naming,
+        "note": ("Read from 10-K filings, with the disclosing sentence kept as evidence. "
+                 "Coverage is uneven: a company appears here only when it or a counterparty "
+                 "names it in writing. Absence means nothing was disclosed, not that no "
+                 "relationship exists."),
+    }, "cached": False}

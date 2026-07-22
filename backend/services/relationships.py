@@ -205,9 +205,13 @@ class RelationshipExtractor:
                     if not key[1] or key in seen:
                         continue
                     seen.add(key)
-                    s = max(0, m.start() - 100)
-                    out.append({"kind": kind, "name": name,
-                                "evidence": section[s: m.end() + 220].strip()})
+                    # Start at the sentence boundary rather than a fixed offset,
+                    # so the quote reads as a sentence instead of a fragment.
+                    lo = max(0, m.start() - 260)
+                    window = section[lo: m.end() + 240]
+                    dot = window.rfind(". ", 0, m.start() - lo)
+                    ev = window[dot + 2:] if dot > 0 else window
+                    out.append({"kind": kind, "name": name, "evidence": ev.strip()})
         return out
 
     async def extract_for(self, ticker: str, cik: str) -> Dict:
