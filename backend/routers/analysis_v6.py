@@ -429,6 +429,77 @@ class QuantEdgeAnalyzerV6:
             except Exception as _e:
                 logger.info(f"flow analysis skipped: {_e}")
 
+            # ── Volatility intelligence: stability, expected moves, regime history ──
+            try:
+                import numpy as _np
+                _c2 = price_data["close"].dropna()
+                if len(_c2) >= 300:
+                    _lr2 = _np.log(_c2 / _c2.shift(1)).dropna()
+                    _rv2 = (_lr2.rolling(21).std() * _np.sqrt(252) * 100).dropna()
+                    _cur2 = float(_rv2.iloc[-1])
+                    _vi = {}
+
+                    # Expected move translation — the practical form of a vol number
+                    _d = _cur2 / _np.sqrt(252)
+                    _vi["expected_move"] = {
+                        "daily": round(_d, 2), "weekly": round(_d * _np.sqrt(5), 2),
+                        "monthly": round(_d * _np.sqrt(21), 2), "quarterly": round(_d * _np.sqrt(63), 2),
+                        "note": "One standard deviation. Roughly two days in three fall within this range; one in twenty exceeds double it.",
+                    }
+
+                    # Stability: volatility of volatility + trend of the rolling series
+                    _vov = float(_rv2.iloc[-63:].std() / _rv2.iloc[-63:].mean() * 100) if _rv2.iloc[-63:].mean() > 0 else None
+                    _sl2 = float(_np.polyfit(range(63), _rv2.iloc[-63:].values, 1)[0])
+                    _slpct = (_sl2 * 63) / _cur2 * 100 if _cur2 > 0 else 0
+                    _stab = max(0, min(100, round(100 - (_vov or 0) * 1.6 - max(0, _slpct) * 0.6)))
+                    _vi["stability"] = {
+                        "score": _stab,
+                        "label": "Very stable" if _stab >= 75 else "Stable" if _stab >= 55 else "Unsettled" if _stab >= 35 else "Rapidly changing",
+                        "vol_of_vol_pct": round(_vov, 1) if _vov else None,
+                        "trend_pct_per_quarter": round(_slpct, 1),
+                        "note": "How steady the volatility level itself has been over the last quarter. Low scores mean risk is moving quickly, which makes position sizing unreliable.",
+                    }
+
+                    # Percentile timeline — gradual drift or one abnormal stretch?
+                    _tl = {}
+                    for _lbl, _n in [("30d",30),("90d",90),("180d",180),("1y",252),("full",len(_rv2))]:
+                        if len(_rv2) >= _n:
+                            _w = _rv2.iloc[-_n:]
+                            _tl[_lbl] = {"percentile": round(float((_w.values < _cur2).mean()*100),1),
+                                         "mean": round(float(_w.mean()),1)}
+                    _vi["percentile_timeline"] = _tl
+
+                    # Regime history over ~2y using terciles of the full distribution
+                    _lo_t, _hi_t = float(_np.percentile(_rv2.values,33)), float(_np.percentile(_rv2.values,67))
+                    _lbl_of = lambda v: "LOW" if v < _lo_t else "HIGH" if v > _hi_t else "NORMAL"
+                    _win = _rv2.iloc[-504:] if len(_rv2) >= 504 else _rv2
+                    _segs, _cl, _cs = [], None, None
+                    for _dt, _v in _win.items():
+                        _l = _lbl_of(float(_v))
+                        if _l != _cl:
+                            if _cl is not None:
+                                _segs.append({"regime": _cl, "start": str(_cs)[:10], "end": str(_pd)[:10], "days": _dl})
+                            _cl, _cs, _dl = _l, _dt, 1
+                        else:
+                            _dl += 1
+                        _pd = _dt
+                    if _cl is not None:
+                        _segs.append({"regime": _cl, "start": str(_cs)[:10], "end": str(_pd)[:10], "days": _dl})
+                    _segs = [s for s in _segs if s["days"] >= 10]
+                    _vi["regime_history"] = {
+                        "segments": _segs[-10:],
+                        "current": _lbl_of(_cur2),
+                        "thresholds": {"low_below": round(_lo_t,1), "high_above": round(_hi_t,1)},
+                        "note": "Volatility clusters. Regime changes matter more than the level on any single day.",
+                    }
+
+                    # Market vs idiosyncratic split (needs a benchmark; skipped if absent)
+                    _vi["decomposition_note"] = ("Splitting volatility into market, sector and company-specific "
+                                                 "components requires benchmark return series not loaded in this request.")
+                    result["volatility_intel"] = _vi
+            except Exception as _e:
+                logger.info(f"volatility intel skipped: {_e}")
+
             # ── LAYER 2: FEATURES ─────────────────────────────
             try:
                 feature_matrix = self.feature_pipeline.build_feature_matrix(
