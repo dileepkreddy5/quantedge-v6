@@ -298,3 +298,15 @@ code, pre, .mono { font-family: var(--font-mono); }
   .qe-hide-mobile { display: none !important; }
   .qe-header-pad { padding-left: 1.1rem !important; padding-right: 1.1rem !important; }
 }
+
+/* Chart + side panel: side-by-side on desktop, stacked below 900px so the
+   price chart never compresses to an unreadable width. */
+.qe-chart-split { grid-template-columns: 2fr 1fr; }
+@media (max-width: 900px) {
+  .qe-chart-split { grid-template-columns: 1fr; }
+}
+
+/* 9-10px mono labels are legible on a desktop monitor but not on a phone. */
+@media (max-width: 640px) {
+  html { font-size: 15px; }
+}

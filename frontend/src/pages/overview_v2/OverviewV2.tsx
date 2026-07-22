@@ -194,7 +194,7 @@ function CapmPanel({ data }: { data: any }) {
   return (
     <div>
       <SectionHeader label="MARKET EXPOSURE — CAPM VS SPY" />
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8 }}>
         {rows.map(r => r.v == null ? null : (
           <div key={r.k} style={{
             background: COLORS.panelAlt, border: `1px solid ${COLORS.borderLt}`,
@@ -454,7 +454,7 @@ export default function OverviewV2({
         <SectionHeader label="KEY METRICS" />
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(4, 1fr)',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
           gap: 10,
         }}>
           <MetricTile insight={sharpeInsight} valueOverride={(data.sharpe_ratio ?? 0).toFixed(2)} />
@@ -475,7 +475,7 @@ export default function OverviewV2({
       <HonestyPanel data={data} />
 
       {/* ── PRICE CHART + SCENARIOS ─────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 12 }}>
+      <div className="qe-chart-split" style={{ display: 'grid', gap: 12 }}>
         <div>
           <SectionHeader label="PRICE HISTORY" />
           <PriceChart ticker={ticker} data={data} />

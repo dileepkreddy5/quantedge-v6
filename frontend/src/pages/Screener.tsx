@@ -124,7 +124,7 @@ function ExplainerPanel() {
           }}>
             THE FOUR FACTORS
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 10 }}>
             <div>
               <div style={{ color: '#daa520', fontWeight: 600, fontSize: 12 }}>QUALITY</div>
               <div style={{ fontSize: 12 }}>Business fundamentals — ROIC, margins, debt levels, Piotroski score. How good is the underlying company.</div>
@@ -258,7 +258,7 @@ function FactorDetails({ row }: { row: RankedRow }) {
       background: '#0a0505', padding: 16, borderTop: '1px solid #3a2920',
       fontSize: 12, color: '#d4c4b0',
     }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 20 }}>
         <div>
           <div style={{ fontWeight: 600, color: '#daa520', marginBottom: 8 }}>MOMENTUM</div>
           <div>12-1mo: {format(m.mom_12_1, '%')}</div>
@@ -471,7 +471,7 @@ export default function Screener({ embedded = false }: { embedded?: boolean } = 
         }}>
           HOW TO USE THIS PAGE
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }}>
           <div>
             <div style={{ color: '#daa520', fontSize: 11, fontWeight: 600, marginBottom: 4 }}>
               1. PICK A HORIZON

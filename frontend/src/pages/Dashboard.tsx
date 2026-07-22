@@ -205,7 +205,7 @@ export default function Dashboard() {
         position: 'sticky', top: 0, zIndex: 100,
         padding: '0 20px',
       }}>
-        <div style={{ maxWidth: 1600, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 16, height: 56 }}>
+        <div style={{ maxWidth: 2100, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 16, height: 56 }}>
           
           {/* Logo */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
@@ -339,7 +339,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      <main style={{ maxWidth: 1600, margin: '0 auto', padding: '16px 20px' }}>
+      <main style={{ maxWidth: 2100, margin: '0 auto', padding: '16px 28px' }}>
 
         {/* ── No data state ── */}
         {!data && !loading && (
@@ -560,7 +560,7 @@ function StockSnapshot({ data }: { data: any }) {
 
   return (
     <div style={{ background:'#241510', border:'1px solid rgba(212,149,108,0.12)', borderRadius:8, padding:'16px 20px', marginBottom:20,
-      display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:24 }}>
+      display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))', gap:24 }}>
       <div>
         <ColHead t="FUNDAMENTALS" />
         <Cell label="Revenue TTM" value={fmtBig(f.revenue_ttm)} />

@@ -141,7 +141,7 @@ export default function NewsPanel({ ticker, data }:{ ticker:string; data?:any })
               Specific figures and stated developments pulled from recent coverage, grouped by what they describe.
               Each links to the article it came from.
             </div>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(2, 1fr)',gap:'18px 24px'}}>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(280px, 1fr))',gap:'18px 24px'}}>
               {order.map(g => (
                 <div key={g}>
                   <div style={{fontFamily:"'Fira Code',monospace",fontSize:8.5,color:'#daa520',letterSpacing:2,marginBottom:2}}>{GROUPS[g].label}</div>

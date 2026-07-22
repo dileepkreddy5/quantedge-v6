@@ -571,7 +571,7 @@ export function VolatilityPanel({ data }: { data: any }) {
             higher during a turbulent stretch.</span>
           </div>
         )}
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:10, marginBottom:14 }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(200px, 1fr))', gap:10, marginBottom:14 }}>
           {[
             { l:'CURRENT', v:curVol, n:'annualised, from GARCH' },
             { l:'STRUCTURAL', v:longRun, n:'long-run GARCH level' },
@@ -648,7 +648,7 @@ export function VolatilityPanel({ data }: { data: any }) {
           <Card style={{ gridColumn:'span 3' }}>
             <SectionTitle>WHAT THIS VOLATILITY MEANS IN PRACTICE</SectionTitle>
 
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:10, marginBottom:6 }}>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(200px, 1fr))', gap:10, marginBottom:6 }}>
               {[{l:'TYPICAL DAY',v:em.daily},{l:'TYPICAL WEEK',v:em.weekly},{l:'TYPICAL MONTH',v:em.monthly},{l:'TYPICAL QUARTER',v:em.quarterly}].map(x => (
                 <div key={x.l} style={{ background:'var(--surface-1)', borderRadius:8, padding:'12px 10px', textAlign:'center' }}>
                   <div style={{ fontFamily:'var(--font-mono)', fontSize:8, color:'var(--cocoa)', letterSpacing:2 }}>{x.l}</div>
@@ -1082,7 +1082,7 @@ export function RegimePanel({ data }: { data: any }) {
         {TRAITS[current] && (
           <div style={{ marginTop:16, paddingTop:14, borderTop:'1px solid rgba(212,149,108,0.12)' }}>
             <div style={{ fontFamily:'var(--font-mono)', fontSize:9, color:'var(--gold)', letterSpacing:2, marginBottom:8 }}>WHAT THIS STATE LOOKS LIKE</div>
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(2, 1fr)', gap:'4px 20px' }}>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(240px, 1fr))', gap:'4px 20px' }}>
               {TRAITS[current].map((t:string,i:number) => (
                 <div key={i} style={{ fontFamily:'var(--font-body)', fontSize:11, color:'var(--cocoa-dust)', lineHeight:1.6 }}>
                   <span style={{ color:C[current] }}>·</span> {t}
@@ -1141,7 +1141,7 @@ export function RegimePanel({ data }: { data: any }) {
             This is the closest thing on the page to a forward-looking read — and the sample is small, so the range
             matters more than the median.
           </div>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:10, marginBottom:14 }}>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(200px, 1fr))', gap:10, marginBottom:14 }}>
             {Object.entries(rc.forward_returns).map(([h,x]:any)=>{
               const lbl = h==='5'?'1 WEEK':h==='10'?'2 WEEKS':h==='21'?'1 MONTH':'3 MONTHS';
               const c = x.median_pct > 0 ? 'var(--bull)' : 'var(--bear)';
