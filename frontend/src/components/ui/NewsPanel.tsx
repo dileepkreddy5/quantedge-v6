@@ -59,7 +59,9 @@ export default function NewsPanel({ ticker, data }:{ ticker:string; data?:any })
     const tone = toneOf(net);
     const dir  = trend > 0.03 ? 'improving' : trend < -0.03 ? 'deteriorating' : 'stable';
     const parts: string[] = [];
-    parts.push(`Coverage is broadly ${tone} and ${dir} — ${sd.positive} positive against ${sd.negative} negative across ${d.article_count} articles.`);
+    // State the neutral count too. Reporting only positive and negative against
+    // the article total reads as broken arithmetic (43 + 11 != 93).
+    parts.push(`Coverage is broadly ${tone} and ${dir} — ${sd.positive} positive, ${sd.neutral} neutral, ${sd.negative} negative across ${d.article_count} articles.`);
     // Does the high-impact subset disagree with the average?
     if (top10 != null && Math.abs(top10 - net) > 0.12) {
       const t10 = toneOf(top10);
@@ -103,7 +105,7 @@ export default function NewsPanel({ ticker, data }:{ ticker:string; data?:any })
         </div>
         <div style={{display:'grid',gridTemplateColumns:'repeat(5, 1fr)',gap:8,marginTop:16,paddingTop:14,borderTop:'1px solid rgba(212,149,108,0.1)'}}>
           {[
-            {l:'NET SENTIMENT', v:net!=null?`${net>0?'+':''}${net.toFixed(2)}`:'—', n:'weighted by relevance'},
+            {l:'NET SENTIMENT', v:net!=null?`${net>0?'+':''}${net.toFixed(2)}`:'—', n:'materiality-weighted'},
             {l:'30-DAY PRICE',  v:px30!=null?`${px30>0?'+':''}${(px30*100).toFixed(1)}%`:'—', n:diverge?'diverging from tone':'in line with tone'},
             {l:'HIGH-IMPACT TONE', v:top10!=null?`${top10>0?'+':''}${top10.toFixed(2)}`:'—', n:'top 10 stories only'},
             {l:'COVERAGE RATE', v:km.news_velocity!=null?`${km.news_velocity.toFixed(1)}/day`:'—', n:`${km.article_count_7d??0} in last 7 days`},
@@ -337,6 +339,16 @@ export default function NewsPanel({ ticker, data }:{ ticker:string; data?:any })
               FinBERT — a transformer trained on financial text — scores the tone of each article independently of the
               headline ranking above. It reads how coverage is written, not what it reports.
             </div>
+            {comp != null && net != null && Math.abs(comp - net) > 0.12 && (
+              <div style={{fontFamily:"'Outfit',sans-serif",fontSize:11,color:'#d4c4b0',lineHeight:1.55,
+                marginBottom:14,paddingLeft:10,borderLeft:'2px solid rgba(212,149,108,0.35)'}}>
+                This is the <b>unweighted</b> mean across every article ({comp > 0 ? '+' : ''}{comp.toFixed(2)}).
+                The net sentiment above ({net > 0 ? '+' : ''}{net.toFixed(2)}) weights each article by materiality.
+                {comp < net
+                  ? ' The gap means the more negative writing sits in lower-impact coverage — an unweighted average here would be dominated by filler.'
+                  : ' The gap means the more negative writing sits in the highest-impact coverage, which the unweighted average understates.'}
+              </div>
+            )}
             <div style={{display:'flex',gap:20,alignItems:'center',flexWrap:'wrap'}}>
               <div style={{textAlign:'center',minWidth:90}}>
                 <div style={{fontFamily:"'Fira Code',monospace",fontSize:26,fontWeight:800,
