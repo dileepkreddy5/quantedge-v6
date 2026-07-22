@@ -124,7 +124,13 @@ export function MLModelsPanel({ data }: { data: any }) {
     if (bear.some(b => u.includes(b))) return -1;
     return 0;
   };
-  const kalmanDir = dirFromString(data.kalman?.signal_interpretation, ['UP', 'BULL', 'RISING'], ['DOWN', 'BEAR', 'FALLING']);
+  // Kalman direction comes from trend_slope (signed), NOT signal_interpretation —
+  // that field describes trend STRENGTH ('STRONG_TREND'), not direction, so string
+  // matching returned neutral for every ticker.
+  const kSlope = data.kalman?.trend_slope;
+  const kalmanDir = kSlope != null && Number.isFinite(Number(kSlope))
+    ? (Number(kSlope) > 0 ? 1 : Number(kSlope) < 0 ? -1 : 0)
+    : null;
   const regimeDir = dirFromString(data.current_regime, ['BULL'], ['BEAR']);
   const gexDir = dirFromString(data.options?.gex?.gex_regime, ['POSITIVE'], ['NEGATIVE']);
   const sentVal = data.sentiment?.composite;
@@ -150,6 +156,56 @@ export function MLModelsPanel({ data }: { data: any }) {
     { name: 'Panel-CS',  v: panelDir },
     { name: 'Options',   v: gexDir },
   ].filter(m => m.v != null) as { name: string; v: number }[];
+
+  // Full 9-model roster: what each model is, what it output, and why it matters.
+  // Written for a general investor, not a quant.
+  const modelRoster = [
+    { name: 'Bidirectional LSTM', kind: 'Neural network',
+      value: lstm.pred_21d != null ? `${(Number(lstm.pred_21d)).toFixed(2)}% (21d)` : null,
+      dir: lstm.pred_21d != null ? Math.sign(Number(lstm.pred_21d)) : null,
+      what: 'Reads the price history like a sequence, learning patterns that repeat across time.',
+      why: 'Captures momentum and reversal shapes that simple indicators miss.' },
+    { name: 'XGBoost', kind: 'Gradient-boosted trees',
+      value: xgb.pred_21d != null ? `${(Number(xgb.pred_21d)).toFixed(2)}% (21d)` : null,
+      dir: xgb.pred_21d != null ? Math.sign(Number(xgb.pred_21d)) : null,
+      what: 'Builds thousands of decision trees over 170 indicators to find which combinations preceded gains.',
+      why: 'Handles non-linear interactions between factors that a single rule cannot.' },
+    { name: 'LightGBM', kind: 'Gradient-boosted trees',
+      value: lgbm.pred_21d != null ? `${(Number(lgbm.pred_21d)).toFixed(2)}% (21d)` : null,
+      dir: lgbm.pred_21d != null ? Math.sign(Number(lgbm.pred_21d)) : null,
+      what: 'A second tree model using a different growth strategy, run alongside XGBoost.',
+      why: 'When two independent tree models agree, the signal is more robust.' },
+    { name: 'Kalman Filter', kind: 'State-space trend',
+      value: kSlope != null ? `slope ${Number(kSlope).toFixed(4)}` : null,
+      dir: kalmanDir,
+      what: 'Strips daily noise out of price to estimate the true underlying trend and its acceleration.',
+      why: 'Separates real directional drift from random day-to-day movement.' },
+    { name: 'HMM Regime', kind: 'Hidden Markov Model',
+      value: data.current_regime ? String(data.current_regime).replace(/_/g,' ') : null,
+      dir: regimeDir,
+      what: 'Classifies which market state we are in — calm bull, volatile bear, and so on.',
+      why: 'The same signal means different things depending on the regime.' },
+    { name: 'GJR-GARCH', kind: 'Volatility model',
+      value: data.garch?.current_annual_vol != null ? `${(Number(data.garch.current_annual_vol)*100).toFixed(1)}% vol` : null,
+      dir: garchDir,
+      what: 'Forecasts volatility, accounting for the fact that crashes raise risk more than rallies.',
+      why: 'Sets position sizing and tells you how much noise to expect around any forecast.' },
+    { name: 'Monte Carlo', kind: 'Path simulation',
+      value: mcMed != null ? `median ${(Number(mcMed)*100).toFixed(1)}%` : null,
+      dir: mcDir,
+      what: 'Simulates thousands of possible future price paths using current drift and volatility.',
+      why: 'Gives a range of outcomes instead of one number — the honest way to express uncertainty.' },
+    { name: 'FinBERT Sentiment', kind: 'Language model',
+      value: sentVal != null ? `${Number(sentVal).toFixed(2)} score` : null,
+      dir: sentVal != null ? Math.sign(Number(sentVal)) : null,
+      what: 'A language model trained on financial text, scoring whether recent news reads bullish or bearish.',
+      why: 'News moves prices before it shows up in fundamentals.' },
+    { name: 'Cross-Sectional Panel', kind: 'Multi-horizon ensemble',
+      value: panelPred != null ? `${Number(panelPred).toFixed(2)}% (1mo)` : null,
+      dir: panelDir,
+      what: 'Ranks this stock against the whole US universe on 178 factors including point-in-time fundamentals.',
+      why: 'The only model here with measured out-of-sample skill — see the reliability badges above.' },
+  ];
 
   const signs = modelDirs.map(m => m.v);
   const nBull = signs.filter(s => s > 0).length;
@@ -181,9 +237,13 @@ export function MLModelsPanel({ data }: { data: any }) {
               const col = pv > 0 ? '#22c55e' : pv < 0 ? '#ef4444' : '#8a7560';
               const ic = h.oos_rank_ic;
               const icNum = ic != null ? Number(ic) : null;
-              const strong = icNum != null && icNum >= 0.05;
-              const badgeCol = strong ? '#22c55e' : (icNum != null && icNum > 0.02) ? '#eab308' : '#8a7560';
-              const badgeTxt = strong ? 'VALIDATED' : (icNum != null && icNum > 0.02) ? 'MODERATE' : 'LOW CONF';
+              // Reliability comes from the TRAINER's independent-window test, not IC size.
+              // A high IC on 1 non-overlapping window is an artifact, not skill.
+              const indep = h.n_independent_val_dates ?? h.indep_dates ?? null;
+              const reliableFlag = h.reliable === true || (indep != null && indep >= 5);
+              const strong = reliableFlag && icNum != null && icNum >= 0.05;
+              const badgeCol = strong ? '#22c55e' : (reliableFlag && icNum != null && icNum > 0.02) ? '#eab308' : '#8a7560';
+              const badgeTxt = strong ? 'VALIDATED' : (reliableFlag && icNum != null && icNum > 0.02) ? 'MODERATE' : (reliableFlag ? 'NO EDGE' : 'UNVALIDATED');
               return (
                 <div key={hk} style={{ border:'1px solid #3a2f28', borderRadius:8, padding:'10px 8px', background:'#1a1512', textAlign:'center' }}>
                   <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:10, color:'#8a7560', letterSpacing:1, marginBottom:6 }}>{h.label}</div>
@@ -259,6 +319,39 @@ export function MLModelsPanel({ data }: { data: any }) {
       </Card>
 
       {/* Ensemble */}
+      <Card style={{ gridColumn:'span 3' }}>
+        <SectionTitle>THE NINE MODELS — WHAT EACH ONE DOES</SectionTitle>
+        <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:11, color:'#8a7560', marginBottom:12, lineHeight:1.5 }}>
+          Nine independent models run on every analysis. Each measures something different; the conviction score above
+          reflects how many of them point the same way.
+        </div>
+        <div style={{ display:'flex', flexDirection:'column', gap:1 }}>
+          {modelRoster.map((m:any, i:number) => {
+            const dcol = m.dir > 0 ? '#22c55e' : m.dir < 0 ? '#ef4444' : '#8a7560';
+            const arrow = m.dir > 0 ? '\u25b2' : m.dir < 0 ? '\u25bc' : '\u2014';
+            return (
+              <div key={i} style={{ display:'grid', gridTemplateColumns:'190px 130px 30px 1fr', gap:12,
+                alignItems:'start', padding:'9px 8px', background: i % 2 ? 'transparent' : 'rgba(255,255,255,0.015)', borderRadius:4 }}>
+                <div>
+                  <div style={{ fontFamily:"'Fira Code',monospace", fontSize:11, color:'#d4c4b0', fontWeight:600 }}>{m.name}</div>
+                  <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:9, color:'#6b5d52' }}>{m.kind}</div>
+                </div>
+                <div style={{ fontFamily:"'Fira Code',monospace", fontSize:11, color: m.value ? '#d4c4b0' : '#6b5d52', paddingTop:1 }}>
+                  {m.value || 'unavailable'}
+                </div>
+                <div style={{ fontFamily:"'Fira Code',monospace", fontSize:12, color:dcol, textAlign:'center', paddingTop:1 }}>{arrow}</div>
+                <div>
+                  <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:11, color:'#b8a894', lineHeight:1.45 }}>{m.what}</div>
+                  <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:10, color:'#7a6b5d', lineHeight:1.45, marginTop:2 }}>
+                    <span style={{ color:'#8a7560' }}>Why it helps:</span> {m.why}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </Card>
+
       <Card style={{ gridColumn:'span 3' }}>
         <SectionTitle>ENSEMBLE MODEL — DRIFT ESTIMATES &amp; UNCERTAINTY</SectionTitle>
         <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:11, color:'#9d8b7a', lineHeight:1.5, marginBottom:12, padding:'8px 10px', background:'#1a0f0a', borderRadius:6, borderLeft:'2px solid #daa520' }}>
