@@ -359,26 +359,12 @@ export function MLModelsPanel({ data }: { data: any }) {
       </Card>
 
       <Card style={{ gridColumn:'span 3' }}>
-        <SectionTitle>ENSEMBLE MODEL — DRIFT ESTIMATES &amp; UNCERTAINTY</SectionTitle>
+        <SectionTitle>PER-TICKER ENSEMBLE — MODEL DIAGNOSTICS</SectionTitle>
         <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:11, color:'#9d8b7a', lineHeight:1.5, marginBottom:12, padding:'8px 10px', background:'#1a0f0a', borderRadius:6, borderLeft:'2px solid #daa520' }}>
-          These are <b style={{color:'#d4c4b0'}}>model-implied drift estimates</b>, not price predictions. Short-horizon
-          equity returns have inherently low predictability — small magnitudes with wide bands are the honest output.
-          The <b style={{color:'#d4c4b0'}}>return distribution</b> below (P10–P90) is the more useful read.
-        </div>
-        <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-          {[{l:'1W',k:'pred_5d'},{l:'2W',k:'pred_10d'},{l:'1M',k:'pred_21d'},{l:'3M',k:'pred_63d'},{l:'1Y',k:'pred_252d'}].map(h => {
-            const v = ensemble[h.k];
-            const c = v == null ? '#8a7560' : v > 0 ? '#22c55e' : '#ef4444';
-            return (
-              <div key={h.k} style={{ flex:1, minWidth:80, background:'#1a0f0a', borderRadius:8, padding:'14px 10px', textAlign:'center', border:`1px solid ${c}30` }}>
-                <div style={{ fontFamily:"'Fira Code',monospace", fontSize:9, color:'#9d8b7a', letterSpacing:2, marginBottom:6 }}>{h.l}</div>
-                <div style={{ fontFamily:"'Fira Code',monospace", fontSize:20, fontWeight:800, color:c }}>
-                  {v != null ? `${v>0?'+':''}${v.toFixed(1)}%` : '—'}
-                </div>
-                <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:9, color:'#8a7560', marginTop:4 }}>drift est.</div>
-              </div>
-            );
-          })}
+          A separate ensemble trains on <b style={{color:'#d4c4b0'}}>this ticker alone</b> at request time. With only ~80
+          usable samples per stock it is too data-starved to forecast reliably, so its point estimates are not shown —
+          the cross-sectional panel above is the forecast of record. What remains useful from it is diagnostic:
+          how confident it is, how much its component models disagree, and the return distribution it implies.
         </div>
         <div style={{ display:'flex', gap:20, marginTop:12, fontFamily:"'Fira Code',monospace", fontSize:9, color:'#8a7560' }}>
           <span>CONFIDENCE: {((ensemble.confidence || 0)*100).toFixed(1)}%</span>
