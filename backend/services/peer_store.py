@@ -55,6 +55,58 @@ _BUCKET_RULES = [
 ]
 
 
+# Narrower groupings used when enough companies share a real industry.
+# Nine broad buckets put carmakers with railroads; these restore comparability.
+_SUB_RULES = [
+    ("Automotive",        ["MOTOR VEHICLE", "AUTOMOTIVE", "TRUCK", "AUTO PARTS", "CAR BODIES"]),
+    ("Airlines",          ["AIR TRANSPORT", "AIRLINE", "AIR COURIER"]),
+    ("Rail & Freight",    ["RAILROAD", "TRUCKING", "FREIGHT", "MARINE", "SHIPPING", "COURIER"]),
+    ("Aerospace/Defense", ["AIRCRAFT", "AEROSPACE", "GUIDED MISSILE", "ORDNANCE", "DEFENSE"]),
+    ("Metals & Steel",    ["STEEL", "METAL", "ALUMINUM", "IRON", "FOUNDRIES"]),
+    ("Machinery",         ["MACHINERY", "ENGINES", "TURBINE", "FARM EQUIPMENT", "CONSTRUCTION MACHINERY"]),
+    ("Semiconductors",    ["SEMICONDUCTOR", "ELECTRONIC COMPONENT"]),
+    ("Software",          ["SOFTWARE", "PREPACKAGED", "DATA PROCESS", "COMPUTER PROGRAMMING"]),
+    ("Hardware",          ["COMPUTER", "PERIPHERAL", "STORAGE DEVICE", "ELECTRONIC COMPUTERS"]),
+    ("Comms Equipment",   ["COMMUNICATIONS EQUIP", "TELEPHONE APPARATUS", "RADIO", "BROADCAST EQUIP"]),
+    ("Biotech",           ["BIOLOGICAL", "BIOTECH"]),
+    ("Pharma",            ["PHARMACEUTICAL", "MEDICINAL"]),
+    ("Medical Devices",   ["SURGICAL", "MEDICAL INSTRUMENT", "DENTAL", "ORTHOPEDIC", "DIAGNOSTIC"]),
+    ("Healthcare Svcs",   ["HOSPITAL", "HEALTH SERVICES", "NURSING", "MANAGED CARE"]),
+    ("Banks",             ["BANK", "SAVINGS INSTITUTION", "CREDIT UNION"]),
+    ("Insurance",         ["INSURANCE", "SURETY", "TITLE INSUR"]),
+    ("Capital Markets",   ["SECURITY BROKER", "INVESTMENT ADVICE", "INVESTMENT OFFICE", "ASSET MANAGE"]),
+    ("REITs",             ["REAL ESTATE INVESTMENT"]),
+    ("Retail",            ["RETAIL", "DEPARTMENT STORE", "GROCERY", "VARIETY STORE"]),
+    ("Restaurants",       ["EATING", "RESTAURANT"]),
+    ("Apparel & Luxury",  ["APPAREL", "FOOTWEAR", "JEWELRY", "LEATHER"]),
+    ("Food & Beverage",   ["FOOD", "BEVERAGE", "DAIRY", "BAKERY", "SUGAR", "BREWERIES"]),
+    ("Household Goods",   ["HOUSEHOLD", "PERSONAL", "SOAP", "COSMETIC", "FURNITURE"]),
+    ("Oil & Gas E&P",     ["CRUDE PETROLEUM", "OIL AND GAS", "DRILLING", "OIL ROYALTY"]),
+    ("Refining & Midstream",["PETROLEUM REFINING", "PIPELINE", "NATURAL GAS TRANSMISSION"]),
+    ("Chemicals",         ["CHEMICAL", "FERTILIZER", "PLASTICS MATERIALS", "PAINT"]),
+    ("Mining",            ["MINING", "GOLD", "COPPER", "COAL", "QUARRYING"]),
+    ("Paper & Packaging", ["PAPER", "FOREST", "CONTAINER", "PACKAGING"]),
+    ("Media",             ["TELEVISION", "MOTION PICTURE", "PUBLISHING", "BROADCAST", "CABLE"]),
+    ("Telecom",           ["TELEPHONE COMMUNICATIONS", "TELECOM", "WIRELESS"]),
+    ("Utilities-Electric",["ELECTRIC SERVICES", "ELECTRIC & OTHER"]),
+    ("Utilities-Gas/Water",["GAS DISTRIBUTION", "WATER SUPPLY", "NATURAL GAS DISTRIB"]),
+    ("Construction",      ["CONSTRUCTION", "HOMEBUILD", "GENERAL BUILDING"]),
+    ("Advertising",       ["ADVERTISING", "MARKETING"]),
+]
+
+
+def sub_bucket_for(sic: Optional[str]) -> Optional[str]:
+    """The narrow industry, where one is identifiable. Falls back to None so the
+    caller can use the broad bucket when a peer group would be too small."""
+    if not sic:
+        return None
+    u = sic.upper()
+    for name, keys in _SUB_RULES:
+        if any(k in u for k in keys):
+            return name
+    return None
+
+
 def bucket_for(sic: Optional[str]) -> str:
     if not sic:
         return "Other"
@@ -110,9 +162,31 @@ class PeerStore:
             peers = await conn.fetch(
                 "SELECT * FROM peer_stats WHERE bucket=$1 AND scan_time=$2 ORDER BY ticker",
                 me["bucket"], latest)
+
+        # Nine broad buckets put carmakers alongside railroads. Narrow to the real
+        # industry when there are enough companies for percentiles to mean anything.
+        # The scanned universe is a few hundred names, so industry groups are small.
+        # Eight is the floor at which a percentile still carries information.
+        MIN_GROUP = 8
+        my_sub = sub_bucket_for(me["sic"])
+        group_label, group_kind = me["bucket"], "sector"
+        if my_sub:
+            narrowed = [p for p in peers if sub_bucket_for(p["sic"]) == my_sub]
+            if len(narrowed) >= MIN_GROUP:
+                peers = narrowed
+                group_label, group_kind = my_sub, "industry"
+
+        # "Other" is not a peer group — it is everything the classifier could not
+        # place, including companies with no SIC at all. Ranking against it is noise.
+        if group_kind == "sector" and group_label == "Other":
+            return {"available": False,
+                    "reason": "no comparable peer group — this company is not classified in the scanned universe"}
+
         return {
             "available": True,
-            "bucket": me["bucket"],
+            "bucket": group_label,
+            "group_kind": group_kind,
+            "broad_sector": me["bucket"],
             "scan_time": latest.isoformat(),
             "me": dict(me),
             "peers": [dict(p) for p in peers],

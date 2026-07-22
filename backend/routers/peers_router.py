@@ -151,6 +151,8 @@ async def get_peers(
         "ticker": ticker,
         "name": me["name"],
         "bucket": data["bucket"],
+        "group_kind": data.get("group_kind"),
+        "broad_sector": data.get("broad_sector"),
         "peer_count": len(peers),
         "scan_time": data["scan_time"],
         "factors": factor_results,
