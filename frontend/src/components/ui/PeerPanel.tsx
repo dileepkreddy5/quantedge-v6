@@ -71,20 +71,54 @@ const PeerPanel: React.FC<Props> = ({ ticker: tickerProp, data: analysisData, on
   const minV = Math.min(...vals), maxV = Math.max(...vals), range = (maxV - minV) || 1;
   // The searched ticker is the reference point, not a competitor to itself.
   // Its standing against this group is already stated in the header percentiles.
-  // Ranking rivals by recent momentum surfaces whoever moved most last quarter,
-  // not who this company actually competes with. Size proximity within the same
-  // industry is the better ordering: the ten nearest names by market cap are the
-  // ones an investor would weigh against each other.
-  const meCap = (pd.peers.find((p: any) => p.is_me)?.market_cap) || null;
-  const sortedPeers = pd.peers.filter((p: any) => !p.is_me)
-    .sort((a: any, b: any) => {
-      if (meCap) {
-        const da = a.market_cap ? Math.abs(Math.log((a.market_cap || 1) / meCap)) : 99;
-        const db = b.market_cap ? Math.abs(Math.log((b.market_cap || 1) / meCap)) : 99;
-        return da - db;
-      }
-      return (b.market_cap || 0) - (a.market_cap || 0);
+  // SIC 7370 holds Alphabet and Snap alongside a gambling operator and a cloud
+  // host, so neither momentum nor market cap identifies a rival. Business shape
+  // does: a company with comparable margins, returns and growth competes for the
+  // same customers and capital, whatever its size.
+  const me = pd.peers.find((p: any) => p.is_me);
+  const rivalScore = (p: any) => {
+    if (!me) return 0;
+    const dims: Array<[any, any, number]> = [
+      [p.net_margin,     me.net_margin,     1.0],
+      [p.gross_margin,   me.gross_margin,   0.8],
+      [p.roic,           me.roic,           0.8],
+      [p.revenue_growth, me.revenue_growth, 0.6],
+    ];
+    let d = 0, w = 0;
+    for (const [a, b, weight] of dims) {
+      if (a == null || b == null) continue;
+      d += weight * Math.abs(Number(a) - Number(b));
+      w += weight;
+    }
+    // Size still matters a little — a $3B and a $1.6T business rarely compete
+    // head-on — but it is a tiebreaker, not the ordering.
+    let sizeGap = 0;
+    if (p.market_cap && me.market_cap) {
+      sizeGap = Math.abs(Math.log10((p.market_cap || 1) / me.market_cap)) * 0.08;
+    }
+    return w > 0 ? (d / w) + sizeGap : 99;
+  };
+
+  // Dual-class listings are one company: GOOGL and GOOG carry identical
+  // fundamentals and would otherwise occupy two of the ten rival slots.
+  const dedupeShareClasses = (list: any[]) => {
+    const seen = new Set<string>();
+    return list.filter((p: any) => {
+      const base = (p.name || p.ticker || '')
+        .toLowerCase()
+        .replace(/\s+(class\s+[a-c]|series\s+[a-c]).*$/, '')
+        .replace(/\s+(common stock|capital stock|ordinary shares|subordinate voting).*$/, '')
+        .replace(/[^a-z0-9]/g, '')
+        .slice(0, 18);
+      if (!base || seen.has(base)) return false;
+      seen.add(base);
+      return true;
     });
+  };
+
+  const sortedPeers = dedupeShareClasses(
+    pd.peers.filter((p: any) => !p.is_me).sort((a: any, b: any) => rivalScore(a) - rivalScore(b))
+  );
 
   return (
     <div style={{ color: C.text }}>
@@ -269,7 +303,7 @@ const PeerPanel: React.FC<Props> = ({ ticker: tickerProp, data: analysisData, on
       })()}
 
       {/* Peer table */}
-      <div style={{ color:C.gold, fontWeight:700, fontSize:13, marginBottom:8 }}>CLOSEST RIVALS BY SIZE</div>
+      <div style={{ color:C.gold, fontWeight:700, fontSize:13, marginBottom:8 }}>CLOSEST RIVALS BY BUSINESS PROFILE</div>
       <div style={{ maxHeight:320, overflowY:'auto' }}>
         <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
           <thead>
@@ -284,7 +318,7 @@ const PeerPanel: React.FC<Props> = ({ ticker: tickerProp, data: analysisData, on
             </tr>
           </thead>
           <tbody>
-            {sortedPeers.slice(0,40).map((p,i) => {
+            {sortedPeers.slice(0,10).map((p,i) => {
               const v = valueOf(p);
               return (
                 <tr key={i} onClick={() => onAnalyze && onAnalyze(p.ticker)}
