@@ -11,7 +11,7 @@ interface NewsData {
   sentiment_dist:{positive:number;neutral:number;negative:number};
   brief:BriefItem[]; recent_headlines:Headline[]; tree:{categories:Cat[]}; key_metrics:Record<string,number|null>; reason?:string;
 }
-const heat=(s:number|null)=>s==null?'#2a2a2a':s>=75?'#0f6e56':s>=58?'#1d9e75':s>=42?'#8a7519':s>=25?'#a35a1d':'#7a2320';
+const heat=(s:number|null)=>s==null?'rgba(212,149,108,0.12)':s>=75?'#0f6e56':s>=58?'#1d9e75':s>=42?'#8a7519':s>=25?'#a35a1d':'#7a2320';
 const ratingColor=(r:string)=>r.includes('Very Positive')?'#0f9d6e':r.includes('Positive')?'#1d9e75':r.includes('Mixed')?'#c9a227':r.includes('Negative')?'#c0705a':'#7a2320';
 const sentDot=(s:string)=>s==='positive'?'#0f9d6e':s==='negative'?'#c0705a':'#9d8b7a';
 
@@ -53,14 +53,26 @@ export default function NewsPanel({ ticker, data }:{ ticker:string; data?:any })
   const px30 = km.price_return_30d ?? null;
   const diverge = px30 != null && ((net > 0.1 && px30 < -0.02) || (net < -0.1 && px30 > 0.02));
   const trend = km.sentiment_trend ?? 0;
+  const top10 = km.top10_sentiment ?? null;
+  const toneOf = (v:number) => v > 0.15 ? 'positive' : v < -0.15 ? 'negative' : 'mixed';
   const verdict = (() => {
-    const tone = net > 0.15 ? 'broadly positive' : net < -0.15 ? 'broadly negative' : 'mixed';
+    const tone = toneOf(net);
     const dir  = trend > 0.03 ? 'improving' : trend < -0.03 ? 'deteriorating' : 'stable';
-    if (diverge && px30 != null)
-      return `Coverage is ${tone} but price has moved the other way — ${(px30*100).toFixed(1)}% over 30 days against ${sd.positive} positive and ${sd.negative} negative articles. That gap is usually the interesting part.`;
-    if (px30 != null)
-      return `Coverage is ${tone} and ${dir}, with price ${px30 >= 0 ? 'up' : 'down'} ${Math.abs(px30*100).toFixed(1)}% over 30 days. ${sd.positive} positive against ${sd.negative} negative across ${d.article_count} articles.`;
-    return `Coverage is ${tone} and ${dir} — ${sd.positive} positive against ${sd.negative} negative across ${d.article_count} articles.`;
+    const parts: string[] = [];
+    parts.push(`Coverage is broadly ${tone} and ${dir} — ${sd.positive} positive against ${sd.negative} negative across ${d.article_count} articles.`);
+    // Does the high-impact subset disagree with the average?
+    if (top10 != null && Math.abs(top10 - net) > 0.12) {
+      const t10 = toneOf(top10);
+      parts.push(t10 === tone
+        ? `The highest-impact stories lean the same way but harder (${top10 > 0 ? '+' : ''}${top10.toFixed(2)} against ${net > 0 ? '+' : ''}${net.toFixed(2)} overall).`
+        : `The stories most likely to move the price read ${t10}, against ${tone} on average — the aggregate is being carried by lower-impact coverage.`);
+    }
+    if (px30 != null) {
+      parts.push(diverge
+        ? `Price has moved the other way, ${px30 > 0 ? 'up' : 'down'} ${Math.abs(px30*100).toFixed(1)}% over 30 days.`
+        : `Price is ${px30 >= 0 ? 'up' : 'down'} ${Math.abs(px30*100).toFixed(1)}% over 30 days, in line.`);
+    }
+    return parts.join(' ');
   })();
 
   const heads = (d.recent_headlines || []);
@@ -93,7 +105,7 @@ export default function NewsPanel({ ticker, data }:{ ticker:string; data?:any })
           {[
             {l:'NET SENTIMENT', v:net!=null?`${net>0?'+':''}${net.toFixed(2)}`:'—', n:'weighted by relevance'},
             {l:'30-DAY PRICE',  v:px30!=null?`${px30>0?'+':''}${(px30*100).toFixed(1)}%`:'—', n:diverge?'diverging from tone':'in line with tone'},
-            {l:'7-DAY TREND',   v:trend!=null?`${trend>0?'↑':trend<0?'↓':'→'} ${Math.abs(trend).toFixed(2)}`:'—', n:'sentiment direction'},
+            {l:'HIGH-IMPACT TONE', v:top10!=null?`${top10>0?'+':''}${top10.toFixed(2)}`:'—', n:'top 10 stories only'},
             {l:'COVERAGE RATE', v:km.news_velocity!=null?`${km.news_velocity.toFixed(1)}/day`:'—', n:`${km.article_count_7d??0} in last 7 days`},
             {l:'SOURCE QUALITY',v:km.tier1_source_share!=null?`${(km.tier1_source_share*100).toFixed(0)}%`:'—', n:'from tier-1 outlets'},
           ].map(x=>(
@@ -156,6 +168,22 @@ export default function NewsPanel({ ticker, data }:{ ticker:string; data?:any })
         )}
       </div>
 
+
+      <div style={{fontFamily:"'Fira Code',monospace",fontSize:9,color:'#daa520',letterSpacing:2,marginBottom:8}}>ALL RECENT COVERAGE · sentiment + reasoning</div>
+      <div style={{display:'flex',flexDirection:'column',gap:6,marginBottom:18}}>
+        {(d.recent_headlines||[]).slice(0,10).map((h,i)=>(
+          <div key={i} style={{background:'#241510',border:'1px solid rgba(212,149,108,0.12)',borderRadius:8,padding:'9px 12px',borderLeft:`3px solid ${sentDot(h.sentiment)}`}}>
+            <div style={{display:'flex',justifyContent:'space-between',gap:10}}>
+              {h.url?<a href={h.url} target="_blank" rel="noopener noreferrer" style={{fontSize:12.5,color:'#e8ddd0',textDecoration:'none',fontWeight:500,flex:1}}>{h.title}</a>
+                :<span style={{fontSize:12.5,color:'#e8ddd0',fontWeight:500,flex:1}}>{h.title}</span>}
+              <span style={{fontSize:9,color:sentDot(h.sentiment),textTransform:'uppercase',fontWeight:600,flexShrink:0}}>{h.sentiment}</span>
+            </div>
+            {h.reason && <div style={{fontSize:11,color:'#9d8b7a',marginTop:4,lineHeight:1.4}}>{h.reason}</div>}
+            <div style={{fontSize:9,color:'#7a7266',marginTop:3}}>{h.publisher} · {h.date}</div>
+          </div>
+        ))}
+      </div>
+
       {data?.sentiment?.news && (() => {
         const nw = data.sentiment.news;
         const p = (nw.positive ?? nw.positive_prob ?? 0) * 100;
@@ -195,32 +223,17 @@ export default function NewsPanel({ ticker, data }:{ ticker:string; data?:any })
         );
       })()}
 
-      <div style={{fontFamily:"'Fira Code',monospace",fontSize:9,color:'#daa520',letterSpacing:2,marginBottom:8}}>ALL RECENT COVERAGE · sentiment + reasoning</div>
-      <div style={{display:'flex',flexDirection:'column',gap:6,marginBottom:18}}>
-        {(d.recent_headlines||[]).slice(0,10).map((h,i)=>(
-          <div key={i} style={{background:'#141414',border:'1px solid #2a2a2a',borderRadius:8,padding:'9px 12px',borderLeft:`3px solid ${sentDot(h.sentiment)}`}}>
-            <div style={{display:'flex',justifyContent:'space-between',gap:10}}>
-              {h.url?<a href={h.url} target="_blank" rel="noopener noreferrer" style={{fontSize:12.5,color:'#e8ddd0',textDecoration:'none',fontWeight:500,flex:1}}>{h.title}</a>
-                :<span style={{fontSize:12.5,color:'#e8ddd0',fontWeight:500,flex:1}}>{h.title}</span>}
-              <span style={{fontSize:9,color:sentDot(h.sentiment),textTransform:'uppercase',fontWeight:600,flexShrink:0}}>{h.sentiment}</span>
-            </div>
-            {h.reason && <div style={{fontSize:11,color:'#9d8b7a',marginTop:4,lineHeight:1.4}}>{h.reason}</div>}
-            <div style={{fontSize:9,color:'#7a7266',marginTop:3}}>{h.publisher} · {h.date}</div>
-          </div>
-        ))}
-      </div>
-
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
         <span style={{fontSize:12,color:'#9d8b7a',letterSpacing:1}}>NEWS SIGNALS · {d.tree.categories.reduce((a,c)=>a+c.n_signals,0)} scored</span>
         <button onClick={()=>{setShowAllSignals(!showAllSignals);const m:Record<string,boolean>={};d.tree.categories.forEach(c=>m[c.id]=!showAllSignals);setExpanded(m);}}
-          style={{background:'#181818',border:'1px solid #2a2a2a',color:'#9d8b7a',borderRadius:8,padding:'5px 12px',fontSize:11,cursor:'pointer'}}>
+          style={{background:'#1a0f0a',border:'1px solid rgba(212,149,108,0.12)',color:'#9d8b7a',borderRadius:8,padding:'5px 12px',fontSize:11,cursor:'pointer'}}>
           {showAllSignals?'Collapse all':'Expand all'}</button>
       </div>
       <div style={{display:'flex',flexDirection:'column',gap:8}}>
         {d.tree.categories.map(cat=>{
           const open=expanded[cat.id];
           return (
-            <div key={cat.id} style={{background:'#141414',border:'1px solid #2a2a2a',borderRadius:10,overflow:'hidden'}}>
+            <div key={cat.id} style={{background:'#241510',border:'1px solid rgba(212,149,108,0.12)',borderRadius:10,overflow:'hidden'}}>
               <div onClick={()=>setExpanded(p=>({...p,[cat.id]:!p[cat.id]}))}
                 style={{display:'flex',alignItems:'center',gap:12,padding:'10px 14px',cursor:'pointer',borderLeft:`4px solid ${heat(cat.score)}`}}>
                 <span style={{fontSize:11,color:'#7a7266',width:12}}>{open?'▾':'▸'}</span>
