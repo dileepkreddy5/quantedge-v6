@@ -186,6 +186,7 @@ const PeerPanel: React.FC<Props> = ({ ticker: tickerProp, data: analysisData, on
         })}
         <div style={{ position:'absolute', bottom:4, left:6, fontSize:9, color:C.textDim }}>weaker</div>
         <div style={{ position:'absolute', bottom:4, right:6, fontSize:9, color:C.textDim }}>stronger →</div>
+      </div>
       {eco && eco.movers?.length > 0 && (() => {
         const floor = eco.significance_floor ?? 0.25;
         const strength = (c:number) =>
