@@ -124,6 +124,87 @@ export default function NewsPanel({ ticker, data }:{ ticker:string; data?:any })
         ) : null}
       </div>
 
+      {(() => {
+        const er = data?.analyst_ratings?.earnings;
+        const an = data?.analyst_ratings?.analytics;
+        const hist = (er?.surprise_history || []).filter((s:any)=>s?.surprise_percent!=null);
+        if (!er || hist.length === 0) return null;
+        // Oldest first, so the reader scans the trend left to right.
+        const ordered = [...hist].reverse();
+        const beats = ordered.filter((s:any)=>s.surprise_percent > 0).length;
+        const first = ordered[0].surprise_percent, last = ordered[ordered.length-1].surprise_percent;
+        const narrowing = ordered.length >= 3 && last < first;
+        const lastRep = er.last_reported || er.date;
+        const days = er.days_since ?? (er.days_to != null ? -er.days_to : null);
+        return (
+          <div style={{background:'var(--surface-2)',border:'1px solid var(--border-1)',borderRadius:8,padding:'16px 20px',marginBottom:14}}>
+            <div style={{fontFamily:'var(--font-mono)',fontSize:9,color:'var(--gold)',letterSpacing:2,marginBottom:4}}>EARNINGS</div>
+            <div style={{fontFamily:'var(--font-body)',fontSize:10.5,color:'#7a6b5d',marginBottom:14}}>
+              Reported results against consensus. The trend across quarters says more than any single beat.
+            </div>
+            <div style={{display:'flex',gap:28,flexWrap:'wrap',alignItems:'flex-start',marginBottom:16}}>
+              <div>
+                <div style={{fontFamily:'var(--font-mono)',fontSize:9,color:'var(--cocoa)',letterSpacing:1.5}}>LAST REPORTED</div>
+                <div style={{fontFamily:'var(--font-mono)',fontSize:15,color:'var(--latte)',fontWeight:600,marginTop:3}}>
+                  {lastRep || '—'}
+                </div>
+                {days != null && (
+                  <div style={{fontFamily:'var(--font-body)',fontSize:10,color:'var(--cocoa)'}}>{days} days ago</div>
+                )}
+              </div>
+              <div>
+                <div style={{fontFamily:'var(--font-mono)',fontSize:9,color:'var(--cocoa)',letterSpacing:1.5}}>EPS ACTUAL VS EST</div>
+                <div style={{fontFamily:'var(--font-mono)',fontSize:15,color:'var(--latte)',fontWeight:600,marginTop:3}}>
+                  {ordered[ordered.length-1].actual ?? '—'} vs {ordered[ordered.length-1].estimate ?? '—'}
+                </div>
+                <div style={{fontFamily:'var(--font-body)',fontSize:10,color: last>0?'var(--bull)':'var(--bear)'}}>
+                  {last>0?'+':''}{last.toFixed(1)}% surprise
+                </div>
+              </div>
+              <div>
+                <div style={{fontFamily:'var(--font-mono)',fontSize:9,color:'var(--cocoa)',letterSpacing:1.5}}>BEAT RATE</div>
+                <div style={{fontFamily:'var(--font-mono)',fontSize:15,color:'var(--latte)',fontWeight:600,marginTop:3}}>
+                  {beats}/{ordered.length}
+                </div>
+                {an?.avg_surprise_pct != null && (
+                  <div style={{fontFamily:'var(--font-body)',fontSize:10,color:'var(--cocoa)'}}>avg {an.avg_surprise_pct.toFixed(1)}%</div>
+                )}
+              </div>
+              <div>
+                <div style={{fontFamily:'var(--font-mono)',fontSize:9,color:'var(--cocoa)',letterSpacing:1.5}}>NEXT SCHEDULED</div>
+                <div style={{fontFamily:'var(--font-mono)',fontSize:15,color:'var(--cocoa)',fontWeight:600,marginTop:3}}>
+                  {er.next_scheduled || 'not available'}
+                </div>
+                <div style={{fontFamily:'var(--font-body)',fontSize:10,color:'var(--cocoa)'}}>
+                  {er.next_scheduled ? '' : 'forward calendar not on this data tier'}
+                </div>
+              </div>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:`repeat(${ordered.length}, 1fr)`,gap:8}}>
+              {ordered.map((s:any)=>(
+                <div key={s.period} style={{background:'var(--surface-3)',border:'1px solid var(--border-1)',borderRadius:4,padding:'8px 10px'}}>
+                  <div style={{fontFamily:'var(--font-mono)',fontSize:9,color:'var(--cocoa)'}}>{s.period}</div>
+                  <div style={{fontFamily:'var(--font-mono)',fontSize:14,fontWeight:600,color: s.surprise_percent>0?'var(--bull)':'var(--bear)',marginTop:2}}>
+                    {s.surprise_percent>0?'+':''}{s.surprise_percent.toFixed(1)}%
+                  </div>
+                  <div style={{fontFamily:'var(--font-body)',fontSize:9,color:'var(--cocoa)'}}>
+                    {s.actual} vs {s.estimate}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{fontFamily:'var(--font-body)',fontSize:11,color:'var(--latte)',marginTop:12,lineHeight:1.5}}>
+              {beats === ordered.length
+                ? `Beat consensus in all ${ordered.length} quarters shown`
+                : `Beat consensus in ${beats} of ${ordered.length} quarters shown`}
+              {narrowing
+                ? `, but the margin has narrowed from ${first>0?'+':''}${first.toFixed(1)}% to ${last>0?'+':''}${last.toFixed(1)}% — a consistent beat rate can mask a compressing surprise.`
+                : '.'}
+            </div>
+          </div>
+        );
+      })()}
+
       {(d.key_facts||[]).length > 0 && (() => {
         const GROUPS: Record<string,{label:string; note:string}> = {
           FINANCIAL:   {label:'FINANCIALS',  note:'margins, earnings, valuation'},
