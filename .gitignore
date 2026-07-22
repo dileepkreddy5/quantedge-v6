@@ -112,3 +112,7 @@ quantedge/**/__pycache__/
 data/edgar_bulk/
 backend/quantedge/data/edgar_bulk/
 scan.log
+
+# local database backups
+backups/
+backup_db.sh
