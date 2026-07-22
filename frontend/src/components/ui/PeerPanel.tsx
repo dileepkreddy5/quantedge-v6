@@ -193,15 +193,30 @@ const PeerPanel: React.FC<Props> = ({ ticker: tickerProp, data: analysisData, on
               <>Weakest on <b style={{color:C.red}}>{weaknesses.slice(0,2).map((x:any)=>x.label.replace(' (cheap)','').toLowerCase()).join(' and ')}</b>
                 {' '}— {phrase(weaknesses[0])}. </>
             )}
-            {pe && pe.value != null && pe.peer_median != null && Number(pe.peer_median) > 0 && (
-              <>The market prices it at <b style={{color: Number(pe.value) > Number(pe.peer_median) * 1.3 ? C.red : C.textDim}}>
-                {(Number(pe.value) / Number(pe.peer_median)).toFixed(1)}×</b> the peer P/E
+            {pe && pe.value != null && pe.peer_median != null && Number(pe.peer_median) > 0 && (() => {
+              const ps = get('fund_ps');
+              const peR = Number(pe.value) / Number(pe.peer_median);
+              const psR = ps && ps.value != null && Number(ps.peer_median) > 0
+                ? Number(ps.value) / Number(ps.peer_median) : null;
+              // Earnings and sales multiples can disagree — a company can look
+              // cheap on profits and expensive on revenue. Reporting one alone
+              // misleads, so both are stated when they diverge.
+              const split = psR != null && ((peR < 0.9 && psR > 1.3) || (peR > 1.3 && psR < 0.9));
+              return (
+                <>The market prices it at <b style={{color: peR > 1.25 ? C.red : peR < 0.85 ? C.green : C.textDim}}>
+                  {peR.toFixed(1)}×</b> the peer P/E
+                  {split && psR != null && (
+                    <> but <b style={{color: psR > 1 ? C.red : C.green}}>{psR.toFixed(1)}×</b> the peer P/S
+                      {peR < 1 ? ' — cheap on earnings, expensive on revenue, which usually means unusually high margins'
+                               : ' — expensive on earnings, cheap on revenue, which usually means compressed margins'}</>
+                  )}
                 {Number(pe.value) > Number(pe.peer_median) * 1.25
                   ? ' — the premium is the trade-off for the strengths above.'
                   : Number(pe.value) < Number(pe.peer_median) * 0.85
                     ? ' — a discount to the group, worth understanding before assuming it is a bargain.'
                     : ', broadly in line with the group.'} </>
-            )}
+              );
+            })()}
             {mom && mom.percentile != null && (
               <>Recent three-month momentum sits at the <b>{mom.percentile}th percentile</b> of the group.</>
             )}
@@ -278,7 +293,14 @@ const PeerPanel: React.FC<Props> = ({ ticker: tickerProp, data: analysisData, on
                 <div style={{ fontSize:10, color:C.gold, letterSpacing:1.5, marginBottom:2 }}>{g.label}</div>
                 <div style={{ fontSize:10, color:C.textDim, marginBottom:7 }}>{g.note}</div>
                 <div style={{ display:'flex', gap:7, flexWrap:'wrap' }}>
-                  {(rel[g.key] || []).slice(0,14).map((x:any,i:number) => (
+                  {(() => {
+                    const seen = new Set<string>();
+                    return (rel[g.key] || []).filter((x:any) => {
+                      const k = (x.ticker || x.name || '').toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,14);
+                      if (!k || seen.has(k)) return false;
+                      seen.add(k); return true;
+                    }).slice(0,14);
+                  })().map((x:any,i:number) => (
                     <div key={i} title={x.evidence || ''}
                       onClick={() => x.ticker && onAnalyze && onAnalyze(x.ticker)}
                       style={{ background:'#1a0f0a', border:`1px solid ${C.border}`, borderRadius:5,
