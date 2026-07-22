@@ -18,7 +18,6 @@ import {
   RegimePanel,
   OptionsPanel,
   SentimentPanel,
-  MonteCarloPanel,
   FundamentalsPanel,
   ScenarioPanel,
   Watchlist,

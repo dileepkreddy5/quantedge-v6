@@ -22,7 +22,6 @@ export { VolatilityPanel } from '../ui/Panels';
 export { RegimePanel }     from '../ui/Panels';
 export { OptionsPanel }    from '../ui/Panels';
 export { SentimentPanel }  from '../ui/Panels';
-export { MonteCarloPanel } from '../ui/Panels';
 export { RiskPanel }       from '../ui/Panels';
 export { FundamentalsPanel } from '../ui/Panels';
 export { ScenarioPanel }   from '../ui/Panels';

@@ -1391,67 +1391,6 @@ export function SentimentPanel({ data }: { data: any }) {
 // ══════════════════════════════════════════════════════════════
 // MONTE CARLO PANEL
 // ══════════════════════════════════════════════════════════════
-export function MonteCarloPanel({ data }: { data: any }) {
-  const mc = data.monte_carlo || {};
-  if (!mc || Object.keys(mc).length === 0) {
-    return <Card><div style={{ textAlign:'center', color:'#8a7560', padding:40 }}>Monte Carlo data unavailable</div></Card>;
-  }
-
-  const bars = [
-    { label: 'P(+20%)',  value: mc.prob_gain_20pct, color: '#22c55e' },
-    { label: 'P(+10%)',  value: mc.prob_gain_10pct, color: '#86efac' },
-    { label: 'P(loss)',  value: mc.prob_loss,         color: '#ef4444' },
-    { label: 'P(-20%)',  value: mc.prob_loss_20pct,   color: '#dc2626' },
-    { label: 'P(-50%)',  value: mc.prob_loss_50pct,   color: '#7f1d1d' },
-  ];
-
-  return (
-    <div className="qe-grid-3">
-      <Card>
-        <SectionTitle>RETURN PERCENTILES (1-Year)</SectionTitle>
-        {[['P1','p1'],['P5 (VaR 95%)','p5'],['P10','p10'],['P25','p25'],['P50 Median','p50'],['P75','p75'],['P90','p90'],['P95','p95'],['P99','p99']].map(([l,k]) => (
-          <Row key={k} label={l} value={`${(mc[k]||0)*100>=0?'+':''}${((mc[k]||0)*100).toFixed(1)}%`} highlight={(mc[k]||0)>0?'#22c55e':'#ef4444'} />
-        ))}
-        <Row label="CVaR 95%" value={`${((mc.cvar_95||0)*100).toFixed(1)}%`} highlight="#ef4444" />
-      </Card>
-
-      <Card>
-        <SectionTitle>OUTCOME PROBABILITIES (1Y)</SectionTitle>
-        {bars.map(b => (
-          <div key={b.label} style={{ marginBottom:12 }}>
-            <div style={{ display:'flex', justifyContent:'space-between', marginBottom:4 }}>
-              <span style={{ fontFamily:"'Fira Code',monospace", fontSize:10, color:'#9d8b7a' }}>{b.label}</span>
-              <span style={{ fontFamily:"'Fira Code',monospace", fontSize:12, fontWeight:700, color:b.color }}>{((b.value||0)*100).toFixed(1)}%</span>
-            </div>
-            <div style={{ height:6, background:'#1a0f0a', borderRadius:3 }}>
-              <div style={{ height:'100%', background:b.color, borderRadius:3, width:`${(b.value||0)*100}%`, transition:'width 1.2s ease' }} />
-            </div>
-          </div>
-        ))}
-        <div style={{ fontFamily:"'Fira Code',monospace", fontSize:8, color:'#8a7560', marginTop:12, lineHeight:1.7 }}>
-          {mc.n_paths?.toLocaleString() || '100,000'} simulation paths<br/>
-          Model: {mc.model || 'Merton Jump Diffusion'}<br/>
-          Innovations: Student-t (fat tails)
-        </div>
-      </Card>
-
-      <Card>
-        <SectionTitle>PRICE DISTRIBUTION (1Y)</SectionTitle>
-        {Object.entries(mc.final_prices || {}).map(([k, v]: [string, any]) => (
-          <Row key={k} label={k.toUpperCase()} value={`$${fmtN(v,2)}`} />
-        ))}
-        <SectionTitle>SUMMARY STATS</SectionTitle>
-        <Row label="Expected Return" value={`${((mc.expected_return||0)*100).toFixed(1)}%`} highlight={(mc.expected_return||0)>0?'#22c55e':'#ef4444'} />
-        <Row label="Return Volatility" value={`${((mc.volatility||0)*100).toFixed(1)}%`} />
-        <Row label="Simulated Sharpe" value={fmtN(mc.sharpe_simulated,3)} />
-      </Card>
-    </div>
-  );
-}
-
-// ══════════════════════════════════════════════════════════════
-// RISK PANEL
-// ══════════════════════════════════════════════════════════════
 export function RiskPanel({ data }: { data: any }) {
   const risk = data.risk_metrics || {};
 
@@ -2335,4 +2274,4 @@ export function PerformancePanel({ data }: { data: any }) {
   );
 }
 
-export default { SignalPanel, MLModelsPanel, VolatilityPanel, RegimePanel, OptionsPanel, SentimentPanel, MonteCarloPanel, RiskPanel, FundamentalsPanel, ScenarioPanel, Watchlist };
+export default { SignalPanel, MLModelsPanel, VolatilityPanel, RegimePanel, OptionsPanel, SentimentPanel, RiskPanel, FundamentalsPanel, ScenarioPanel, Watchlist };
