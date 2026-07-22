@@ -27,14 +27,37 @@ const Row = ({ label, value, highlight }: { label: string; value: string; highli
   </div>
 );
 
-const SectionTitle = ({ children }: { children: React.ReactNode }) => (
-  <div style={{ fontFamily:"'Fira Code',monospace", fontSize:9, color:'#daa520', letterSpacing:3, marginBottom:10, marginTop:18, paddingBottom:6, borderBottom:'1px solid rgba(218,165,32,0.15)' }}>
+// The design tokens in globals.css define surfaces, shadows and glows that these
+// primitives were hardcoding around — flat backgrounds with no elevation. Reading
+// from the variables restores the depth the palette was built for, across every
+// panel at once rather than one tab at a time.
+const SectionTitle = ({ children, accent }: { children: React.ReactNode; accent?: string }) => (
+  <div style={{
+    fontFamily:'var(--font-mono)', fontSize:9, letterSpacing:3,
+    color: accent || 'var(--gold)',
+    marginBottom:12, marginTop:18, paddingBottom:7,
+    borderBottom:'1px solid var(--border-accent)',
+    textShadow:'0 0 12px rgba(218,165,32,0.25)',
+  }}>
     {children}
   </div>
 );
 
-const Card = ({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) => (
-  <div style={{ background:'#241510', border:'1px solid rgba(212,149,108,0.1)', borderRadius:8, padding:16, ...style }}>
+const Card = ({ children, style, elevated, glow }: {
+  children: React.ReactNode; style?: React.CSSProperties;
+  elevated?: boolean; glow?: 'gold' | 'bull' | 'bear';
+}) => (
+  <div style={{
+    background: elevated ? 'var(--surface-3)' : 'var(--surface-2)',
+    border: `1px solid ${elevated ? 'var(--border-2)' : 'var(--border-1)'}`,
+    borderRadius:'var(--radius-md)',
+    padding:18,
+    boxShadow: glow
+      ? `var(--shadow-card), var(--shadow-glow-${glow})`
+      : 'var(--shadow-card)',
+    transition:'border-color .2s ease, box-shadow .2s ease',
+    ...style,
+  }}>
     {children}
   </div>
 );
