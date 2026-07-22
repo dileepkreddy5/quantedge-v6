@@ -164,10 +164,6 @@ async def get_peer_relative(
         "n_peers": len(peer_cols),
         "n_sessions": len(series),
         "windows": windows,
-        "note": ("Cumulative return rebased to zero at the window start. The band "
-                 "spans the 25th to 75th percentile of the peer group. With a small "
-                 "group the median moves in steps and the band is wide — read the "
-                 "direction of the gap, not its precise width."),
     }}
 
 

@@ -229,7 +229,7 @@ const PeerPanel: React.FC<Props> = ({ ticker: tickerProp, data: analysisData, on
               );
             })()}
             {mom && mom.percentile != null && (
-              <>Recent three-month momentum sits at the <b>{mom.percentile}th percentile</b> of the group.</>
+              <>Recent three-month momentum sits at the <b>{Math.round(mom.percentile)}th percentile</b> of the group ({pd.peer_count} companies — with a group this small each place is a large step).</>
             )}
           </div>
         );
@@ -340,7 +340,7 @@ const PeerPanel: React.FC<Props> = ({ ticker: tickerProp, data: analysisData, on
               <div style={{ display:'grid', gridTemplateColumns:`repeat(${relPerf.windows.length}, 1fr)`, gap:6, marginTop:8 }}>
                 {relPerf.windows.map((w:any)=>(
                   <div key={w.window} style={{ background:'rgba(212,149,108,0.04)', borderRadius:4, padding:'6px 9px' }}>
-                    <div style={{ fontFamily:'monospace', fontSize:9, color:C.textDim, letterSpacing:1 }}>{w.window} VS PEER MEDIAN</div>
+                    <div style={{ fontFamily:'monospace', fontSize:9, color:C.textDim, letterSpacing:1 }}>{w.window} VS MEDIAN OF {w.n_peers}</div>
                     <div style={{ fontFamily:'monospace', fontSize:14, fontWeight:700, marginTop:1,
                       color: w.relative_pts>=0 ? C.green : C.red }}>
                       {w.relative_pts>=0?'+':''}{w.relative_pts}pts
@@ -396,7 +396,7 @@ const PeerPanel: React.FC<Props> = ({ ticker: tickerProp, data: analysisData, on
                   </div>
                   <div style={{ width:64, textAlign:'right', fontSize:10, color:C.textDim, fontFamily:"'Fira Code',monospace" }}>#{f.rank}/{f.of}</div>
                   <div style={{ width:54, textAlign:'right', fontFamily:"'Fira Code',monospace", fontWeight:700, fontSize:14, color:pctColor(f.percentile) }}>
-                    {f.percentile}%
+                    {f.rank != null && f.of != null ? `${f.rank}/${f.of}` : `${Math.round(f.percentile)}%`}
                   </div>
                 </div>
               );
