@@ -42,16 +42,19 @@ CREATE INDEX IF NOT EXISTS idx_rel_dst ON relationships (dst_ticker);
 
 # Language that establishes direction. A company "purchases from" a supplier and
 # "sells to" a customer; conflating the two inverts the entire graph.
+# Suppliers name their customers because concentration is a reportable risk;
+# buyers have no such obligation. Skyworks lists Apple, Cisco and Ericsson by
+# name; Apple's own filing names nobody. So the graph is read from the supply
+# side and the edges reversed to answer "who benefits when this company grows".
 _PATTERNS: List[Tuple[str, str]] = [
-    ("SUPPLIER",   r"(?:purchase[sd]?|source[sd]?|procure[sd]?|buy|obtain[s]?|supplied by|"
-                   r"rely on|depend[s]? on|agreement with)\s+(?:[\w\s,]{0,40}?)\s*from\s+"),
-    ("SUPPLIER",   r"(?:our|key|primary|principal|sole)\s+suppliers?\s+(?:include[s]?|are|is)\s+"),
-    ("CUSTOMER",   r"(?:sell[s]?|supply|provide[s]?|deliver[s]?|revenue from)\s+"
-                   r"(?:[\w\s,]{0,40}?)\s*to\s+"),
-    ("CUSTOMER",   r"(?:our|largest|principal|significant)\s+customers?\s+(?:include[s]?|are|is)\s+"),
-    ("COMPETITOR", r"(?:compete[s]?\s+(?:with|against)|competitors?\s+(?:include[s]?|are|is)|"
-                   r"competition\s+from)\s+"),
-    ("PARTNER",    r"(?:partnership|joint venture|collaborat\w+|alliance)\s+with\s+"),
+    ("CUSTOMER_OF", r"(?:our\s+)?(?:key|significant|principal|largest|major|primary|top)?\s*"
+                    r"customers?\s+(?:include[sd]?|are|comprise[sd]?|consist(?:s|ed)? of)\s*:?\s+"),
+    ("CUSTOMER_OF", r"(?:we\s+)?(?:sell|supply|provide|ship)\s+(?:our\s+)?(?:products?|solutions?|"
+                    r"services?)\s+to\s+(?:companies\s+such\s+as\s+|customers\s+including\s+)?"),
+    ("SUPPLIER_OF", r"(?:our\s+)?(?:key|principal|primary|main|major)?\s*suppliers?\s+"
+                    r"(?:include[sd]?|are)\s*:?\s+"),
+    ("COMPETITOR",  r"(?:our\s+)?(?:primary|principal|main|key)?\s*competitors?\s+"
+                    r"(?:include[sd]?|are)\s*:?\s+"),
 ]
 
 # Corporate suffixes to strip when matching a mention back to a ticker.
@@ -82,14 +85,21 @@ class RelationshipExtractor:
         async with self.pool.acquire() as conn:
             rows = await conn.fetch(
                 "SELECT ticker, name FROM universe WHERE name IS NOT NULL AND active")
-        idx = {}
+        # Matching on the first word alone maps "Sierra Wireless" to Sierra Bancorp
+        # and "Texas Instruments" to a bank in Texas. Single-word keys are only
+        # safe when exactly one company in the universe carries that word.
+        idx, first_counts, first_map = {}, {}, {}
         for r in rows:
             key = _norm(r["name"])
             if len(key) >= 4 and key not in idx:
                 idx[key] = r["ticker"]
-                first = key.split()[0]
-                if len(first) >= 5:
-                    idx.setdefault(first, r["ticker"])
+            parts = key.split()
+            if parts and len(parts[0]) >= 5:
+                first_counts[parts[0]] = first_counts.get(parts[0], 0) + 1
+                first_map.setdefault(parts[0], r["ticker"])
+        for w, n in first_counts.items():
+            if n == 1 and w not in idx:
+                idx[w] = first_map[w]
         self._name_index = idx
         logger.info(f"name index built: {len(idx)} entries")
 
@@ -99,8 +109,14 @@ class RelationshipExtractor:
             return None
         if k in self._name_index:
             return self._name_index[k]
-        first = k.split()[0] if k.split() else ""
-        return self._name_index.get(first) if len(first) >= 5 else None
+        # Try progressively shorter prefixes before giving up, so "Apple Inc"
+        # resolves while an ambiguous single word stays unresolved.
+        parts = k.split()
+        for n in range(len(parts), 0, -1):
+            cand = " ".join(parts[:n])
+            if len(cand) >= 5 and cand in self._name_index:
+                return self._name_index[cand]
+        return None
 
     async def _latest_10k(self, client: httpx.AsyncClient, cik: str) -> Optional[Tuple[str, str, str]]:
         c10 = str(cik).zfill(10)
@@ -122,32 +138,52 @@ class RelationshipExtractor:
         t = re.sub(r"<[^>]+>", " ", text)
         t = re.sub(r"&#?\w+;", " ", t)
         t = re.sub(r"\s+", " ", t)
-        m = re.search(r"item\s*1\b.{0,40}business", t, re.I)
-        n = re.search(r"item\s*2\b.{0,40}propert", t, re.I)
-        if m:
-            return t[m.start(): n.start() if n and n.start() > m.start() else m.start() + 250_000]
-        return t[:250_000]
+        # The first "Item 1 ... Business" match is the table of contents, which
+        # sits a few lines from "Item 2 ... Properties" and yields a section of
+        # about a hundred characters. The real body is the last such match.
+        starts = [x.start() for x in re.finditer(r"item\s*1\b.{0,60}?business", t, re.I)]
+        ends = [x.start() for x in re.finditer(r"item\s*2\b.{0,60}?propert", t, re.I)]
+        best, best_len = None, 0
+        for s in starts:
+            e = next((x for x in ends if x > s + 2000), None)
+            span = (e - s) if e else (len(t) - s)
+            if span > best_len:
+                best, best_len = (s, e), span
+        if best and best_len > 5000:
+            s, e = best
+            return t[s: e if e else s + 400_000]
+        return t[:400_000]
 
     def _extract(self, section: str) -> List[Dict]:
+        """These phrases are followed by a comma-separated run of company names,
+        so the whole list is taken rather than the first match."""
         out, seen = [], set()
-        # Company mentions are capitalised multi-word phrases; require at least
-        # one token to look like a proper noun rather than sentence-initial caps.
-        cand = re.compile(r"\b([A-Z][a-zA-Z&.\-]+(?:\s+[A-Z][a-zA-Z&.\-]+){0,3})\b")
+        name_re = re.compile(r"[A-Z][A-Za-z0-9&.\-]*(?:\s+[A-Z][A-Za-z0-9&.\-]*){0,3}")
+        stop = {"the", "our", "we", "united states", "company", "inc", "and", "other",
+                "these", "such", "including", "certain", "various", "many", "some"}
         for kind, pat in _PATTERNS:
             for m in re.finditer(pat, section, re.I):
-                tail = section[m.end(): m.end() + 200]
-                for cm in cand.finditer(tail[:120]):
-                    name = cm.group(1).strip(" .,;")
-                    if len(name) < 4 or name.lower() in ("the", "our", "we", "united states"):
+                tail = section[m.end(): m.end() + 420]
+                # the list ends at a sentence boundary or a trailing clause
+                cut = re.search(r"\.\s+[A-Z]|\band\s+others\b|\betc\b|\bamong\s+others\b", tail)
+                run = tail[: cut.start()] if cut else tail[:260]
+                for part in re.split(r",|\band\b|;", run):
+                    part = part.strip(" .,;:()")
+                    if len(part) < 3:
+                        continue
+                    nm = name_re.match(part)
+                    if not nm:
+                        continue
+                    name = nm.group(0).strip(" .,;")
+                    if len(name) < 3 or name.lower() in stop:
                         continue
                     key = (kind, _norm(name))
                     if not key[1] or key in seen:
                         continue
                     seen.add(key)
-                    s = max(0, m.start() - 120)
+                    s = max(0, m.start() - 100)
                     out.append({"kind": kind, "name": name,
-                                "evidence": section[s: m.end() + 160].strip()})
-                    break
+                                "evidence": section[s: m.end() + 220].strip()})
         return out
 
     async def extract_for(self, ticker: str, cik: str) -> Dict:
@@ -170,15 +206,21 @@ class RelationshipExtractor:
             dst = self._resolve(rel["name"])
             if dst == ticker:
                 continue
+            # asyncpg binds a real date object; the ::date cast does not coerce a string.
+            from datetime import datetime as _dt
+            try:
+                _fd = _dt.strptime(fdate, "%Y-%m-%d").date()
+            except Exception:
+                _fd = None
             rows.append((ticker, rel["name"], dst, rel["kind"],
-                         rel["evidence"][:600], fdate, acc,
+                         rel["evidence"][:600], _fd, acc,
                          0.85 if dst else 0.45))
         if rows:
             async with self.pool.acquire() as conn:
                 await conn.executemany("""
                     INSERT INTO relationships
                       (src_ticker,dst_name,dst_ticker,kind,evidence,filing_date,accession,confidence)
-                    VALUES ($1,$2,$3,$4,$5,$6::date,$7,$8)
+                    VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
                     ON CONFLICT (src_ticker,dst_name,kind) DO UPDATE SET
                       dst_ticker=EXCLUDED.dst_ticker, evidence=EXCLUDED.evidence,
                       filing_date=EXCLUDED.filing_date, updated_at=NOW()
