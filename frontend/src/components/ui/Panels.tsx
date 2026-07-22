@@ -1003,6 +1003,69 @@ export function RegimePanel({ data }: { data: any }) {
         </Card>
       )}
 
+      {(rc?.forward_returns && Object.keys(rc.forward_returns).length > 0) && (
+        <Card style={{ gridColumn:'span 3' }}>
+          <SectionTitle>WHAT FOLLOWED, THE LAST {rc.past_episodes_of_state} TIMES THIS STATE BEGAN</SectionTitle>
+          <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:11, color:'#9d8b7a', marginBottom:14, lineHeight:1.55 }}>
+            Price change over the days following each historical entry into {pretty(rc.inferred_state).toLowerCase()}.
+            This is the closest thing on the page to a forward-looking read — and the sample is small, so the range
+            matters more than the median.
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:10, marginBottom:14 }}>
+            {Object.entries(rc.forward_returns).map(([h,x]:any)=>{
+              const lbl = h==='5'?'1 WEEK':h==='10'?'2 WEEKS':h==='21'?'1 MONTH':'3 MONTHS';
+              const c = x.median_pct > 0 ? '#22c55e' : '#ef4444';
+              const spanTot = x.best_pct - x.worst_pct || 1;
+              const zeroPos = ((0 - x.worst_pct) / spanTot) * 100;
+              const medPos = ((x.median_pct - x.worst_pct) / spanTot) * 100;
+              return (
+                <div key={h} style={{ background:'#1a0f0a', borderRadius:8, padding:'12px 12px' }}>
+                  <div style={{ fontFamily:"'Fira Code',monospace", fontSize:8, color:'#8a7560', letterSpacing:2 }}>{lbl} LATER</div>
+                  <div style={{ fontFamily:"'Fira Code',monospace", fontSize:22, fontWeight:800, color:c, marginTop:5 }}>
+                    {x.median_pct > 0 ? '+' : ''}{x.median_pct}%
+                  </div>
+                  <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:9, color:'#6b5d52' }}>median outcome</div>
+                  <div style={{ position:'relative', height:16, marginTop:9 }}>
+                    <div style={{ position:'absolute', top:6, left:0, right:0, height:4,
+                      background:'linear-gradient(90deg,#ef444455,#8a756033,#22c55e55)', borderRadius:2 }} />
+                    <div style={{ position:'absolute', top:2, left:`${zeroPos}%`, width:1, height:12, background:'#9d8b7a66' }} />
+                    <div style={{ position:'absolute', top:1, left:`${medPos}%`, transform:'translateX(-50%)',
+                      width:2.5, height:14, background:c, borderRadius:1 }} />
+                  </div>
+                  <div style={{ display:'flex', justifyContent:'space-between', fontFamily:"'Fira Code',monospace", fontSize:8, color:'#6b5d52', marginTop:1 }}>
+                    <span>{x.worst_pct}%</span><span>{x.best_pct}%</span>
+                  </div>
+                  <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:9, color:'#7a6b5d', marginTop:6 }}>
+                    {x.positive_pct}% positive · n={x.n}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {rc.exit_analysis?.transitions && Object.keys(rc.exit_analysis.transitions).length > 0 && (
+            <div style={{ paddingTop:12, borderTop:'1px solid rgba(212,149,108,0.12)' }}>
+              <div style={{ fontFamily:"'Fira Code',monospace", fontSize:9, color:'#daa520', letterSpacing:2, marginBottom:8 }}>
+                WHERE THIS STATE HAS LED NEXT
+              </div>
+              <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+                {Object.entries(rc.exit_analysis.transitions).map(([s,x]:any)=>(
+                  <div key={s} style={{ flex:1, minWidth:130, background:'#1a0f0a', borderRadius:6, padding:'8px 10px',
+                    borderLeft:`2px solid ${C[s]||'#8a7560'}` }}>
+                    <div style={{ fontFamily:"'Fira Code',monospace", fontSize:8.5, color:C[s]||'#9d8b7a' }}>{pretty(s)}</div>
+                    <div style={{ fontFamily:"'Fira Code',monospace", fontSize:15, fontWeight:700, color:'#d4c4b0', marginTop:2 }}>{x.share_pct}%</div>
+                    <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:8.5, color:'#6b5d52' }}>{x.count} of {rc.past_episodes_of_state} exits</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:9.5, color:'#6b5d52', marginTop:10, lineHeight:1.5 }}>
+                Observed transitions from this stock&apos;s own history, which is a different thing from the model&apos;s
+                theoretical transition matrix shown under model internals. Small samples — treat as tendency, not probability.
+              </div>
+            </div>
+          )}
+        </Card>
+      )}
+
       {rc?.conditional_stats && (
         <Card style={{ gridColumn:'span 3' }}>
           <SectionTitle>WHAT HAS HAPPENED IN EACH STATE</SectionTitle>
