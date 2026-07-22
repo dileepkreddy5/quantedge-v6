@@ -92,7 +92,31 @@ _SUB_RULES = [
     ("Utilities-Gas/Water",["GAS DISTRIBUTION", "WATER SUPPLY", "NATURAL GAS DISTRIB"]),
     ("Construction",      ["CONSTRUCTION", "HOMEBUILD", "GENERAL BUILDING"]),
     ("Advertising",       ["ADVERTISING", "MARKETING"]),
+    # Industries present in the full universe but missing from the original list.
+    ("Oilfield Services",   ["OIL & GAS FIELD SERVICES", "OIL AND GAS FIELD SERV"]),
+    ("Real Estate",         ["REAL ESTATE", "OPERATIVE BUILDERS", "LAND SUBDIVID"]),
+    ("Hotels & Leisure",    ["HOTELS", "MOTELS", "AMUSEMENT", "RECREATION", "GAMBLING", "RACING"]),
+    ("Diagnostics & Labs",  ["MEDICAL LABORATORIES", "ELECTROMEDICAL", "IN VITRO", "CLINICAL LAB"]),
+    ("Instruments",         ["LABORATORY ANALYTICAL", "INDUSTRIAL INSTRUMENTS", "MEASURING & CONTROL",
+                             "MEAS & TESTING", "SEARCH, DETECTION", "OPTICAL INSTRUMENT"]),
+    ("Business Services",   ["MANAGEMENT CONSULTING", "HELP SUPPLY", "BUSINESS SERVICES",
+                             "COMPUTER PROGRAMMING", "PREPACKAGED SOFTWARE"]),
+    ("Education",           ["EDUCATIONAL SERVICES"]),
+    ("Specialty Finance",   ["FINANCE SERVICES", "FINANCE LESSORS", "PERSONAL CREDIT",
+                             "MORTGAGE BANKERS", "PATENT OWNERS"]),
+    ("Electronics Mfg",     ["PRINTED CIRCUIT BOARDS", "ELECTRONIC CONNECTORS", "ELECTRICAL INDUSTRIAL"]),
+    ("Consumer Products",   ["SPORTING & ATHLETIC", "TOYS", "GAMES"]),
+    ("Transport Services",  ["TRANSPORTATION SERVICES", "ARRANGEMENT OF TRANSPORT"]),
+    ("Telecom Services",    ["COMMUNICATIONS SERVICES"]),
 ]
+
+# Shell companies with no operations. They have a SIC but no business to compare.
+_EXCLUDE_SIC = ("BLANK CHECK",)
+
+
+def is_shell(sic: Optional[str]) -> bool:
+    """SPACs and blank-check vehicles hold cash and nothing else."""
+    return bool(sic) and any(k in sic.upper() for k in _EXCLUDE_SIC)
 
 
 def sub_bucket_for(sic: Optional[str]) -> Optional[str]:
