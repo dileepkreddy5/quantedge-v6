@@ -250,6 +250,44 @@ class QuantEdgeAnalyzerV6:
                 except Exception as _e:
                     logger.info(f"supplemental field computation skipped: {_e}")
 
+            # ── Volatility term history: is vol expanding or contracting? ──
+            # Rolling 21d annualised vol, sampled at intervals back to 5 years, so the
+            # user can see whether current turbulence is unusual for this name.
+            try:
+                import numpy as _np
+                _c = price_data["close"].dropna()
+                if len(_c) >= 40:
+                    _lr = _np.log(_c / _c.shift(1)).dropna()
+                    _rv = _lr.rolling(21).std() * _np.sqrt(252) * 100   # annualised %
+                    _rv = _rv.dropna()
+                    if len(_rv) >= 30:
+                        _now = float(_rv.iloc[-1])
+                        _pts = [("1d",1),("3d",3),("1w",5),("2w",10),("1mo",21),
+                                ("2mo",42),("3mo",63),("6mo",126),("1y",252),
+                                ("2y",504),("3y",756),("5y",1260)]
+                        _hist = {}
+                        for _lbl,_n in _pts:
+                            if len(_rv) > _n:
+                                _then = float(_rv.iloc[-1-_n])
+                                _hist[_lbl] = {
+                                    "then": round(_then,2),
+                                    "change": round(_now-_then,2),
+                                    "change_pct": round(((_now-_then)/_then)*100,1) if _then > 0 else None,
+                                }
+                        _vals = _rv.values
+                        result["volatility_history"] = {
+                            "current": round(_now,2),
+                            "changes": _hist,
+                            "range_high": round(float(_np.max(_vals)),2),
+                            "range_low": round(float(_np.min(_vals)),2),
+                            "percentile": round(float((_vals < _now).mean()*100),1),
+                            "median": round(float(_np.median(_vals)),2),
+                            "observations": int(len(_vals)),
+                            "note": "Rolling 21-day realized volatility, annualised. Percentile is versus this stock's own history over the available window.",
+                        }
+            except Exception as _e:
+                logger.info(f"volatility history skipped: {_e}")
+
             # ── LAYER 2: FEATURES ─────────────────────────────
             try:
                 feature_matrix = self.feature_pipeline.build_feature_matrix(
