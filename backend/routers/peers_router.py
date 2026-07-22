@@ -142,8 +142,10 @@ async def get_peer_relative(
     # Per-ticker series so the client can let the user pick which rivals to
     # plot without another round trip. Small payload: ~8 tickers x 501 points.
     by_ticker = {}
+    px_ticker = {}
     for c in valid:
         by_ticker[c] = [None if _pd.isna(v) else round(float(v), 2) for v in rebased[c].tolist()]
+        px_ticker[c] = [None if _pd.isna(v) else round(float(v), 2) for v in seg[c].tolist()]
     caps = {p["ticker"]: p.get("market_cap") for p in meta["peers"]}
     roster = sorted(
         [{"ticker": c, "market_cap": caps.get(c),
@@ -157,6 +159,7 @@ async def get_peer_relative(
         "group_kind": meta.get("group_kind"),
         "dates": [str(d) for d in rebased.index],
         "by_ticker": by_ticker,
+        "px_ticker": px_ticker,
         "roster": roster,
         "n_peers": len(peer_cols),
         "n_sessions": len(series),

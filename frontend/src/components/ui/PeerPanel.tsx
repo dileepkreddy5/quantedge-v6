@@ -35,6 +35,7 @@ const PeerPanel: React.FC<Props> = ({ ticker: tickerProp, data: analysisData, on
   const [relPerf, setRelPerf] = useState<any>(null);
   const [picked, setPicked] = useState<string[]>([]);
   const [win, setWin] = useState<number>(252);
+  const [hoverI, setHoverI] = useState<number|null>(null);
 
   const load = useCallback(async () => {
     if (!ticker) { setLoading(false); return; }
@@ -236,7 +237,7 @@ const PeerPanel: React.FC<Props> = ({ ticker: tickerProp, data: analysisData, on
 
       {relPerf && relPerf.dates?.length > 20 && (() => {
         const LINE = ['#6ea8d8','#7aa874','#c98f6c','#a98bc4','#c9b06c'];
-        const W = 900, H = 200, PAD = { l: 46, r: 92, t: 10, b: 20 };
+        const W = 1000, H = 170, PAD = { l: 46, r: 108, t: 10, b: 20 };
         const all = relPerf.dates as string[];
         const n = Math.min(win, all.length - 1);
         const i0 = all.length - 1 - n;
@@ -289,18 +290,66 @@ const PeerPanel: React.FC<Props> = ({ ticker: tickerProp, data: analysisData, on
                   {v>=0?'+':''}{v.toFixed(0)}%
                 </text>
               ))}
-              {lines.map(l => {
-                const vs = l.v as any[]; const last = vs[vs.length-1];
-                return last==null?null:(
-                  <text key={l.t} x={W-PAD.r+6} y={sy(last)+3} fill={l.c} fontSize="10" fontFamily="monospace" fontWeight={l.me?700:400}>
-                    {l.t} {last>=0?'+':''}{last.toFixed(0)}%
-                  </text>
-                );
-              })}
+              {(() => {
+                // End labels collide when lines finish within a few percent of
+                // each other. Lay them out top-down with a minimum gap.
+                const ends = lines.map(l => { const vs = l.v as any[]; return { l, last: vs[vs.length-1] }; })
+                  .filter(e => e.last != null).sort((a,b) => (b.last as number) - (a.last as number));
+                let prevY = -Infinity;
+                return ends.map(e => {
+                  let y = sy(e.last as number);
+                  if (y - prevY < 12) y = prevY + 12;
+                  prevY = y;
+                  return (
+                    <text key={e.l.t} x={W-PAD.r+6} y={y+3} fill={e.l.c} fontSize="10" fontFamily="monospace" fontWeight={e.l.me?700:400}>
+                      {e.l.t} {(e.last as number)>=0?'+':''}{(e.last as number).toFixed(0)}%
+                    </text>
+                  );
+                });
+              })()}
+              {hoverI != null && hoverI < dates.length && (
+                <g>
+                  <line x1={sx(hoverI)} y1={PAD.t} x2={sx(hoverI)} y2={H-PAD.b} stroke="rgba(212,149,108,0.45)" strokeWidth={1} />
+                  {lines.map(l => { const v=(l.v as any[])[hoverI];
+                    return v==null?null:<circle key={l.t} cx={sx(hoverI)} cy={sy(v)} r={3} fill={l.c} />; })}
+                </g>
+              )}
+              <rect x={PAD.l} y={PAD.t} width={W-PAD.l-PAD.r} height={H-PAD.t-PAD.b} fill="transparent"
+                onMouseLeave={()=>setHoverI(null)}
+                onMouseMove={(e:any)=>{
+                  const r = e.currentTarget.getBoundingClientRect();
+                  const f = (e.clientX - r.left) / r.width;
+                  setHoverI(Math.max(0, Math.min(dates.length-1, Math.round(f*(dates.length-1)))));
+                }} />
               <text x={PAD.l} y={H-4} fill={C.textDim} fontSize="9" fontFamily="monospace">{dates[0]}</text>
               <text x={W-PAD.r} y={H-4} fill={C.textDim} fontSize="9" fontFamily="monospace" textAnchor="end">{dates[dates.length-1]}</text>
             </svg>
-            <div style={{ display:'flex', gap:5, flexWrap:'wrap', marginTop:8, marginBottom:6 }}>
+            <div style={{ minHeight:22, marginTop:2, display:'flex', gap:14, flexWrap:'wrap', alignItems:'baseline' }}>
+              {hoverI != null ? (<>
+                <span style={{ fontFamily:'monospace', fontSize:10.5, color:C.text }}>{dates[hoverI]}</span>
+                {lines.map(l => { const v=(l.v as any[])[hoverI]; const px=relPerf.px_ticker?.[l.t]?.[i0+hoverI];
+                  return v==null?null:(
+                    <span key={l.t} style={{ fontFamily:'monospace', fontSize:10.5, color:l.c }}>
+                      {l.t} {v>=0?'+':''}{v.toFixed(1)}%{px!=null?` ($${px})`:''}
+                    </span>); })}
+              </>) : (
+                <span style={{ fontFamily:'monospace', fontSize:10, color:C.textDim }}>Hover the chart for prices on any date</span>
+              )}
+            </div>
+            {relPerf.windows?.length > 0 && (
+              <div style={{ display:'grid', gridTemplateColumns:`repeat(${relPerf.windows.length}, 1fr)`, gap:6, marginTop:8 }}>
+                {relPerf.windows.map((w:any)=>(
+                  <div key={w.window} style={{ background:'rgba(212,149,108,0.04)', borderRadius:4, padding:'6px 9px' }}>
+                    <div style={{ fontFamily:'monospace', fontSize:9, color:C.textDim, letterSpacing:1 }}>{w.window} VS PEER MEDIAN</div>
+                    <div style={{ fontFamily:'monospace', fontSize:14, fontWeight:700, marginTop:1,
+                      color: w.relative_pts>=0 ? C.green : C.red }}>
+                      {w.relative_pts>=0?'+':''}{w.relative_pts}pts
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div style={{ display:'flex', gap:5, flexWrap:'wrap', marginTop:10, marginBottom:6 }}>
               {relPerf.roster.map((r:any)=>{
                 const on = picked.includes(r.ticker);
                 return (
@@ -313,7 +362,7 @@ const PeerPanel: React.FC<Props> = ({ ticker: tickerProp, data: analysisData, on
                 );
               })}
               <span style={{ fontFamily:'monospace', fontSize:9.5, color:C.textDim, alignSelf:'center', marginLeft:4 }}>
-                {picked.length}/5 · min 1
+                {picked.length} of 5 selected
               </span>
             </div>
             <div style={{ fontSize:10, color:C.textDim, marginBottom:22, fontFamily:'monospace' }}>
