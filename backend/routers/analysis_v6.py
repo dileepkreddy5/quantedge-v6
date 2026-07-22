@@ -288,6 +288,147 @@ class QuantEdgeAnalyzerV6:
             except Exception as _e:
                 logger.info(f"volatility history skipped: {_e}")
 
+            # ── Flow analysis: is supply being absorbed or is demand building? ──
+            # Everything here is derived from daily bars. True buy/sell volume is NOT
+            # derivable — every trade has a buyer and a seller — so we never claim it.
+            try:
+                import numpy as _np
+                _px = price_data["close"].dropna()
+                _vol = price_data["volume"].dropna() if "volume" in price_data else None
+                if _vol is not None and len(_px) >= 260 and len(_vol) >= 260:
+                    _px, _vol = _px.align(_vol, join="inner")
+                    _ret = _px.pct_change()
+                    _dv = _px * _vol                      # dollar volume
+                    _flow = {}
+
+                    # Volume percentile vs its own history
+                    _v21 = _vol.rolling(21).mean().dropna()
+                    _vnow = float(_v21.iloc[-1])
+                    _flow["volume_21d_avg"] = round(_vnow, 0)
+                    _flow["volume_percentile"] = round(float((_v21.values < _vnow).mean() * 100), 1)
+                    _v252 = float(_vol.iloc[-252:].mean())
+                    _flow["volume_vs_1y_avg_pct"] = round(((_vnow / _v252) - 1) * 100, 1) if _v252 > 0 else None
+
+                    # Up-day vs down-day volume share (accumulation proxy)
+                    for _w in (21, 63, 252):
+                        _r = _ret.iloc[-_w:]; _v = _vol.iloc[-_w:]
+                        _up = float(_v[_r > 0].sum()); _dn = float(_v[_r < 0].sum())
+                        _tot = _up + _dn
+                        _flow[f"up_volume_share_{_w}d"] = round((_up / _tot) * 100, 1) if _tot > 0 else None
+
+                    # Effort vs result: dollar volume required per 1% of price movement.
+                    # Falling ratio = moves coming easier. Rising = absorption/resistance.
+                    def _effort(w):
+                        _r = _ret.iloc[-w:].abs(); _d = _dv.iloc[-w:]
+                        _m = _r > 0.0005
+                        return float(_d[_m].sum() / (_r[_m].sum() * 100)) if _m.sum() > 5 else None
+                    _e_now, _e_prev = _effort(21), None
+                    _r_p = _ret.iloc[-84:-21].abs(); _d_p = _dv.iloc[-84:-21]
+                    _m_p = _r_p > 0.0005
+                    if _m_p.sum() > 5:
+                        _e_prev = float(_d_p[_m_p].sum() / (_r_p[_m_p].sum() * 100))
+                    _flow["effort_per_pct_now"] = round(_e_now, 0) if _e_now else None
+                    _flow["effort_per_pct_prior"] = round(_e_prev, 0) if _e_prev else None
+                    if _e_now and _e_prev:
+                        _flow["effort_change_pct"] = round(((_e_now / _e_prev) - 1) * 100, 1)
+
+                    # On-Balance Volume slope, normalised
+                    _obv = (_np.sign(_ret.fillna(0)) * _vol).cumsum()
+                    for _w in (21, 63):
+                        _seg = _obv.iloc[-_w:]
+                        _sl = float(_np.polyfit(range(len(_seg)), _seg.values, 1)[0])
+                        _flow[f"obv_slope_{_w}d"] = round(_sl / float(_vol.iloc[-_w:].mean()), 3)
+
+                    # Volume-weighted average price over 1y = the supply map
+                    _v1y, _p1y = _vol.iloc[-252:], _px.iloc[-252:]
+                    _vwap = float((_p1y * _v1y).sum() / _v1y.sum())
+                    _cur = float(_px.iloc[-1])
+                    _flow["vwap_1y"] = round(_vwap, 2)
+                    _flow["price_vs_vwap_pct"] = round(((_cur / _vwap) - 1) * 100, 1)
+                    _flow["shares_in_profit_pct"] = round(float((_p1y < _cur).mul(_v1y).sum() / _v1y.sum() * 100), 1)
+
+                    # Turnover: share of float trading daily, and its trend
+                    _so = (fundamentals or {}).get("shares_outstanding")
+                    if _so and _so > 0:
+                        _flow["turnover_daily_pct"] = round((_vnow / float(_so)) * 100, 3)
+
+                    # Phase: OBV direction vs price direction over 63d
+                    _pch = float((_px.iloc[-1] / _px.iloc[-63] - 1) * 100)
+                    _osl = _flow.get("obv_slope_63d", 0)
+                    if _osl > 0.15 and abs(_pch) < 5:   _ph = ("ACCUMULATION", "Volume is building while price stays flat — supply is being absorbed quietly.")
+                    elif _osl > 0.15 and _pch >= 5:     _ph = ("MARKUP", "Price and volume rising together — the move is confirmed by participation.")
+                    elif _osl < -0.15 and abs(_pch) < 5:_ph = ("DISTRIBUTION", "Price holding while volume flow turns negative — supply is being fed into strength.")
+                    elif _osl < -0.15 and _pch <= -5:   _ph = ("MARKDOWN", "Price and volume flow both falling — active selling pressure.")
+                    else:                                _ph = ("NEUTRAL", "No clear accumulation or distribution pattern over the last quarter.")
+                    _flow["phase"], _flow["phase_note"] = _ph
+                    _flow["price_change_63d_pct"] = round(_pch, 1)
+                    # Demand persistence ladder — is participation strengthening?
+                    for _w in (5, 15, 30, 90):
+                        _r = _ret.iloc[-_w:]; _v = _vol.iloc[-_w:]
+                        _u = float(_v[_r > 0].sum()); _dn2 = float(_v[_r < 0].sum())
+                        _t = _u + _dn2
+                        _flow[f"up_volume_share_{_w}d"] = round((_u / _t) * 100, 1) if _t > 0 else None
+
+                    # Volume percentile over full available history (5y)
+                    _vser = _vol.rolling(21).mean().dropna()
+                    _flow["volume_percentile_5y"] = round(float((_vser.values < _vnow).mean() * 100), 1)
+                    _flow["relative_volume"] = round(_vnow / _v252, 2) if _v252 > 0 else None
+
+                    # Price-volume agreement over 21d
+                    _p21 = float(_px.iloc[-1] / _px.iloc[-21] - 1)
+                    _vtrend = (_vnow / float(_vol.iloc[-63:-21].mean()) - 1) if len(_vol) > 63 else 0
+                    if _p21 > 0.01 and _vtrend > 0.05:   _pv = ("ACCUMULATION", "Price advancing on expanding volume — the move has participation behind it.")
+                    elif _p21 > 0.01 and _vtrend < -0.05:_pv = ("WEAK RALLY", "Price advancing on shrinking volume — few participants are following the move.")
+                    elif _p21 < -0.01 and _vtrend > 0.05:_pv = ("DISTRIBUTION", "Price declining on expanding volume — active selling into the market.")
+                    elif _p21 < -0.01 and _vtrend < -0.05:_pv = ("SELLING EXHAUSTION", "Price declining on shrinking volume — sellers appear to be running out.")
+                    else:                                 _pv = ("BALANCED", "No clear divergence between price direction and volume trend.")
+                    _flow["pv_agreement"], _flow["pv_note"] = _pv
+                    _flow["volume_trend_pct"] = round(_vtrend * 100, 1)
+
+                    # Exhaustion: falling volume against a directional move
+                    _exh = None
+                    if _p21 < -0.02 and _vtrend < -0.10:
+                        _exh = {"type": "SUPPLY", "score": min(100, round(abs(_vtrend) * 200 + abs(_p21) * 300)),
+                                "note": "Price falling while volume dries up — selling pressure is fading, which often precedes stabilisation."}
+                    elif _p21 > 0.02 and _vtrend < -0.10:
+                        _exh = {"type": "DEMAND", "score": min(100, round(abs(_vtrend) * 200 + _p21 * 300)),
+                                "note": "Price rising while volume dries up — buying interest is thinning, which often precedes a stall."}
+                    _flow["exhaustion"] = _exh
+
+                    # Market Participation Score — conviction behind the move, not buyer identity
+                    _c = []
+                    _rv = _flow.get("relative_volume") or 1
+                    _c.append(("Relative volume", f"{_rv:.2f}x", min(100, _rv * 50)))
+                    _uv = _flow.get("up_volume_share_21d") or 50
+                    _c.append(("Up-volume share (21d)", f"{_uv:.0f}%", max(0, min(100, (_uv - 35) * 3.3))))
+                    _vp = _flow.get("volume_percentile_5y") or 50
+                    _c.append(("Volume percentile (5y)", f"{_vp:.0f}th", _vp))
+                    _pvs = {"ACCUMULATION": 90, "BALANCED": 50, "WEAK RALLY": 35, "SELLING EXHAUSTION": 45, "DISTRIBUTION": 15}[_pv[0]]
+                    _c.append(("Price-volume agreement", _pv[0].title(), _pvs))
+                    _os = _flow.get("obv_slope_21d") or 0
+                    _c.append(("Volume flow direction", f"{_os:+.2f}", max(0, min(100, 50 + _os * 60))))
+                    _pers = 0
+                    _lad = [_flow.get(f"up_volume_share_{w}d") for w in (252, 90, 30, 21, 5)]
+                    _lad = [x for x in _lad if x is not None]
+                    if len(_lad) >= 3:
+                        _pers = 100 if _lad[-1] > _lad[0] + 3 else 30 if _lad[-1] < _lad[0] - 3 else 60
+                        _c.append(("Participation trend", "strengthening" if _pers > 70 else "weakening" if _pers < 40 else "steady", _pers))
+                    _score = round(sum(x[2] for x in _c) / len(_c))
+                    _flow["participation"] = {
+                        "score": _score,
+                        "label": "Very high" if _score >= 80 else "High" if _score >= 65 else "Moderate" if _score >= 45 else "Low" if _score >= 30 else "Very low",
+                        "components": [{"name": n, "value": v, "score": round(s)} for n, v, s in _c],
+                        "note": "Measures how much conviction sits behind the current move. It does not identify who is buying — that requires trade-level data.",
+                    }
+
+                    _flow["disclaimer"] = ("Buy and sell volume cannot be separated from daily bars — every trade has both "
+                                           "a buyer and a seller. These are directional proxies based on where price closed, "
+                                           "not actual order flow. Institutional versus retail participation cannot be "
+                                           "determined without trade-size and venue data.")
+                    result["flow_analysis"] = _flow
+            except Exception as _e:
+                logger.info(f"flow analysis skipped: {_e}")
+
             # ── LAYER 2: FEATURES ─────────────────────────────
             try:
                 feature_matrix = self.feature_pipeline.build_feature_matrix(
