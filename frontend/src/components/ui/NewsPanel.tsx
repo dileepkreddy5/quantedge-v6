@@ -4,7 +4,7 @@ import { api } from '../../auth/authStore';
 interface Sig { id:string; label:string; weight:number; status:string; evidence:string; raw_value:number|null; score:number|null; }
 interface Cat { id:string; label:string; weight:number; score:number|null; n_signals:number; n_scored:number; signals:Sig[]; }
 interface BriefItem { headline:string; sentiment:string; publisher:string; date:string; url:string; }
-interface Headline { title:string; sentiment:string; reason:string; publisher:string; date:string; url:string; materiality?:number; materiality_why?:string[]; about_company?:boolean; }
+interface Headline { title:string; sentiment:string; reason:string; publisher:string; date:string; url:string; materiality?:number; materiality_why?:string[]; about_company?:boolean; kind?:string; event_kind?:string; source_weight?:number; }
 interface NewsData {
   ticker:string; available:boolean; score:number|null; news_rating:string; confidence:number;
   coverage:{scored:number;total:number}; article_count:number;
@@ -76,8 +76,8 @@ export default function NewsPanel({ ticker, data }:{ ticker:string; data?:any })
   })();
 
   const heads = (d.recent_headlines || []);
-  const leads = heads.slice(0, 3);
-  const rest  = heads.slice(3, 12);
+  const events = heads.filter(h => h.kind === 'EVENT' || h.kind === 'ANALYST');
+  const rest   = heads.filter(h => h.kind !== 'EVENT' && h.kind !== 'ANALYST').slice(0, 12);
 
   return (
     <div style={{padding:'8px 4px',color:'#e8ddd0'}}>
@@ -125,12 +125,19 @@ export default function NewsPanel({ ticker, data }:{ ticker:string; data?:any })
       </div>
 
       <div style={{background:'#241510',border:'1px solid rgba(212,149,108,0.12)',borderRadius:8,padding:'16px 20px',marginBottom:14}}>
-        <div style={{fontFamily:"'Fira Code',monospace",fontSize:9,color:'#daa520',letterSpacing:2,marginBottom:4}}>WHAT MATTERS MOST</div>
+        <div style={{fontFamily:"'Fira Code',monospace",fontSize:9,color:'#daa520',letterSpacing:2,marginBottom:4}}>REPORTED EVENTS</div>
         <div style={{fontFamily:"'Outfit',sans-serif",fontSize:10.5,color:'#7a6b5d',marginBottom:14}}>
-          Ranked by likely impact on the share price, not by recency. Passing mentions and listicles are filtered out.
+          Things that actually happened — results, deals, filings, analyst actions — separated from commentary about them.
+          Most financial coverage is opinion; this section is deliberately short, and empty when nothing has been reported.
         </div>
-        {leads.map((h,i)=>(
-          <div key={i} style={{paddingBottom:14,marginBottom:14,borderBottom:i<leads.length-1?'1px solid rgba(212,149,108,0.08)':'none'}}>
+        {events.length === 0 && (
+          <div style={{fontFamily:"'Outfit',sans-serif",fontSize:12,color:'#8a7560',padding:'14px 0',lineHeight:1.6}}>
+            No reported events in recent coverage. Everything currently written about this company is commentary,
+            comparison or speculation — listed below.
+          </div>
+        )}
+        {events.map((h,i)=>(
+          <div key={i} style={{paddingBottom:14,marginBottom:14,borderBottom:i<events.length-1?'1px solid rgba(212,149,108,0.08)':'none'}}>
             <div style={{display:'flex',gap:12,alignItems:'flex-start'}}>
               <div style={{minWidth:38,textAlign:'center'}}>
                 <div style={{fontFamily:"'Fira Code',monospace",fontSize:16,fontWeight:800,color:heat(h.materiality??50)}}>{h.materiality??'—'}</div>
@@ -142,6 +149,12 @@ export default function NewsPanel({ ticker, data }:{ ticker:string; data?:any })
                   : <div style={{fontFamily:"'Outfit',sans-serif",fontSize:16,fontWeight:600,color:'#e8ddd0',lineHeight:1.35}}>{h.title}</div>}
                 <div style={{fontFamily:"'Outfit',sans-serif",fontSize:11.5,color:'#9d8b7a',lineHeight:1.5,marginTop:5}}>{h.reason}</div>
                 <div style={{display:'flex',gap:10,alignItems:'center',marginTop:7,flexWrap:'wrap'}}>
+                  <span style={{fontFamily:"'Fira Code',monospace",fontSize:8,letterSpacing:1,padding:'2px 6px',borderRadius:3,
+                    color: h.kind==='EVENT' ? '#22c55e' : '#daa520',
+                    border: `1px solid ${h.kind==='EVENT' ? '#22c55e' : '#daa520'}44`,
+                    background: `${h.kind==='EVENT' ? '#22c55e' : '#daa520'}12`}}>
+                    {h.event_kind || h.kind}
+                  </span>
                   <span style={{fontFamily:"'Fira Code',monospace",fontSize:9,color:sentDot(h.sentiment),textTransform:'uppercase',letterSpacing:1}}>{h.sentiment}</span>
                   <span style={{fontFamily:"'Outfit',sans-serif",fontSize:9.5,color:'#6b5d52'}}>{h.publisher} · {h.date}</span>
                   {h.materiality_why?.length ? (
@@ -153,7 +166,10 @@ export default function NewsPanel({ ticker, data }:{ ticker:string; data?:any })
           </div>
         ))}
         {rest.length > 0 && (
-          <div style={{marginTop:4}}>
+          <div style={{marginTop:16,paddingTop:14,borderTop:'1px solid rgba(212,149,108,0.1)'}}>
+            <div style={{fontFamily:"'Fira Code',monospace",fontSize:9,color:'#8a7560',letterSpacing:2,marginBottom:8}}>
+              COMMENTARY &amp; ANALYSIS · {rest.length}
+            </div>
             {rest.map((h,i)=>(
               <div key={i} style={{display:'grid',gridTemplateColumns:'30px 1fr auto',gap:10,alignItems:'center',padding:'6px 0',
                 borderTop:'1px solid rgba(212,149,108,0.06)'}}>
