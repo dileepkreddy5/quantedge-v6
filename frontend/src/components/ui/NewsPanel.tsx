@@ -9,7 +9,7 @@ interface NewsData {
   ticker:string; available:boolean; score:number|null; news_rating:string; confidence:number;
   coverage:{scored:number;total:number}; article_count:number;
   sentiment_dist:{positive:number;neutral:number;negative:number};
-  brief:BriefItem[]; recent_headlines:Headline[]; tree:{categories:Cat[]}; key_metrics:Record<string,number|null>; reason?:string;
+  brief:BriefItem[]; recent_headlines:Headline[]; key_facts?:{fact:string;group:string;source:string;date:string;url:string;headline:string;weight:number}[]; tree:{categories:Cat[]}; key_metrics:Record<string,number|null>; reason?:string;
 }
 const heat=(s:number|null)=>s==null?'rgba(212,149,108,0.12)':s>=75?'#0f6e56':s>=58?'#1d9e75':s>=42?'#8a7519':s>=25?'#a35a1d':'#7a2320';
 const ratingColor=(r:string)=>r.includes('Very Positive')?'#0f9d6e':r.includes('Positive')?'#1d9e75':r.includes('Mixed')?'#c9a227':r.includes('Negative')?'#c0705a':'#7a2320';
@@ -123,6 +123,49 @@ export default function NewsPanel({ ticker, data }:{ ticker:string; data?:any })
           </div>
         ) : null}
       </div>
+
+      <div style={{background:'#241510',border:'1px solid rgba(212,149,108,0.12)',borderRadius:8,padding:'16px 20px',marginBottom:14}}>
+      {(d.key_facts||[]).length > 0 && (() => {
+        const GROUPS: Record<string,{label:string; note:string}> = {
+          FINANCIAL:   {label:'FINANCIALS',  note:'margins, earnings, valuation'},
+          OPERATIONAL: {label:'OPERATIONS',  note:'volumes, capacity, customers'},
+          CAPITAL:     {label:'CAPITAL',     note:'buybacks, dividends, debt'},
+          STRATEGIC:   {label:'STRATEGIC',   note:'deals, launches, partnerships'},
+        };
+        const by: Record<string, any[]> = {};
+        (d.key_facts||[]).forEach(k => { (by[k.group] = by[k.group] || []).push(k); });
+        const order = ['FINANCIAL','OPERATIONAL','CAPITAL','STRATEGIC'].filter(g => by[g]?.length);
+        return (
+          <div style={{background:'#241510',border:'1px solid rgba(212,149,108,0.12)',borderRadius:8,padding:'16px 20px',marginBottom:14}}>
+            <div style={{fontFamily:"'Fira Code',monospace",fontSize:9,color:'#daa520',letterSpacing:2,marginBottom:4}}>THE NUMBERS THAT MATTER</div>
+            <div style={{fontFamily:"'Outfit',sans-serif",fontSize:10.5,color:'#7a6b5d',marginBottom:16}}>
+              Specific figures and stated developments pulled from recent coverage, grouped by what they describe.
+              Each links to the article it came from.
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(2, 1fr)',gap:'18px 24px'}}>
+              {order.map(g => (
+                <div key={g}>
+                  <div style={{fontFamily:"'Fira Code',monospace",fontSize:8.5,color:'#daa520',letterSpacing:2,marginBottom:2}}>{GROUPS[g].label}</div>
+                  <div style={{fontFamily:"'Outfit',sans-serif",fontSize:8.5,color:'#6b5d52',marginBottom:9}}>{GROUPS[g].note}</div>
+                  {by[g].slice(0,4).map((k,i) => (
+                    <div key={i} style={{marginBottom:11,paddingLeft:10,borderLeft:'2px solid rgba(212,149,108,0.18)'}}>
+                      <div style={{fontFamily:"'Outfit',sans-serif",fontSize:11.5,color:'#d4c4b0',lineHeight:1.5}}>{k.fact}</div>
+                      <div style={{marginTop:3}}>
+                        {k.url
+                          ? <a href={k.url} target="_blank" rel="noopener noreferrer"
+                              style={{fontFamily:"'Outfit',sans-serif",fontSize:9,color:'#8a7560',textDecoration:'none'}}>
+                              {k.source} · {k.date} ↗
+                            </a>
+                          : <span style={{fontFamily:"'Outfit',sans-serif",fontSize:9,color:'#6b5d52'}}>{k.source} · {k.date}</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
       <div style={{background:'#241510',border:'1px solid rgba(212,149,108,0.12)',borderRadius:8,padding:'16px 20px',marginBottom:14}}>
         <div style={{fontFamily:"'Fira Code',monospace",fontSize:9,color:'#daa520',letterSpacing:2,marginBottom:4}}>REPORTED EVENTS</div>
