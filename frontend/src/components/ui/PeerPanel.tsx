@@ -71,8 +71,20 @@ const PeerPanel: React.FC<Props> = ({ ticker: tickerProp, data: analysisData, on
   const minV = Math.min(...vals), maxV = Math.max(...vals), range = (maxV - minV) || 1;
   // The searched ticker is the reference point, not a competitor to itself.
   // Its standing against this group is already stated in the header percentiles.
+  // Ranking rivals by recent momentum surfaces whoever moved most last quarter,
+  // not who this company actually competes with. Size proximity within the same
+  // industry is the better ordering: the ten nearest names by market cap are the
+  // ones an investor would weigh against each other.
+  const meCap = (pd.peers.find((p: any) => p.is_me)?.market_cap) || null;
   const sortedPeers = pd.peers.filter((p: any) => !p.is_me)
-    .sort((a,b) => ((valueOf(b) ?? -1e9) - (valueOf(a) ?? -1e9)));
+    .sort((a: any, b: any) => {
+      if (meCap) {
+        const da = a.market_cap ? Math.abs(Math.log((a.market_cap || 1) / meCap)) : 99;
+        const db = b.market_cap ? Math.abs(Math.log((b.market_cap || 1) / meCap)) : 99;
+        return da - db;
+      }
+      return (b.market_cap || 0) - (a.market_cap || 0);
+    });
 
   return (
     <div style={{ color: C.text }}>
@@ -150,10 +162,10 @@ const PeerPanel: React.FC<Props> = ({ ticker: tickerProp, data: analysisData, on
             {pe && pe.value != null && pe.peer_median != null && Number(pe.peer_median) > 0 && (
               <>The market prices it at <b style={{color: Number(pe.value) > Number(pe.peer_median) * 1.3 ? C.red : C.textDim}}>
                 {(Number(pe.value) / Number(pe.peer_median)).toFixed(1)}×</b> the peer P/E
-                {Number(pe.value) > Number(pe.peer_median) * 1.3
+                {Number(pe.value) > Number(pe.peer_median) * 1.25
                   ? ' — the premium is the trade-off for the strengths above.'
-                  : Number(pe.value) < Number(pe.peer_median) * 0.7
-                    ? ' — cheaper than the group, which is worth understanding before assuming it is a bargain.'
+                  : Number(pe.value) < Number(pe.peer_median) * 0.85
+                    ? ' — a discount to the group, worth understanding before assuming it is a bargain.'
                     : ', broadly in line with the group.'} </>
             )}
             {mom && mom.percentile != null && (
@@ -257,7 +269,7 @@ const PeerPanel: React.FC<Props> = ({ ticker: tickerProp, data: analysisData, on
       })()}
 
       {/* Peer table */}
-      <div style={{ color:C.gold, fontWeight:700, fontSize:13, marginBottom:8 }}>PEERS — RANKED BY {factorLabels[factorKey].toUpperCase()}</div>
+      <div style={{ color:C.gold, fontWeight:700, fontSize:13, marginBottom:8 }}>CLOSEST RIVALS BY SIZE</div>
       <div style={{ maxHeight:320, overflowY:'auto' }}>
         <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
           <thead>
