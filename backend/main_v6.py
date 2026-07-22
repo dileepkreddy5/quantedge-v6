@@ -285,7 +285,11 @@ async def lifespan(app: FastAPI):
                 await bs.ensure_tables()
                 n = await bs.refresh_universe()
                 r = await bs.enrich_universe(limit=800)
-                logger.info(f"universe refreshed: {n} tickers, enriched {r}")
+                # Polygon lacks SIC for part of the universe; EDGAR fills the rest.
+                # SEC throttles aggressively, so this runs weekly and picks up
+                # whatever the previous pass could not.
+                e = await bs.enrich_from_edgar()
+                logger.info(f"universe refreshed: {n} tickers, polygon {r}, edgar {e}")
             except Exception as e:
                 logger.error(f"universe refresh failed: {e}")
 

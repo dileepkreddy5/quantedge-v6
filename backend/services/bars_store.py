@@ -140,6 +140,59 @@ class BarsStore:
                 logger.info(f"enriched {min(i+250, len(tickers))}/{len(tickers)} · {miss} without sic")
         return {"processed": len(tickers), "no_sic": miss}
 
+    async def enrich_from_edgar(self) -> Dict:
+        """Polygon has no SIC for roughly a fifth of the universe, XOM included.
+        EDGAR's bulk company file is already on disk for the Multibagger scan and
+        carries SIC for every filer, so it fills the gap without another API."""
+        # SIC comes from the SEC submissions endpoint rather than companyfacts.zip,
+        # which carries financial facts but not classification.
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT ticker, cik FROM universe WHERE sic_code IS NULL AND cik IS NOT NULL AND active")
+        if not rows:
+            return {"pending": 0}
+
+        # submissions.zip carries SIC; companyfacts does not. Fall back to the
+        # per-company submissions endpoint, which is free and unthrottled at this rate.
+        import httpx as _hx
+        got, miss = [], 0
+        headers = {"User-Agent": "QuantEdge research contact@quantedge.local"}
+        async with _hx.AsyncClient(timeout=20, headers=headers) as client:
+            # SEC permits ~10 req/s. A semaphore alone does not bound the rate, so
+            # concurrency is kept low and each worker sleeps a full interval.
+            sem = asyncio.Semaphore(3)
+
+            async def one(tk: str, cik: str):
+                nonlocal miss
+                async with sem:
+                    try:
+                        c10 = str(cik).zfill(10)
+                        r = await client.get(f"https://data.sec.gov/submissions/CIK{c10}.json")
+                        if r.status_code == 429:
+                            await asyncio.sleep(3)
+                            r = await client.get(f"https://data.sec.gov/submissions/CIK{c10}.json")
+                        if r.status_code != 200:
+                            miss += 1; return
+                        j = r.json() or {}
+                        sic, desc = j.get("sic"), j.get("sicDescription")
+                        if not sic:
+                            miss += 1; return
+                        got.append((desc or "", str(sic), tk))
+                    except Exception:
+                        miss += 1
+                    await asyncio.sleep(0.35)   # 3 workers x 0.35s ≈ 8.5 req/s
+
+            batch = [(r["ticker"], r["cik"]) for r in rows]
+            for i in range(0, len(batch), 150):
+                await asyncio.gather(*[one(t, c) for t, c in batch[i:i + 150]])
+                if got:
+                    async with self.pool.acquire() as conn:
+                        await conn.executemany(
+                            "UPDATE universe SET sic=$1, sic_code=$2, updated_at=NOW() WHERE ticker=$3", got)
+                    got.clear()
+                logger.info(f"edgar sic {min(i+150, len(batch))}/{len(batch)} · {miss} missing")
+        return {"processed": len(batch), "missing": miss}
+
     # ── Bars ────────────────────────────────────────────────────
     async def upsert_bars(self, ticker: str, bars: List[Dict]) -> int:
         if not bars:
