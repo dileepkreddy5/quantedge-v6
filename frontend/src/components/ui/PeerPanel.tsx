@@ -372,59 +372,6 @@ const PeerPanel: React.FC<Props> = ({ ticker: tickerProp, data: analysisData, on
         );
       })()}
 
-      {/* Growth ranking against the ten largest peers */}
-      {pd.peers && pd.peers.length > 2 && (() => {
-        const rows = pd.peers
-          .filter(p => p.revenue_growth != null && p.market_cap != null)
-          .sort((a, b) => (b.market_cap || 0) - (a.market_cap || 0))
-          .slice(0, 10)
-          .sort((a, b) => (b.revenue_growth || 0) - (a.revenue_growth || 0));
-        if (rows.length < 3) return null;
-        const meIn = rows.some(r => r.is_me);
-        const meRow = pd.peers.find(p => p.is_me && p.revenue_growth != null);
-        const all = meIn || !meRow ? rows : [...rows, meRow].sort((a,b)=>(b.revenue_growth||0)-(a.revenue_growth||0));
-        const vals = all.map(r => r.revenue_growth as number);
-        const lo = Math.min(0, ...vals), hi = Math.max(...vals);
-        const span = (hi - lo) || 1;
-        const zero = ((0 - lo) / span) * 100;
-        const meRank = all.findIndex(r => r.is_me) + 1;
-
-        return (
-          <>
-            <div style={{ color:C.gold, fontWeight:700, fontSize:13, marginBottom:4, marginTop:4 }}>GROWTH VS LARGEST RIVALS</div>
-            <div style={{ fontSize:11, color:C.textDim, marginBottom:10, fontStyle:'italic' }}>
-              Revenue growth for the ten biggest companies in the group, ranked.
-              {meRank > 0 ? ` ${ticker} places ${meRank} of ${all.length}.` : ''}
-            </div>
-            <div style={{ marginBottom:24 }}>
-              {all.map(r => {
-                const v = r.revenue_growth as number;
-                const w = (Math.abs(v) / span) * 100;
-                const left = v >= 0 ? zero : zero - w;
-                return (
-                  <div key={r.ticker} title={`${r.ticker} — ${r.name}\ngrowth ${(v*100).toFixed(1)}%  ·  cap ${fmtCap(r.market_cap)}`}
-                    style={{ display:'grid', gridTemplateColumns:'58px 1fr 72px 62px', gap:10, alignItems:'center', marginBottom:4, cursor:'default' }}>
-                    <span style={{ fontFamily:'monospace', fontSize:11, fontWeight: r.is_me?700:400, color: r.is_me?C.gold:C.text }}>{r.ticker}</span>
-                    <div style={{ position:'relative', height:16, background:'rgba(212,149,108,0.05)', borderRadius:2 }}>
-                      <div style={{ position:'absolute', left:`${zero}%`, top:0, bottom:0, width:1, background:C.border }} />
-                      <div style={{ position:'absolute', left:`${left}%`, width:`${w}%`, top:3, bottom:3, borderRadius:2,
-                        background: r.is_me ? C.gold : v>=0 ? 'rgba(34,197,94,0.45)' : 'rgba(239,68,68,0.45)' }} />
-                    </div>
-                    <span style={{ fontFamily:'monospace', fontSize:11, textAlign:'right', color: r.is_me?C.gold:(v>=0?C.green:C.red) }}>
-                      {v>=0?'+':''}{(v*100).toFixed(1)}%
-                    </span>
-                    <span style={{ fontFamily:'monospace', fontSize:10, textAlign:'right', color:C.textDim }}>{fmtCap(r.market_cap)}</span>
-                  </div>
-                );
-              })}
-              <div style={{ fontSize:10, color:C.textDim, marginTop:8, fontFamily:'monospace' }}>
-                Ten largest of {pd.peers.length} peers by market cap · hover a row for detail
-              </div>
-            </div>
-          </>
-        );
-      })()}
-
       {/* Fundamental percentile bars (quality / profitability / growth / valuation vs peers) */}
       {pd.fund_factors && pd.fund_factors.length > 0 && (
         <>

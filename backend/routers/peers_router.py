@@ -163,7 +163,6 @@ async def get_peer_relative(
         "roster": roster,
         "n_peers": len(peer_cols),
         "n_sessions": len(series),
-        "series": series,
         "windows": windows,
         "note": ("Cumulative return rebased to zero at the window start. The band "
                  "spans the 25th to 75th percentile of the peer group. With a small "
@@ -200,8 +199,11 @@ async def get_peers(
         me_val = me_factors.get(key)
         if me_val is None:
             continue
+        # Exclude the target from its own population — `peers` includes it.
         pop = []
         for p in peers:
+            if (p["ticker"] or "").upper() == ticker:
+                continue
             pf = json.loads(p["factors"]) if isinstance(p["factors"], str) else (p["factors"] or {})
             v = pf.get(key)
             if v is not None:
@@ -225,8 +227,16 @@ async def get_peers(
         me_val = me_factors.get(key)
         if me_val is None:
             continue
+        # `peers` already contains the target — that is what is_me marks — so the
+        # target must be excluded from its own comparison population, and the
+        # denominator must not add it back. Previously pop included the target
+        # AND of was len(pop)+1, which reported "1 of 9" for a group of eight
+        # and biased every percentile toward the middle by counting the target
+        # as one of the names it was being ranked against.
         pop = []
         for p in peers:
+            if (p["ticker"] or "").upper() == ticker:
+                continue
             pf = json.loads(p["factors"]) if isinstance(p["factors"], str) else (p["factors"] or {})
             v = pf.get(key)
             if v is not None:
@@ -236,7 +246,7 @@ async def get_peers(
         pct = _percentile(float(me_val), pop)
         if not higher_better:
             pct = round(100 - pct, 1)
-        # explicit rank: #N of M (1 = best)
+        # explicit rank: #N of M (1 = best), M = peers with data + the target
         if higher_better:
             better = sum(1 for v in pop if v > float(me_val))
         else:
