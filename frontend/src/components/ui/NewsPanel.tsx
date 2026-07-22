@@ -124,7 +124,6 @@ export default function NewsPanel({ ticker, data }:{ ticker:string; data?:any })
         ) : null}
       </div>
 
-      <div style={{background:'#241510',border:'1px solid rgba(212,149,108,0.12)',borderRadius:8,padding:'16px 20px',marginBottom:14}}>
       {(d.key_facts||[]).length > 0 && (() => {
         const GROUPS: Record<string,{label:string; note:string}> = {
           FINANCIAL:   {label:'FINANCIALS',  note:'margins, earnings, valuation'},
