@@ -45,7 +45,7 @@ const PeerPanel: React.FC<Props> = ({ ticker: tickerProp, data: analysisData, on
       } catch { /* score is optional enhancement */ }
       try {
         const rr = await api.get(`/api/v6/relationships/${ticker}`);
-        if (rr.data?.data?.available) setRel(rr.data.data);
+        if (rr.data?.data) setRel(rr.data.data);
       } catch { /* filing coverage is uneven */ }
     } catch { setErr(true); }
     finally { setLoading(false); }
@@ -125,7 +125,17 @@ const PeerPanel: React.FC<Props> = ({ ticker: tickerProp, data: analysisData, on
         const pe = get('fund_pe');
         const mom = (pd.factors || []).find((x: any) => x.key === 'mom_3m');
         if (!ff.length) return null;
-        const phrase = (x: any) => `${x.label.replace(' (cheap)','')} ${x.value} against a peer median of ${x.peer_median}`;
+        // Margins and returns are stored as fractions; multiples are not. Printing
+        // 0.29 where the bar below says 29.0% makes the sentence read as a different
+        // number than the chart.
+        const isRatio = (k: string) => /_(pe|ps|pb|ev)$/.test(k) || /P\/(E|S|B)/.test(k);
+        const fmt = (k: string, v: any) => {
+          if (v == null) return '—';
+          const n = Number(v);
+          return isRatio(k) ? `${n.toFixed(1)}x` : `${(n * 100).toFixed(1)}%`;
+        };
+        const phrase = (x: any) =>
+          `${x.label.replace(' (cheap)','')} ${fmt(x.key, x.value)} against a peer median of ${fmt(x.key, x.peer_median)}`;
         return (
           <div style={{ background:'#241510', border:`1px solid ${C.border}`, borderRadius:8,
             padding:'14px 18px', marginBottom:22, lineHeight:1.65, fontSize:12.5, color:C.text }}>
@@ -197,7 +207,18 @@ const PeerPanel: React.FC<Props> = ({ ticker: tickerProp, data: analysisData, on
           { key:'named_as_rival_by',label:'NAME IT AS A RIVAL',
             note:'Companies that list this one as competition.' },
         ].filter(g => (rel[g.key] || []).length > 0);
-        if (!groups.length) return null;
+        if (!groups.length) {
+          return (
+            <div style={{ marginBottom:26 }}>
+              <div style={{ color:C.gold, fontWeight:700, fontSize:13, marginBottom:4 }}>DISCLOSED RELATIONSHIPS</div>
+              <div style={{ fontSize:11, color:C.textDim, lineHeight:1.55 }}>
+                Nothing disclosed for {ticker} yet. Relationships are read from 10-K filings — suppliers must report
+                customer concentration, so they name their buyers, while buyers rarely name anyone. Coverage grows as
+                more filings are processed.
+              </div>
+            </div>
+          );
+        }
         return (
           <div style={{ marginBottom:26 }}>
             <div style={{ color:C.gold, fontWeight:700, fontSize:13, marginBottom:4 }}>DISCLOSED RELATIONSHIPS</div>
