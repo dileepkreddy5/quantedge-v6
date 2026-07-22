@@ -598,6 +598,85 @@ export function VolatilityPanel({ data }: { data: any }) {
         })()}
       </Card>
 
+      {data.volatility_intel && (() => {
+        const vi = data.volatility_intel;
+        const em = vi.expected_move, st = vi.stability, tl = vi.percentile_timeline, rh = vi.regime_history;
+        const stCol = st.score >= 70 ? '#22c55e' : st.score >= 45 ? '#f59e0b' : '#ef4444';
+        const rgCol = { LOW:'#22c55e', NORMAL:'#8a7560', HIGH:'#ef4444' };
+        const tlOrder = ['30d','90d','180d','1y','full'];
+        const tlRows = tlOrder.filter(k => tl[k]).map(k => ({ k, ...tl[k] }));
+        const totalDays = (rh.segments||[]).reduce((a:number,s:any)=>a+s.days,0) || 1;
+        return (
+          <Card style={{ gridColumn:'span 3' }}>
+            <SectionTitle>WHAT THIS VOLATILITY MEANS IN PRACTICE</SectionTitle>
+
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:10, marginBottom:6 }}>
+              {[{l:'TYPICAL DAY',v:em.daily},{l:'TYPICAL WEEK',v:em.weekly},{l:'TYPICAL MONTH',v:em.monthly},{l:'TYPICAL QUARTER',v:em.quarterly}].map(x => (
+                <div key={x.l} style={{ background:'#1a0f0a', borderRadius:8, padding:'12px 10px', textAlign:'center' }}>
+                  <div style={{ fontFamily:"'Fira Code',monospace", fontSize:8, color:'#8a7560', letterSpacing:2 }}>{x.l}</div>
+                  <div style={{ fontFamily:"'Fira Code',monospace", fontSize:20, fontWeight:800, color:'#d4c4b0', marginTop:5 }}>±{x.v}%</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:10, color:'#7a6b5d', marginBottom:18, lineHeight:1.5 }}>{em.note}</div>
+
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:18, marginBottom:18 }}>
+              <div>
+                <div style={{ fontFamily:"'Fira Code',monospace", fontSize:9, color:'#daa520', letterSpacing:2, marginBottom:8 }}>IS THE RISK LEVEL ITSELF STEADY?</div>
+                <div style={{ display:'flex', gap:14, alignItems:'center' }}>
+                  <div style={{ textAlign:'center', minWidth:70 }}>
+                    <div style={{ fontFamily:"'Fira Code',monospace", fontSize:30, fontWeight:800, color:stCol, lineHeight:1 }}>{st.score}</div>
+                    <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:10.5, color:stCol, marginTop:3 }}>{st.label}</div>
+                  </div>
+                  <div style={{ flex:1, fontFamily:"'Outfit',sans-serif", fontSize:10.5, color:'#9d8b7a', lineHeight:1.5 }}>
+                    Volatility of volatility {st.vol_of_vol_pct}% · trending {st.trend_pct_per_quarter > 0 ? 'up' : 'down'}{' '}
+                    {Math.abs(st.trend_pct_per_quarter)}% per quarter. {st.note}
+                  </div>
+                </div>
+              </div>
+              <div>
+                <div style={{ fontFamily:"'Fira Code',monospace", fontSize:9, color:'#daa520', letterSpacing:2, marginBottom:8 }}>GRADUAL DRIFT OR RECENT SPIKE?</div>
+                {tlRows.map(r => (
+                  <div key={r.k} style={{ display:'grid', gridTemplateColumns:'50px 1fr 70px', gap:8, alignItems:'center', marginBottom:4 }}>
+                    <span style={{ fontFamily:"'Fira Code',monospace", fontSize:9.5, color:'#8a7560' }}>{r.k === 'full' ? 'all' : r.k}</span>
+                    <div style={{ height:10, background:'#1a0f0a', borderRadius:2, overflow:'hidden' }}>
+                      <div style={{ height:'100%', width:`${r.percentile}%`,
+                        background: r.percentile >= 80 ? '#ef4444' : r.percentile >= 60 ? '#f59e0b' : '#22c55e', opacity:0.5 }} />
+                    </div>
+                    <span style={{ fontFamily:"'Fira Code',monospace", fontSize:9.5, color:'#d4c4b0', textAlign:'right' }}>{r.percentile}th</span>
+                  </div>
+                ))}
+                <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:9.5, color:'#7a6b5d', marginTop:6, lineHeight:1.4 }}>
+                  Percentile of current volatility within each lookback. Rising left-to-right means elevation is recent;
+                  uniformly high means it has been sustained.
+                </div>
+              </div>
+            </div>
+
+            <div style={{ fontFamily:"'Fira Code',monospace", fontSize:9, color:'#daa520', letterSpacing:2, marginBottom:8 }}>
+              VOLATILITY REGIME HISTORY — CURRENTLY <span style={{ color: rgCol[rh.current] }}>{rh.current}</span>
+            </div>
+            <div style={{ display:'flex', height:26, borderRadius:4, overflow:'hidden', marginBottom:6 }}>
+              {(rh.segments||[]).map((s:any,i:number) => (
+                <div key={i} title={`${s.regime} · ${s.start} to ${s.end}`}
+                  style={{ width:`${(s.days/totalDays)*100}%`, background:rgCol[s.regime], opacity:0.45,
+                    borderRight:'1px solid #1a0f0a', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                  {s.days/totalDays > 0.09 && (
+                    <span style={{ fontFamily:"'Fira Code',monospace", fontSize:8, color:'#1a0f0a', fontWeight:700 }}>{s.regime}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div style={{ display:'flex', justifyContent:'space-between', fontFamily:"'Fira Code',monospace", fontSize:8.5, color:'#6b5d52' }}>
+              <span>{rh.segments?.[0]?.start}</span>
+              <span>low below {rh.thresholds.low_below}% · high above {rh.thresholds.high_above}%</span>
+              <span>{rh.segments?.[rh.segments.length-1]?.end}</span>
+            </div>
+            <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:9.5, color:'#7a6b5d', marginTop:8, lineHeight:1.5 }}>{rh.note}</div>
+          </Card>
+        );
+      })()}
+
       {data.flow_analysis?.participation && (() => {
         const fl = data.flow_analysis;
         const p = fl.participation;
