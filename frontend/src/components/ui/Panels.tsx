@@ -144,15 +144,29 @@ export function MLModelsPanel({ data }: { data: any }) {
   const panelPred = data.panel_prediction?.horizons?.['21d']?.pred_pct;
   const panelDir = panelPred != null ? Math.sign(Number(panelPred)) : null;
 
+  // When the three return-forecasting models land within a hair of each other it is
+  // not consensus — it is all three regressing to the same conditional mean because
+  // none of them found signal in ~80 training samples. Counting that as three votes
+  // manufactures agreement out of an absence of information, so they collapse to one.
+  const _mlVals = [lstm.pred_21d, xgb.pred_21d, lgbm.pred_21d]
+    .filter(v => v != null).map(Number);
+  const _mlSpread = _mlVals.length > 1 ? Math.max(..._mlVals) - Math.min(..._mlVals) : 0;
+  const mlCollapsed = _mlVals.length > 1 && _mlSpread < 0.05;
+  const mlMean = _mlVals.length ? _mlVals.reduce((a,b)=>a+b,0) / _mlVals.length : null;
+
   // Only DIRECTIONAL, non-derived signals get a vote.
   //  - GARCH is excluded: it forecasts volatility, not direction. Low vol is not bullish.
   //  - Monte Carlo is excluded: its drift is derived from the ML ensemble, so it would
   //    double-count that signal rather than add an independent view.
   // Both are still displayed in the model matrix as context.
   const modelDirs = [
-    { name: 'LSTM',      v: lstm.pred_21d != null ? Math.sign(Number(lstm.pred_21d)) : null },
-    { name: 'XGBoost',   v: xgb.pred_21d != null ? Math.sign(Number(xgb.pred_21d)) : null },
-    { name: 'LightGBM',  v: lgbm.pred_21d != null ? Math.sign(Number(lgbm.pred_21d)) : null },
+    ...(mlCollapsed
+      ? [{ name: 'ML ensemble', v: mlMean != null ? Math.sign(mlMean) : null }]
+      : [
+          { name: 'LSTM',     v: lstm.pred_21d != null ? Math.sign(Number(lstm.pred_21d)) : null },
+          { name: 'XGBoost',  v: xgb.pred_21d != null ? Math.sign(Number(xgb.pred_21d)) : null },
+          { name: 'LightGBM', v: lgbm.pred_21d != null ? Math.sign(Number(lgbm.pred_21d)) : null },
+        ]),
     { name: 'Kalman',    v: kalmanDir },
     { name: 'Regime',    v: regimeDir },
     { name: 'Sentiment', v: sentVal != null ? Math.sign(Number(sentVal)) : null },
@@ -305,6 +319,7 @@ export function MLModelsPanel({ data }: { data: any }) {
             </div>
             <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:12, color:'#d4c4b0', lineHeight:1.5 }}>
               {majority} of {nTotal} models agree on a {direction.toLowerCase()} 21-day lean
+              {mlCollapsed ? ' (the three return-forecasting models produced near-identical output — a sign they found no distinguishing signal — so they count once, not three times)' : ''}
               {nTotal - majority > 0 ? `, ${nTotal - majority} disagree` : ''}.
               {' '}Conviction measures <b style={{color:'#d4c4b0'}}>agreement across models</b>, not predictive accuracy.
             </div>
