@@ -81,8 +81,29 @@ class PanelPredictor:
             dist_p = PANEL_MODEL_DIR / "feature_distribution.json"
             if dist_p.exists():
                 self.distribution = json.loads(dist_p.read_text())
+            # An XGBoost model trained under 3.x and loaded under 2.x restores
+            # base_score from the 2.x default of 0.5 rather than the fitted value
+            # (~0.003 for forward returns). Predictions come back ~0.497 too high
+            # with no exception raised — a 25% one-week forecast that looks like a
+            # model output. Refuse the artifact instead of serving it.
+            _env = (self.report or {}).get("environment") or {}
+            _trained = _env.get("xgboost")
+            if _trained:
+                import xgboost as _x
+                if _trained.split(".")[0] != _x.__version__.split(".")[0]:
+                    logger.error(
+                        f"Panel models trained with xgboost {_trained} but running "
+                        f"{_x.__version__} — major version mismatch changes base_score "
+                        f"handling and silently offsets every prediction. Panel disabled.")
+                    self.loaded = False
+                    self.horizons = {}
+                    return False
+            else:
+                logger.warning("Panel report has no environment stamp — cannot verify "
+                               "the training library versions match this runtime.")
             self.loaded = len(self.horizons) > 0
             logger.info(f"Panel models loaded: {len(self.feature_names)} features, "
+                        f"trained with xgboost {_trained or 'unknown'}, "
                         f"OOS rank-IC {self.report.get('oos_rank_ic',{}).get('ensemble','?')}")
             return True
         except Exception as e:

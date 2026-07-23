@@ -124,6 +124,15 @@ def main():
     (OUT_DIR / "feature_names.json").write_text(json.dumps(csrank_cols, indent=2))
     logger.info(f"Saved training distribution for {len(dist)} raw features")
 
+    import xgboost as _xgbmod, lightgbm as _lgbmod, sklearn as _skmod
+    # Models trained under one XGBoost major version and loaded under another
+    # restore base_score differently: a 3.x model auto-fits base_score from the
+    # target mean (~0.003 here), while 2.x falls back to its own 0.5 default.
+    # Every prediction then sits ~0.497 too high, and nothing raises. Record the
+    # versions so PanelPredictor can refuse a mismatched artifact at load.
+    _env = {"xgboost": _xgbmod.__version__, "lightgbm": _lgbmod.__version__,
+            "sklearn": _skmod.__version__}
+    logger.info(f"training environment: {_env}")
     horizon_reports = {}
     shap_drivers_21d = []
 
@@ -220,6 +229,7 @@ def main():
 
     report = {
         "trained_at": datetime.now().isoformat(),
+        "environment": _env,
         "panel": str(panel_path.name),
         "n_tickers": int(df["ticker"].nunique()),
         "split_date": str(pd.Timestamp(split_date).date()),
