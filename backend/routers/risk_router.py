@@ -79,8 +79,25 @@ async def compute_risk_intelligence(ticker: str, api_key: str) -> Dict[str,Any]:
     closes=await _price_closes(ticker, api_key)
     mcap, beta=await _market_cap_beta(ticker, api_key)
     if beta is None:
-        try: beta=estimate_wacc(beta=None).get("beta_used")
-        except Exception: beta=None
+        # _market_cap_beta never sets beta, so this branch always fired and
+        # estimate_wacc returned its hardcoded 1.0 default (quality_engine.py:468).
+        # Every ticker on this tab therefore showed "Beta 1.00" as if measured —
+        # Block's real regression against SPY gives 1.90. Regress it here instead,
+        # and report null rather than a placeholder when it cannot be computed.
+        try:
+            spy=await _price_closes("SPY", api_key)
+            n=min(len(closes), len(spy))
+            if n>=60:
+                import numpy as _np
+                a=_np.array(closes[-n:], dtype=float); m=_np.array(spy[-n:], dtype=float)
+                ra=_np.diff(a)/a[:-1]; rm=_np.diff(m)/m[:-1]
+                keep=(_np.abs(ra)<=0.60)&(_np.abs(rm)<=0.60)
+                ra, rm = ra[keep], rm[keep]
+                if len(ra)>=60 and rm.var()>0:
+                    beta=float(_np.cov(ra, rm)[0][1]/rm.var())
+        except Exception as e:
+            logger.warning(f"risk beta regression {ticker}: {type(e).__name__}: {e}")
+            beta=None
     feats=compute_risk_features(merged, price_closes=closes, market_cap=mcap, beta=beta)
     if feats.get("available") is False:
         return {"ticker":ticker,"available":False,"reason":"could not compute risk metrics"}
