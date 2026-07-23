@@ -29,10 +29,11 @@ MARKET_SIGNALS = {
    ("sharpe_3m","3-month Sharpe","sharpe_3m",0.55,True,"risk-adjusted return vs sector"),
    ("vol_adj_return","Vol-adjusted return","vol_adj_return",0.45,True,"return per unit volatility vs sector"),
  ]),
- "relative_strength": ("Relative Strength", 0.55, [
-   ("rs_6m","6-month relative strength","mom_6m",0.50,True,"performance vs sector median"),
-   ("rs_12m","12-month relative strength","mom_12_1",0.50,True,"long-term relative strength vs sector"),
- ]),
+ # "Relative Strength" read mom_6m and mom_12_1 — the same fields already scored
+ # under Trend & Momentum, and scored the same way (percentile against the peer
+ # set), so both signals were identical to their counterparts. The raw values are
+ # absolute returns; it is the scoring that is sector-relative, which the Trend &
+ # Momentum labels already say.
  "liquidity_flow": ("Liquidity & Flow", 0.30, [
    ("amihud","Amihud liquidity","amihud",0.40,False,"price impact (lower = more liquid)"),
    ("volume_surge","Volume surge","volume_surge",0.30,True,"recent volume vs baseline"),
