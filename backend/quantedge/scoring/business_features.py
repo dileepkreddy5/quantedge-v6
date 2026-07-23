@@ -118,7 +118,6 @@ def compute_business_features(merged, fin_features, wacc=None, peer_data=None):
     if len(op_t)>=5 and len(rev_t)>=5 and (rev_t[-1]-rev_t[-5])!=0:
         f["incremental_margin"]=(op_t[-1]-op_t[-5])/(rev_t[-1]-rev_t[-5])
     f["contribution_margin_proxy"]=_mean(gm_hist)
-    f["marginal_roic"]=f.get("incremental_roic")
     if rev_t and assets and assets[-1]: f["capital_turnover"]=rev_t[-1]/assets[-1]
     f["cash_conversion_cycle"]=fin_features.get("cash_conversion_cycle")
     if ocf_t and ni_t and ni_t[-1]: f["cash_conversion_ratio"]=ocf_t[-1]/ni_t[-1]
@@ -175,12 +174,15 @@ def compute_business_features(merged, fin_features, wacc=None, peer_data=None):
         rvg=_slope(rev_t); opg=_slope(op_t)
         if rvg and opg and rvg>0: f["operating_leverage"]=opg/rvg
         om_hist=[(op_t[i]/rev_t[i]) if rev_t[i] else None for i in range(min(len(op_t),len(rev_t)))]
-        f["operating_margin_trend"]=_slope(om_hist); f["margin_expansion_rate"]=_slope(om_hist)
+        f["operating_margin_trend"]=_slope(om_hist)
     opex_t=ttm("operating_expenses")
     if opex_t and rev_t:
         oxr=[(opex_t[i]/rev_t[i]) if rev_t[i] else None for i in range(min(len(opex_t),len(rev_t)))]
         sl=_slope(oxr); f["opex_efficiency"]=-sl if sl is not None else None
-    f["fixed_cost_absorption"]=f.get("incremental_margin")
+    # fixed_cost_absorption was set to incremental_margin — a different
+    # measure. Operating leverage from scale is not the same as the
+    # incremental margin on new revenue, and the catalog scored the copy
+    # as if it were the former. Left uncomputed rather than asserted.
     f["revenue_per_employee"]=None
 
     # 8. GROWTH QUALITY & DURABILITY

@@ -42,7 +42,6 @@ CATEGORIES = {
  "unit_economics": ("Unit Economics", 1.30, [
    _s("incremental_margin","Incremental margin","incremental_margin",0.20,0.20,0.45,evidence="ΔOperating income / ΔRevenue"),
    _s("contribution_margin_proxy","Contribution margin","contribution_margin_proxy",0.12,0.35,0.60,evidence="gross margin as contribution proxy"),
-   _s("marginal_roic","Marginal ROIC","marginal_roic",0.16,0.10,0.30,evidence="return on incremental capital"),
    _s("capital_turnover","Capital turnover","capital_turnover",0.12,0.4,1.0,evidence="revenue per dollar of assets"),
    _s("cash_conversion_cycle","Cash conversion cycle","cash_conversion_cycle",0.10,60,10,hib=False,evidence="days to cash (lower better)"),
    _s("cash_conversion_ratio","Cash conversion ratio","cash_conversion_ratio",0.12,0.9,1.2,evidence="OCF / net income"),
@@ -73,9 +72,7 @@ CATEGORIES = {
  "scale_leverage": ("Scale & Operating Leverage", 1.00, [
    _s("operating_leverage","Operating leverage","operating_leverage",0.28,1.0,1.5,evidence="margin expansion as revenue scales"),
    _s("operating_margin_trend","Operating margin trend","operating_margin_trend",0.22,-0.003,0.003,evidence="efficiency direction"),
-   _s("margin_expansion_rate","Margin expansion rate","margin_expansion_rate",0.16,-0.003,0.003,evidence="pace of operating leverage"),
    _s("opex_efficiency","Opex efficiency","opex_efficiency",0.16,-0.003,0.003,evidence="declining opex/revenue"),
-   _s("fixed_cost_absorption","Fixed-cost absorption","fixed_cost_absorption",0.12,0.2,0.45,evidence="incremental margin from scale"),
    _s("revenue_per_employee","Revenue per employee","revenue_per_employee",0.0,300000,800000,status="needs_source",evidence="headcount data (pending)"),
  ]),
  "growth_quality": ("Growth Quality & Durability", 0.90, [
