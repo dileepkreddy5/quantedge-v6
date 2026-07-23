@@ -44,6 +44,10 @@ CONCEPTS = {
     "rd": ["ResearchAndDevelopmentExpense"],
     "operating_lease_liab": ["OperatingLeaseLiabilityNoncurrent"],
     "short_term_debt": ["ShortTermBorrowings", "DebtCurrent"],
+    # Long-term debt came only from Polygon, which returns null for KO in every
+    # quarter — leaving leverage_trend and debt_funded_buyback unscoreable.
+    "long_term_debt_edgar": ["LongTermDebtNoncurrent", "LongTermDebt",
+                             "LongTermDebtAndCapitalLeaseObligations"],
     "inventory": ["InventoryNet"],
     "accounts_payable": ["AccountsPayableCurrent", "AccountsPayableTradeCurrent"],
     "deferred_revenue": ["ContractWithCustomerLiabilityCurrent", "ContractWithCustomerLiability", "DeferredRevenueCurrent"],

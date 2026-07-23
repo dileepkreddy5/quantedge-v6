@@ -89,6 +89,8 @@ def merge_quarters(polygon_quarters: List[Any], edgar: Dict[str, List[dict]]) ->
         # TSLA while the SEC served 200+ quarterly points for each.
         if row.get("cash") is None:
             row["cash"] = _nearest_edgar_val(edgar.get("cash", []), pe)
+        if row.get("long_term_debt") is None:
+            row["long_term_debt"] = _nearest_edgar_val(edgar.get("long_term_debt_edgar", []), pe)
         da = _nearest_edgar_val(edgar.get("depreciation_amortization", []), pe)
         if da is None:
             dep = _nearest_edgar_val(edgar.get("depreciation", []), pe)

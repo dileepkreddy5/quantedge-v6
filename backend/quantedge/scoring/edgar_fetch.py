@@ -14,7 +14,8 @@ FLOW = {"capex","dividends_paid","buybacks","depreciation_amortization",
         "depreciation","amortization","sbc","interest_expense","interest_expense_full","sga","rd"}
 STOCK = {"receivables","goodwill","intangibles","operating_lease_liab",
          "short_term_debt","inventory","accounts_payable","deferred_revenue",
-         "retained_earnings","short_term_debt2","operating_lease_total","cash"}
+         "retained_earnings","short_term_debt2","operating_lease_total","cash",
+         "long_term_debt_edgar"}
 
 async def _ticker_to_cik(ticker: str, client: httpx.AsyncClient) -> Optional[int]:
     t = ticker.upper().strip()
@@ -29,23 +30,41 @@ async def _ticker_to_cik(ticker: str, client: httpx.AsyncClient) -> Optional[int
     return _CIK_CACHE.get(t)
 
 async def _fetch_concept(cik: int, tags: List[str], client: httpx.AsyncClient) -> List[dict]:
+    """Return the mapped tag whose data runs closest to the present.
+
+    This previously returned the first tag with any points at all. Filers change
+    tags: NVIDIA stopped filing PaymentsToAcquirePropertyPlantAndEquipment in
+    2020 and moved to PaymentsToAcquireProductiveAssets, and Coca-Cola left
+    LongTermDebtNoncurrent in 2024 for LongTermDebtAndCapitalLeaseObligations.
+    Both newer tags were already in the map, but sat behind a stale one that
+    still returned data — so capital intensity and leverage trend were computed
+    from series that ended years ago, or not at all. Nothing raised, because a
+    stale series is a valid series.
+    """
+    best: List[dict] = []
+    best_end = ""
     for tag in tags:
         ck = f"{cik}:{tag}"
         if ck in _CONCEPT_CACHE:
-            return _CONCEPT_CACHE[ck].get("units", {}).get("USD", [])
-        url = SEC_BASE.format(cik=cik, concept=tag)
-        try:
-            r = await client.get(url, headers={"User-Agent": UA}, timeout=30)
-        except httpx.HTTPError:
-            continue
-        await asyncio.sleep(0.12)
-        if r.status_code == 200:
+            units = _CONCEPT_CACHE[ck].get("units", {}).get("USD", [])
+        else:
+            url = SEC_BASE.format(cik=cik, concept=tag)
+            try:
+                r = await client.get(url, headers={"User-Agent": UA}, timeout=30)
+            except httpx.HTTPError:
+                continue
+            await asyncio.sleep(0.12)
+            if r.status_code != 200:
+                continue
             data = r.json()
             _CONCEPT_CACHE[ck] = data
             units = data.get("units", {}).get("USD", [])
-            if units:
-                return units
-    return []
+        if not units:
+            continue
+        last = max((u.get("end") or "") for u in units)
+        if last > best_end:
+            best, best_end = units, last
+    return best
 
 async def fetch_edgar_supplement(ticker: str, years_back: int = 6) -> Dict[str, List[dict]]:
     out: Dict[str, List[dict]] = {}
