@@ -116,3 +116,4 @@ scan.log
 # local database backups
 backups/
 backup_db.sh
+ml_models/

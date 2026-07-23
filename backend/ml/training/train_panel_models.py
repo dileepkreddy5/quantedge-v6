@@ -158,7 +158,16 @@ def main():
         lgb_val = lgb.predict(X_val)
         lgb_ic, _, _ = cross_sectional_rank_ic(dates_val, lgb_val, y_val, horizon_days=h)
 
-        ens_val = 0.5 * xgb_val + 0.5 * lgb_val
+        # A fixed 50/50 blend assumes both models found the same signal. At 2wk
+        # they did not: XGB ranked at -0.129 while LGB ranked at +0.164, i.e.
+        # near-opposite orderings, and averaging them gave -0.098 — worse than
+        # either component. Weight by validation IC and give a model that scored
+        # negative no weight at all.
+        _wx, _wl = max(xgb_ic, 0.0), max(lgb_ic, 0.0)
+        if _wx + _wl <= 0:
+            ens_val = 0.5 * xgb_val + 0.5 * lgb_val   # both useless; nothing to prefer
+        else:
+            ens_val = (_wx * xgb_val + _wl * lgb_val) / (_wx + _wl)
         ens_ic, ens_ic_std, ens_nd = cross_sectional_rank_ic(dates_val, ens_val, y_val, horizon_days=h)
 
         # hit rate + t-stat
