@@ -1,5 +1,13 @@
 """Competitive Intelligence — head-to-head competitive dynamics vs sector peers.
-Uses enriched peer fundamentals (fund_*) + own financials."""
+Uses enriched peer fundamentals (fund_*) + own financials.
+
+Sixteen fields here were aliases: f["x"] = f.get("y"), or the same own_pctile()
+call under a second name. The catalog scored each as an independent signal in a
+different category, so 39 signals were computed from roughly 19 facts. One
+number — revenue growth above the peer median — appeared four times, three of
+them inside the same category. The composite was one company profile counted
+ten times over, which is why nine of eleven categories scored above 90.
+"""
 import json, statistics as st
 
 def _pf(obj):
@@ -35,7 +43,6 @@ def compute_competitive_features(own, peer_bucket):
 
     mc=own.get("market_cap"); rev=own.get("revenue")
     f["scale_rank"]=_pctile([p.get("market_cap") for p in peers], mc, True)
-    f["mcap_rank"]=f["scale_rank"]
     if rev and mc:
         peer_rev=[]
         for p in peers:
@@ -44,8 +51,6 @@ def compute_competitive_features(own, peer_bucket):
         if peer_rev and rev:
             tot=sum(peer_rev)+rev
             f["market_share_proxy"]=rev/tot if tot>0 else None
-    f["size_dominance"]=f.get("scale_rank")
-    f["revenue_rank"]=f.get("scale_rank")
 
     f["net_margin_pctile"]=own_pctile("net_margin","fund_net_margin")
     f["gross_margin_pctile"]=own_pctile("gross_margin","fund_gross_margin")
@@ -57,37 +62,26 @@ def compute_competitive_features(own, peer_bucket):
 
     f["growth_pctile"]=own_pctile("revenue_growth","fund_revenue_growth")
     f["growth_advantage"]=advantage("revenue_growth","fund_revenue_growth")
-    f["revenue_growth_vs_median"]=f.get("growth_advantage")
-    if f.get("growth_advantage") is not None: f["share_gain_proxy"]=f["growth_advantage"]
 
     f["gross_margin_level"]=own.get("gross_margin")
-    f["gross_margin_pctile_pp"]=own_pctile("gross_margin","fund_gross_margin")
-    f["margin_advantage_pp"]=advantage("gross_margin","fund_gross_margin")
-    f["price_premium_proxy"]=own_pctile("gross_margin","fund_gross_margin")
+    f["margin_advantage_gm"]=advantage("gross_margin","fund_gross_margin")
 
     f["asset_turnover_pctile"]=own_pctile("asset_turnover","fund_asset_turnover")
     f["ocf_margin_pctile"]=own_pctile("ocf_margin","fund_ocf_margin")
     f["efficiency_advantage"]=advantage("asset_turnover","fund_asset_turnover")
-    f["capital_efficiency_vs_peers"]=own_pctile("roic","fund_roic_approx")
 
-    f["excess_return_vs_peers"]=own_pctile("roic","fund_roic_approx")
     if own.get("roic") is not None and own.get("wacc") is not None:
         f["economic_moat_spread"]=own["roic"]-own["wacc"]
     f["margin_durability"]=own.get("gross_margin_stability")
     f["roic_persistence"]=own.get("roe_stability")
 
     f["pe_discount_vs_peers"]=own_pctile("pe","fund_pe",False)
-    f["cheapness_rank"]=f.get("pe_discount_vs_peers")
     if own.get("pe") is not None:
         m=_med(pv("fund_pe"))
         if m and m>0: f["pe_relative_to_median"]=own["pe"]/m
 
-    f["roe_strength_rank"]=own_pctile("roe","fund_roe")
     if own.get("current_ratio") is not None: f["liquidity_position"]=own["current_ratio"]
-    f["profitability_rank"]=own_pctile("net_margin","fund_net_margin")
-    f["profit_spread_vs_median"]=advantage("net_margin","fund_net_margin")
 
-    f["growth_momentum_rank"]=own_pctile("revenue_growth","fund_revenue_growth")
     if own.get("earnings_growth") is not None: f["earnings_growth"]=own["earnings_growth"]
 
     ga=f.get("growth_advantage")
@@ -99,6 +93,5 @@ def compute_competitive_features(own, peer_bucket):
 
     if mc: f["absolute_scale"]=mc/1e9
     if own.get("employees"): f["employee_scale"]=own["employees"]
-    f["scale_advantage"]=f.get("scale_rank")
 
     return {k:v for k,v in f.items() if (v is not None or k.startswith("_"))}
