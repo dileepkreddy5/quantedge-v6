@@ -1061,7 +1061,7 @@ export function RegimePanel({ data }: { data: any }) {
             <div style={{ fontFamily:'var(--font-mono)', fontSize:10, color:'var(--cocoa)', marginTop:10, lineHeight:1.8 }}>
               model confidence {((regime.confidence||0)*100).toFixed(1)}%<br/>
               {elapsed != null && <>day {elapsed} of this episode<br/></>}
-              {dur != null && <>typical episode runs {dur} days<br/></>}
+              {dur != null && <>median {pretty(current).toLowerCase()} episode: {dur} days{rc?.past_episodes_of_state != null ? ` (n=${rc.past_episodes_of_state})` : ''}<br/></>}
               {rc?.current_episode_return_pct != null && <>episode return {rc.current_episode_return_pct > 0 ? '+' : ''}{rc.current_episode_return_pct}%</>}
             </div>
           </div>
