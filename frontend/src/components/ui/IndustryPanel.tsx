@@ -8,11 +8,17 @@ interface IndData {
   coverage:{scored:number;total:number}; sector_name:string; sector_etf:string; sic:string; sic_description:string;
   tree:{categories:Cat[]}; key_metrics:Record<string,number|null>; reason?:string;
 }
-const heat=(s:number|null)=>s==null?'#2a2a2a':s>=75?'#0f6e56':s>=58?'#1d9e75':s>=42?'#8a7519':s>=25?'#a35a1d':'#7a2320';
+const heat=(s:number|null)=>s==null?'var(--border-2)':s>=70?'var(--gold)':s>=50?'var(--caramel)':s>=30?'#c9762f':'var(--bear)';
 const ratingColor=(r:string)=>r.includes('Leader')?'#0f9d6e':r.includes('Above')?'#1d9e75':r.includes('In-Line')?'#c9a227':r.includes('Below')?'#c0705a':'#7a2320';
 
 const fmtVal=(id:string,v:number|null):string=>{
   if(v==null) return '—';
+  // Counts and tiers first: 'years_public' was reaching a later percent branch
+  // and rendering 27.5 years as 2749.9%, while the summary card said 27.
+  if(id.includes('years')) return v.toFixed(0)+'y';
+  if(id.includes('tier')) return v.toFixed(0);
+  if(id.includes('employee')||id.includes('peer_count')) return v.toLocaleString();
+  if(id.includes('cap_eff')) return '$'+v.toFixed(0)+'M';
   if(id.includes('pct')||id.includes('rank')||id.includes('quartile')||id.includes('position')||id.includes('capture')||id.includes('in_favor')||id.includes('leader')||id.includes('cyclical')||id.includes('defensive')||id.includes('correlation')) {
     if(Math.abs(v)<=1) return (v*100).toFixed(0)+(id.includes('pct')||id.includes('rank')||id.includes('position')||id.includes('quartile')?' pct':'%');
   }
@@ -146,13 +152,13 @@ export default function IndustryPanel({ ticker }:{ ticker:string }){
                   {cat.signals.map(s=>{
                     const pending=s.status==='needs_source'||s.score==null;
                     return (
-                      <div key={s.id} title={s.evidence} style={{display:'flex',alignItems:'center',gap:10,padding:'5px 0',borderBottom:'1px solid #1e1e1e',opacity:pending?0.5:1}}>
-                        <span style={{fontSize:12,color:'#cdbfae',flex:1}}>{s.label}</span>
-                        <span style={{fontSize:12,color:'#9d8b7a',width:72,textAlign:'right'}}>{pending?(s.status==='needs_source'?'pending':'—'):fmtVal(s.id,s.raw_value)}</span>
-                        <div style={{width:80,height:6,background:'#242424',borderRadius:3,overflow:'hidden'}}>
-                          {!pending && <div style={{height:'100%',width:`${s.score}%`,background:heat(s.score)}}/>}
+                      <div key={s.id} title={s.evidence} style={{display:'grid',gridTemplateColumns:'minmax(150px,220px) 90px 1fr 30px',alignItems:'center',gap:14,padding:'5px 0',borderBottom:'1px solid var(--border-1)',opacity:pending?0.45:1}}>
+                        <span style={{fontFamily:'var(--font-body)',fontSize:12,color:'var(--latte)'}}>{s.label}</span>
+                        <span style={{fontFamily:'var(--font-mono)',fontSize:11.5,color:'var(--cocoa-dust)',textAlign:'right'}}>{pending?(s.status==='needs_source'?'pending':'—'):fmtVal(s.id,s.raw_value)}</span>
+                        <div style={{height:5,background:'var(--surface-3)',borderRadius:2,overflow:'hidden'}}>
+                          {!pending && <div style={{height:'100%',width:`${s.score}%`,background:heat(s.score),borderRadius:2}}/>}
                         </div>
-                        <span style={{fontSize:11,fontWeight:600,color:pending?'#555':heat(s.score),width:26,textAlign:'right'}}>{pending?'—':s.score!.toFixed(0)}</span>
+                        <span style={{fontFamily:'var(--font-mono)',fontSize:11,fontWeight:600,color:pending?'var(--cocoa)':heat(s.score),textAlign:'right'}}>{pending?'—':s.score!.toFixed(0)}</span>
                       </div>
                     );
                   })}

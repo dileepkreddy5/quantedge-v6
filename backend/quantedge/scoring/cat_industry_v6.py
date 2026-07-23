@@ -77,10 +77,10 @@ CATEGORIES = {
    _s("sec_accel","Sector acceleration","sector_acceleration",0.35,-0.03,0.03,evidence="sector momentum accelerating"),
    _s("sec_rotation","Sector rotation","sector_vs_spy_3m",0.25,-0.05,0.05,evidence="flows into/out of sector"),
  ]),
- "geo_structural": ("Geographic & Structural", 0.10, [
-   _s("cap_eff2","Capital efficiency","capital_efficiency",0.50,2,20,evidence="mcap per employee"),
-   _s("size2","Size tier","size_tier",0.50,1,3,evidence="market-cap tier"),
- ]),
+ # "Geographic & Structural" contained no geographic data: its only two signals
+ # were capital_efficiency and size_tier, already scored under Maturity and
+ # Sector Classification. Both therefore counted twice toward the composite, at
+ # higher weight in the duplicate. Removed rather than padded.
 }
 INDUSTRY_INTELLIGENCE = {"label":"Industry Intelligence","weight":6.0,"categories":CATEGORIES}
 
