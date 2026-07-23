@@ -119,7 +119,14 @@ def compute_risk_features(merged, price_closes=None, market_cap=None, beta=None)
             m=st.mean(sq); num=sum((sq[i]-m)*(sq[i-1]-m) for i in range(1,len(sq))); den=sum((x-m)**2 for x in sq)
             f["vol_clustering"]=round(num/den,3) if den>0 else None
         m=st.mean(rets); f["semivariance"]=round(sum((r-m)**2 for r in rets if r<m)/len(rets)*252,4)
-    if beta is not None: f["beta"]=beta; f["market_sensitivity"]=beta
+    if beta is not None:
+        f["beta"]=beta
+        # Score on distance from zero, not on the signed value. With hib=False
+        # a raw beta scored -0.25 as safer than +0.80, and would score -2.0 —
+        # violently anticorrelated, genuinely dangerous — as the safest of all.
+        # What carries systematic risk is magnitude; sign only says direction.
+        f["abs_beta"]=abs(beta)
+        f["market_sensitivity"]=abs(beta)
 
     f["operating_margin"]=_sd(ebit_ttm,rev_ttm)
     if ebit_ttm is not None and rev_ttm and rev_ttm>0: f["margin_cushion"]=ebit_ttm/rev_ttm

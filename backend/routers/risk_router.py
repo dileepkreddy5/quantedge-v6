@@ -59,6 +59,29 @@ async def _price_closes(ticker, api_key, days=400):
     except Exception: pass
     return []
 
+async def _price_closes_dated(ticker, api_key, days=400):
+    """Same fetch, but keeping the bar timestamps.
+
+    Aligning two tickers by list position is wrong: a halt, a missing session
+    or a different listing history shifts one series against the other and the
+    regression then measures noise against noise. Coca-Cola came back at beta
+    -0.25 that way. Join on the date instead.
+    """
+    try:
+        end=dt.date.today(); start=end-dt.timedelta(days=days)
+        async with httpx.AsyncClient(timeout=15) as c:
+            u=f"{_POLY}/v2/aggs/ticker/{ticker}/range/1/day/{start.isoformat()}/{end.isoformat()}?adjusted=true&sort=asc&limit=500&apiKey={api_key}"
+            r=await c.get(u)
+            if r.status_code==200:
+                out={}
+                for b in (r.json() or {}).get("results",[]):
+                    t=b.get("t"); cval=b.get("c")
+                    if t is None or cval is None: continue
+                    out[dt.datetime.utcfromtimestamp(t/1000).date().isoformat()]=float(cval)
+                return out
+    except Exception: pass
+    return {}
+
 async def _market_cap_beta(ticker, api_key):
     mcap=None; beta=None
     try:
@@ -85,16 +108,19 @@ async def compute_risk_intelligence(ticker: str, api_key: str) -> Dict[str,Any]:
         # Block's real regression against SPY gives 1.90. Regress it here instead,
         # and report null rather than a placeholder when it cannot be computed.
         try:
-            spy=await _price_closes("SPY", api_key)
-            n=min(len(closes), len(spy))
-            if n>=60:
+            me=await _price_closes_dated(ticker, api_key)
+            spy=await _price_closes_dated("SPY", api_key)
+            common=sorted(set(me) & set(spy))
+            if len(common)>=61:
                 import numpy as _np
-                a=_np.array(closes[-n:], dtype=float); m=_np.array(spy[-n:], dtype=float)
+                a=_np.array([me[d] for d in common], dtype=float)
+                m=_np.array([spy[d] for d in common], dtype=float)
                 ra=_np.diff(a)/a[:-1]; rm=_np.diff(m)/m[:-1]
                 keep=(_np.abs(ra)<=0.60)&(_np.abs(rm)<=0.60)
                 ra, rm = ra[keep], rm[keep]
                 if len(ra)>=60 and rm.var()>0:
                     beta=float(_np.cov(ra, rm)[0][1]/rm.var())
+                    logger.info(f"risk beta {ticker}: {beta:.3f} on {len(ra)} aligned sessions")
         except Exception as e:
             logger.warning(f"risk beta regression {ticker}: {type(e).__name__}: {e}")
             beta=None

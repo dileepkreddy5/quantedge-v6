@@ -39,7 +39,7 @@ CATEGORIES = {
    _s("max_dd","Max drawdown","max_drawdown",0.25,-0.5,-0.15,evidence="worst peak-to-trough (closer to 0=safer)"),
    _s("cvar","5% CVaR","cvar_5pct",0.22,-0.06,-0.02,evidence="expected loss in worst 5% of days"),
    _s("worst_month","Worst month","worst_month",0.20,-0.35,-0.1,evidence="worst 21-day return"),
-   _s("beta","Beta","beta",0.18,1.5,0.8,hib=False,evidence="market sensitivity"),
+   _s("beta","Beta (magnitude)","abs_beta",0.18,1.5,0.8,hib=False,evidence="|beta| — distance from market-independent, either direction"),
    _s("worst_day","Worst day","worst_day",0.15,-0.1,-0.03,evidence="single worst daily return"),
  ]),
  "volatility": ("Volatility Structure", 0.55, [
