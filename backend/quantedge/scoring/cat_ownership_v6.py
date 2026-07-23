@@ -22,7 +22,7 @@ CATEGORIES = {
  "share_stability":("Share Stability",0.55,[
    _s("share_stab","Share count stability","share_count_stability",0.35,0.5,0.9,evidence="consistent share count"),
    _s("dilution_press","Dilution pressure","dilution_pressure",0.35,0.06,0.01,hib=False,evidence="SBC / revenue"),
-   _s("conc_dir","Concentration direction","concentration_direction",0.30,0.0,0.02,evidence="ownership tightening")]),
+   ]),
  "smart_money":("Smart Money Signals",0.55,[
    _s("smart_buy","Smart money buying","smart_money_buying",0.30,0,1,evidence="insider open-market buys"),
    _s("officer_conv","Officer conviction","officer_conviction",0.30,0,1,evidence="net officer buying"),
@@ -36,7 +36,6 @@ CATEGORIES = {
    _s("buyback_int2","Buyback conviction","buyback_intensity",0.30,0.005,0.03,evidence="management buying back"),
    _s("unique_buyers","Unique insider buyers","insider_unique_buyers",0.25,1,4,evidence="breadth of insider buying")]),
  "concentration":("Concentration Risk",0.35,[
-   _s("conc_risk","Holder concentration risk","holder_concentration_risk",0.50,25,8,hib=False,evidence="single-holder dominance risk"),
    _s("top_pct","Top holder stake","top_holder_pct",0.50,20,7,hib=False,evidence="largest holder %")]),
 }
 OWNERSHIP_INTELLIGENCE={"label":"Ownership Intelligence","weight":4.0,"categories":CATEGORIES}

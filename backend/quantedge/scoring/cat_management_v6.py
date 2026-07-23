@@ -31,7 +31,7 @@ CATEGORIES = {
    _s("share_change","Share count change","share_count_change",0.30,0.01,-0.02,hib=False,evidence="buyback (shrink) vs dilution"),
    _s("sbc_intensity","SBC intensity","sbc_intensity",0.25,0.08,0.01,hib=False,evidence="stock comp / revenue; lower better"),
    _s("net_buyback","Net buyback vs SBC","net_buyback_vs_sbc",0.25,0.0,0.03,evidence="real buybacks net of dilution"),
-   _s("insider_align","Insider alignment","insider_alignment",0.20,0.15,0.5,evidence="insider buy conviction")]),
+   ]),
  "execution":("Execution Quality", 0.65,[
    _s("cash_conv","Cash conversion","cash_conversion",0.30,0.7,1.2,evidence="OCF / net income"),
    _s("wc_ratio","Working capital ratio","working_capital_ratio",0.20,1.0,2.0,evidence="current ratio"),

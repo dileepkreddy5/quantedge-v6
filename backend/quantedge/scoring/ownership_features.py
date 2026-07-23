@@ -66,9 +66,8 @@ def compute_ownership_features(merged, shares_out=None, market_cap=None, insider
     bb=cur("buybacks")
     if bb and market_cap: f["buyback_intensity"]=bb/market_cap
 
-    if f.get("ownership_concentration_trend") is not None:
-        f["concentration_direction"]=f["ownership_concentration_trend"]
-    if ownership.get("top_holder_pct") is not None:
-        f["holder_concentration_risk"]=ownership["top_holder_pct"]
+    # concentration_direction and holder_concentration_risk were straight copies
+    # of ownership_concentration_trend and top_holder_pct, both already scored.
+    # Two signals per number, in different categories.
 
     return {k:v for k,v in f.items() if v is not None}

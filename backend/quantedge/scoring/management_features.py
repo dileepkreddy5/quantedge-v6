@@ -132,8 +132,9 @@ def compute_management_features(merged, fin_features, insider=None, market_cap=N
 
     # ===== GOVERNANCE =====
     # dilution control (already have share_count_change); insider ownership proxy via net buying
-    if insider.get("available"):
-        f["insider_alignment"]=insider.get("buy_value_ratio")
+    # insider_alignment read buy_value_ratio, already scored as
+    # insider_buy_value_ratio — the same number under a second name, so the
+    # whole block is gone rather than left as an empty guard.
     # capital discipline: not over-issuing debt
     ltd_series=series("long_term_debt",8)
     if len(ltd_series)>=8 and assets:
