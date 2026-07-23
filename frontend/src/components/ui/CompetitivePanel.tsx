@@ -96,7 +96,7 @@ export default function CompetitivePanel({ ticker }:{ ticker:string }){
       })()}
 
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-        <span style={{fontFamily:'var(--font-mono)',fontSize:9,letterSpacing:2,color:'var(--gold)'}}>{d.tree.categories.length} DIMENSIONS \u00b7 {d.tree.categories.reduce((a,c)=>a+c.n_signals,0)} SIGNALS</span>
+        <span style={{fontFamily:'var(--font-mono)',fontSize:9,letterSpacing:2,color:'var(--gold)'}}>{d.tree.categories.length} DIMENSIONS · {d.tree.categories.reduce((a,c)=>a+c.n_signals,0)} SIGNALS</span>
         <button onClick={()=>{const v=!allOpen;setAllOpen(v);const m:Record<string,boolean>={};d.tree.categories.forEach(c=>m[c.id]=v);setExpanded(m);}}
           style={{background:'transparent',border:'1px solid var(--border-1)',color:'var(--cocoa-dust)',borderRadius:3,padding:'4px 10px',fontFamily:'var(--font-mono)',fontSize:10,cursor:'pointer'}}>{allOpen?'Collapse all':'Expand all'}</button>
       </div>
@@ -106,17 +106,18 @@ export default function CompetitivePanel({ ticker }:{ ticker:string }){
             <div onClick={()=>setExpanded(p=>({...p,[cat.id]:!p[cat.id]}))}
               style={{display:'flex',alignItems:'center',gap:12,padding:'10px 14px',cursor:'pointer',borderLeft:`3px solid ${heat(cat.score)}`}}>
               <span style={{fontSize:11,color:'#7a7266',width:12}}>{open?'▾':'▸'}</span>
-              <span style={{fontSize:13,fontWeight:600,fontFamily:'var(--font-body)',color:'var(--latte)',flex:1}}>{cat.label}</span>
-              <span style={{fontSize:10,color:'#7a7266'}}>wt {cat.weight.toFixed(2)} · {cat.n_scored}/{cat.n_signals}</span>
-              <span style={{fontSize:18,fontWeight:700,color:heat(cat.score),width:36,textAlign:'right'}}>{cat.score?.toFixed(0)??'—'}</span>
+              <span style={{fontSize:12.5,fontWeight:600,fontFamily:'var(--font-body)',color:'var(--latte)',width:200}}>{cat.label}</span>
+              <div style={{flex:1,height:5,background:'var(--surface-3)',borderRadius:2,minWidth:100}}><div style={{height:'100%',width:`${cat.score??0}%`,background:heat(cat.score),borderRadius:2,opacity:0.85}}/></div>
+              <span style={{fontFamily:'var(--font-mono)',fontSize:9,color:'var(--cocoa)',width:76,textAlign:'right'}}>wt {cat.weight.toFixed(2)} · {cat.n_scored}/{cat.n_signals}</span>
+              <span style={{fontFamily:'var(--font-mono)',fontSize:16,fontWeight:700,color:heat(cat.score),width:32,textAlign:'right'}}>{cat.score?.toFixed(0)??'—'}</span>
             </div>
             {open && (<div style={{padding:'4px 14px 12px 30px'}}>
               {cat.signals.map(s=>{const pending=s.status==='needs_source'||s.score==null;return (
                 <div key={s.id} title={s.evidence} style={{display:'flex',alignItems:'center',gap:10,padding:'5px 0',borderBottom:'1px solid var(--border-1)',opacity:pending?0.5:1}}>
-                  <span style={{fontSize:12,fontFamily:'var(--font-body)',color:'var(--latte)',flex:1}}>{s.label}</span>
-                  <span style={{fontSize:12,color:'#9d8b7a',width:70,textAlign:'right'}}>{pending?'—':fmt(s.id,s.raw_value)}</span>
-                  <div style={{width:80,height:6,background:'var(--surface-3)',borderRadius:2,overflow:'hidden'}}>{!pending && <div style={{height:'100%',width:`${s.score}%`,background:heat(s.score)}}/>}</div>
-                  <span style={{fontSize:11,fontWeight:600,color:pending?'#555':heat(s.score),width:26,textAlign:'right'}}>{pending?'—':s.score!.toFixed(0)}</span>
+                  <span style={{fontSize:12,fontFamily:'var(--font-body)',color:'var(--latte)',width:210}}>{s.label}</span>
+                  <span style={{fontFamily:'var(--font-mono)',fontSize:11.5,color:'var(--cocoa-dust)',width:90,textAlign:'right'}}>{pending?'—':fmt(s.id,s.raw_value)}</span>
+                  <div style={{flex:1,height:5,background:'var(--surface-3)',borderRadius:2,overflow:'hidden',minWidth:100}}>{!pending && <div style={{height:'100%',width:`${s.score}%`,background:heat(s.score),borderRadius:2}}/>}</div>
+                  <span style={{fontFamily:'var(--font-mono)',fontSize:11,fontWeight:600,color:pending?'var(--cocoa)':heat(s.score),width:30,textAlign:'right'}}>{pending?'—':s.score!.toFixed(0)}</span>
                 </div>);})}
             </div>)}
           </div>);})}
