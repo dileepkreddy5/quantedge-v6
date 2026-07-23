@@ -2,8 +2,13 @@
 activity (buy/sell counts, net shares, officer vs director) over recent filings."""
 import re, asyncio, httpx
 from datetime import datetime, timezone, timedelta
+from loguru import logger
+from quantedge.scoring.edgar_xbrl import UA as _UA_STR
 
-_UA={"User-Agent":"QuantEdge research contact@quantedge.io"}
+# contact@quantedge.io is not a domain we own. The SEC requires a genuine
+# contact address and throttles harder without one; every other caller here
+# uses the real address from edgar_xbrl.
+_UA={"User-Agent":_UA_STR}
 
 def _parse_form4(xml):
     def g(tag,s):
@@ -29,7 +34,11 @@ async def fetch_insider_activity(cik, days_back=365, max_filings=60):
     try:
         async with httpx.AsyncClient(timeout=15) as c:
             sub=await c.get(f"https://data.sec.gov/submissions/CIK{cik}.json",headers=_UA)
-            if sub.status_code!=200: return out
+            if sub.status_code!=200:
+                logger.warning(
+                    f"insider: SEC submissions returned HTTP {sub.status_code} for CIK {cik} — "
+                    f"every insider signal on Management and Ownership will be blank")
+                return out
             rec=(sub.json() or {}).get("filings",{}).get("recent",{})
             forms=rec.get("form",[]); dates=rec.get("filingDate",[])
             accs=rec.get("accessionNumber",[]); docs=rec.get("primaryDocument",[])
