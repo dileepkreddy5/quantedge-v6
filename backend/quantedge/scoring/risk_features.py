@@ -61,9 +61,16 @@ def compute_risk_features(merged, price_closes=None, market_cap=None, beta=None)
     f["liabilities_to_equity"]=_sd(liab,eq)
     f["debt_to_ebitda"]=_sd(total_debt,ebitda_ttm)
     f["equity_ratio"]=_sd(eq,assets)
-    ltd_y=_f(qy.get("long_term_debt")); assets_y=_f(qy.get("assets"))
-    if ltd_y is not None and assets_y and assets and total_debt is not None:
-        f["leverage_trend"]=(total_debt/assets)-(ltd_y/assets_y)
+    # Compare like with like. This previously measured current TOTAL debt
+    # against year-ago LONG-TERM debt, so any company carrying short-term
+    # borrowings showed a leverage increase that was purely definitional.
+    _ltd_y=_f(qy.get("long_term_debt")) or 0.0
+    _std_y=_f(qy.get("short_term_debt")) or 0.0
+    total_debt_y=(_ltd_y+_std_y) if (qy.get("long_term_debt") is not None
+                                     or qy.get("short_term_debt") is not None) else None
+    assets_y=_f(qy.get("assets"))
+    if total_debt_y is not None and assets_y and assets and total_debt is not None:
+        f["leverage_trend"]=(total_debt/assets)-(total_debt_y/assets_y)
 
     f["current_ratio"]=_sd(ca,cl)
     f["quick_ratio"]=_sd((ca-_f(q.get("inventory") or 0)) if ca else None, cl)
@@ -142,8 +149,12 @@ def compute_risk_features(merged, price_closes=None, market_cap=None, beta=None)
     if sh and sh_y and sh_y>0: f["share_dilution"]=(sh/sh_y-1)
     sbc_ttm=ttm("sbc")
     if sbc_ttm is not None and rev_ttm and rev_ttm>0: f["sbc_intensity"]=sbc_ttm/rev_ttm
-    if f.get("leverage_trend") is not None and ttm("buybacks"):
-        bb=ttm("buybacks"); f["debt_funded_buyback_flag"]=1.0 if (f["leverage_trend"]>0.02 and bb and bb>0) else 0.0
+    # A company with no buybacks is not missing data — it simply did not do the
+    # thing this signal looks for, which is the good outcome. Requiring a
+    # truthy buyback figure left the signal blank for every such company.
+    if f.get("leverage_trend") is not None:
+        bb=ttm("buybacks") or 0.0
+        f["debt_funded_buyback_flag"]=1.0 if (f["leverage_trend"]>0.02 and bb>0) else 0.0
 
     if f.get("debt_to_assets") is not None: f["rate_sensitivity"]=f["debt_to_assets"]
     if f.get("earnings_volatility") is not None: f["cyclicality_proxy"]=f["earnings_volatility"]

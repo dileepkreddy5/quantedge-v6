@@ -7,8 +7,12 @@ interface RiskData {
   ticker:string; available:boolean; score:number|null; risk_rating:string; confidence:number;
   coverage:{scored:number;total:number}; tree:{categories:Cat[]}; key_metrics:Record<string,number|null>; reason?:string;
 }
-const heat=(s:number|null)=>s==null?'#2a2a2a':s>=75?'#0f6e56':s>=58?'#1d9e75':s>=42?'#8a7519':s>=25?'#a35a1d':'#7a2320';
-const ratingColor=(r:string)=>r.includes('Low')?'#0f9d6e':r.includes('Moderate')?'#1d9e75':r.includes('Elevated')?'#c9a227':r.includes('High')?'#c0705a':'#7a2320';
+// Scores cluster in the 60-100 band, so a five-step green/amber/red scale
+// paints almost everything the same green and the eye learns nothing. Gold is
+// the resting state; only genuine weakness takes colour, so an outlier like a
+// Valuation Risk of 24 is the one thing that stands out on the page.
+const heat=(s:number|null)=>s==null?'var(--border-2)':s>=70?'var(--gold)':s>=50?'var(--caramel)':s>=30?'#c9762f':'var(--bear)';
+const ratingColor=(r:string)=>r.includes('Low')?'var(--gold)':r.includes('Moderate')?'var(--caramel)':r.includes('Elevated')?'#c9762f':'var(--bear)';
 
 const altmanZone=(z:number|null)=>{
   if(z==null) return {label:'—',color:'#9d8b7a'};

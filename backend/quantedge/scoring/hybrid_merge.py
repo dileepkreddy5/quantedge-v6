@@ -83,6 +83,12 @@ def merge_quarters(polygon_quarters: List[Any], edgar: Dict[str, List[dict]]) ->
         # short-term debt: use the supplemental tag if base is absent
         if row.get("short_term_debt") is None:
             row["short_term_debt"] = row.get("short_term_debt2")
+        # Cash: Polygon supplies it for some filers and not others. EDGAR always
+        # has it, but it was fetched and then dropped — not in the overlay list
+        # above — so cash_ratio and cash_to_debt were blank for AAPL, NVDA and
+        # TSLA while the SEC served 200+ quarterly points for each.
+        if row.get("cash") is None:
+            row["cash"] = _nearest_edgar_val(edgar.get("cash", []), pe)
         da = _nearest_edgar_val(edgar.get("depreciation_amortization", []), pe)
         if da is None:
             dep = _nearest_edgar_val(edgar.get("depreciation", []), pe)

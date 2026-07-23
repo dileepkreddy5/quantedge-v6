@@ -18,7 +18,13 @@ METRIC_ALIASES = {
     "assets": ["Assets"],
     "liabilities": ["Liabilities"],
     "equity": ["StockholdersEquity", "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"],
-    "cash": ["CashAndCashEquivalentsAtCarryingValue"],
+    # Many filers report cash under the restricted-cash-inclusive tag or the
+    # short-term-investments variant. Mapping only the first left cash_ratio and
+    # cash_to_debt blank for every company that uses another.
+    "cash": ["CashAndCashEquivalentsAtCarryingValue",
+             "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents",
+             "CashAndCashEquivalentsFairValueDisclosure",
+             "CashCashEquivalentsAndShortTermInvestments"],
     "current_assets": ["AssetsCurrent"],
     "current_liabilities": ["LiabilitiesCurrent"],
     "long_term_debt": ["LongTermDebtNoncurrent", "LongTermDebt"],

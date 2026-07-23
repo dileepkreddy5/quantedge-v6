@@ -48,6 +48,12 @@ CONCEPTS = {
     "accounts_payable": ["AccountsPayableCurrent", "AccountsPayableTradeCurrent"],
     "deferred_revenue": ["ContractWithCustomerLiabilityCurrent", "ContractWithCustomerLiability", "DeferredRevenueCurrent"],
     "retained_earnings": ["RetainedEarningsAccumulatedDeficit"],
+    # cash was absent from this map entirely, so cash_ratio and cash_to_debt
+    # depended on Polygon happening to report it — blank for AAPL and NVDA even
+    # though the SEC serves 200+ quarterly points for each.
+    "cash": ["CashAndCashEquivalentsAtCarryingValue",
+             "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents",
+             "CashCashEquivalentsAndShortTermInvestments"],
     "short_term_debt2": ["ShortTermBorrowings", "DebtCurrent", "LongTermDebtCurrent"],
     "interest_expense_full": ["InterestExpense", "InterestExpenseNonoperating", "InterestAndDebtExpense"],
     "operating_lease_total": ["OperatingLeaseLiability"],
