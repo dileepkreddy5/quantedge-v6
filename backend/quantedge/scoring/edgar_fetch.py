@@ -59,6 +59,33 @@ async def _ticker_to_cik(ticker: str, client: httpx.AsyncClient) -> Optional[int
         logger.warning(f"could not persist sec ticker map: {e}")
     return _CIK_CACHE.get(t)
 
+_BULK_FACTS: Dict[int, dict] = {}
+
+def _bulk_units(cik: int, tag: str) -> List[dict]:
+    """Read one tag's USD series from the nightly companyfacts.zip.
+
+    The per-company concept API rate-limits hard enough that fundamentals were
+    unavailable for whole sessions — every EDGAR-sourced signal on every tab
+    blank at once. The bulk archive is the same data, complete, already on the
+    persistent volume and refreshed nightly by the Multibagger job, and its
+    points carry the identical {end, val, fy, fp, form, frame} shape the
+    parsers expect. No network, no throttling.
+    """
+    facts = _BULK_FACTS.get(cik)
+    if facts is None:
+        try:
+            from quantedge.fundamentals.edgar_bulk import company_facts_from_bulk
+            facts = company_facts_from_bulk(f"{cik:010d}") or {}
+        except Exception as e:
+            logger.warning(f"bulk facts unavailable for CIK {cik}: {e}")
+            facts = {}
+        _BULK_FACTS[cik] = facts
+    node = ((facts.get("facts") or {}).get("us-gaap") or {}).get(tag)
+    if not node:
+        return []
+    return (node.get("units") or {}).get("USD", []) or []
+
+
 async def _fetch_concept(cik: int, tags: List[str], client: httpx.AsyncClient) -> List[dict]:
     """Return the mapped tag whose data runs closest to the present.
 
@@ -73,6 +100,15 @@ async def _fetch_concept(cik: int, tags: List[str], client: httpx.AsyncClient) -
     """
     best: List[dict] = []
     best_end = ""
+    for tag in tags:
+        units = _bulk_units(cik, tag)
+        if units:
+            last = max((u.get("end") or "") for u in units)
+            if last > best_end:
+                best, best_end = units, last
+    if best:
+        return best
+    # Nothing in the archive for any mapped tag — fall back to the concept API.
     for tag in tags:
         ck = f"{cik}:{tag}"
         if ck in _CONCEPT_CACHE:
