@@ -49,7 +49,6 @@ CATEGORIES = {
    _s("vol_cluster","Volatility clustering","vol_clustering",0.20,0.3,0.05,hib=False,evidence="persistence of volatility shocks"),
  ]),
  "business_model": ("Business Model Risk", 0.50, [
-   _s("margin_cushion","Margin cushion","margin_cushion",0.30,0.05,0.3,evidence="operating margin buffer to breakeven"),
    _s("op_margin","Operating margin","operating_margin",0.25,0.05,0.3,evidence="profitability level"),
    _s("cap_intensity","Capital intensity","capital_intensity",0.22,0.2,0.05,hib=False,evidence="capex/revenue; high=capital-hungry"),
    _s("asset_turnover","Asset turnover","asset_turnover",0.23,0.3,1.0,evidence="revenue efficiency of assets"),
@@ -67,8 +66,6 @@ CATEGORIES = {
  ]),
  "macro": ("Macro Sensitivity", 0.15, [
    _s("rate_sens","Rate sensitivity","rate_sensitivity",0.35,0.4,0.1,hib=False,evidence="leverage-driven rate exposure"),
-   _s("market_sens","Market sensitivity","market_sensitivity",0.35,1.5,0.8,hib=False,evidence="beta-driven systematic risk"),
-   _s("cyclicality","Cyclicality proxy","cyclicality_proxy",0.30,0.8,0.2,hib=False,evidence="earnings cyclicality"),
  ]),
 }
 RISK_INTELLIGENCE = {"label":"Risk Intelligence","weight":6.0,"categories":CATEGORIES}

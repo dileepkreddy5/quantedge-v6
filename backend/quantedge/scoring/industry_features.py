@@ -163,9 +163,9 @@ def compute_industry_features(sic, stock_closes, sector_closes, spy_closes,
 
     if f.get("rs_sector_3m") is not None:
         f["is_sector_leader"]=1.0 if f["rs_sector_3m"]>0 else 0.0
-        f["rs_magnitude"]=f["rs_sector_3m"]
-    if f.get("momentum_pctile_sector") is not None:
-        f["leadership_rank"]=f["momentum_pctile_sector"]
+    # rs_magnitude copied rs_sector_3m and leadership_rank copied
+    # momentum_pctile_sector — both already scored, so the assignments and
+    # their now-empty guards are gone.
 
     if sector_closes and len(sector_closes)>=126:
         ser=_rets(sector_closes[-126:])
@@ -196,6 +196,6 @@ def compute_industry_features(sic, stock_closes, sector_closes, spy_closes,
         if len(sector_closes)>=63:
             r1=sector_closes[-1]/sector_closes[-21]-1; r2=sector_closes[-21]/sector_closes[-42]-1
             f["sector_acceleration"]=r1-r2
-    if market_cap and employees: f["capital_efficiency"]=market_cap/employees/1e6
+    # capital_efficiency repeated mcap_per_employee_m exactly (mcap/employees/1e6).
 
     return {k:v for k,v in f.items() if (v is not None or k.startswith("_"))}

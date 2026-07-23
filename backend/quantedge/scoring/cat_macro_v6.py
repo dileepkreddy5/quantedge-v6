@@ -7,7 +7,6 @@ def _s(id,label,field,weight,good,great,hib=True,status="live",evidence=""):
 
 CATEGORIES = {
  "rate_sensitivity":("Rate Sensitivity",0.55,[
-   _s("rate_sens_abs","Rate sensitivity","rate_sensitivity_abs",0.40,0.5,0.1,hib=False,evidence="exposure to rate moves (lower=insulated)"),
    _s("rate_beta","Rate beta (TLT)","rate_beta",0.30,-0.3,0.3,evidence="bond-like behavior; +=benefits from falling rates"),
    _s("rate_corr","Rate correlation","rate_correlation",0.30,-0.5,0.3,evidence="correlation to long bonds")]),
  "inflation":("Inflation Exposure",0.45,[

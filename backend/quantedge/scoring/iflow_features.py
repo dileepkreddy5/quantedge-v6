@@ -49,7 +49,7 @@ def compute_iflow_features(bars, insider=None, ownership=None):
             base=st.mean(sizes[-40:-5])
             f["avg_trade_size_trend"]=st.mean(sizes[-5:])/base-1 if base>0 else None
             f["block_trade_frequency"]=sum(1 for s in sizes[-10:] if s>1.5*base)/10 if base>0 else None
-            f["institutional_footprint"]=st.mean(sizes[-5:])/base-1 if base>0 else None
+            # institutional_footprint repeated avg_trade_size_trend exactly.
 
     if len(closes)>=40 and len(vols)>=40:
         upv=sum(vols[i] for i in range(len(closes)-20,len(closes)) if i>0 and closes[i] and closes[i-1] and closes[i]>closes[i-1] and vols[i])

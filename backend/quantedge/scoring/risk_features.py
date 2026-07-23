@@ -133,10 +133,11 @@ def compute_risk_features(merged, price_closes=None, market_cap=None, beta=None)
         # violently anticorrelated, genuinely dangerous — as the safest of all.
         # What carries systematic risk is magnitude; sign only says direction.
         f["abs_beta"]=abs(beta)
-        f["market_sensitivity"]=abs(beta)
+        # market_sensitivity duplicated abs_beta, which the beta signal already
+        # scores. Two signals, one number, in two categories.
 
     f["operating_margin"]=_sd(ebit_ttm,rev_ttm)
-    if ebit_ttm is not None and rev_ttm and rev_ttm>0: f["margin_cushion"]=ebit_ttm/rev_ttm
+    # margin_cushion repeated operating_margin exactly (ebit/revenue).
     f["capital_intensity"]=_sd(ttm("capex"),rev_ttm)
     f["asset_turnover"]=_sd(rev_ttm,assets)
 
@@ -157,6 +158,8 @@ def compute_risk_features(merged, price_closes=None, market_cap=None, beta=None)
         f["debt_funded_buyback_flag"]=1.0 if (f["leverage_trend"]>0.02 and bb>0) else 0.0
 
     if f.get("debt_to_assets") is not None: f["rate_sensitivity"]=f["debt_to_assets"]
-    if f.get("earnings_volatility") is not None: f["cyclicality_proxy"]=f["earnings_volatility"]
+    # cyclicality_proxy was a copy of earnings_volatility, already scored
+    # under Earnings Quality. Cyclicality is not the same thing as earnings
+    # variability, so asserting it from that number was wrong twice over.
 
     return {k:v for k,v in f.items() if v is not None}

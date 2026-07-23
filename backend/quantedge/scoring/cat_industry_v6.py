@@ -48,8 +48,6 @@ CATEGORIES = {
  ]),
  "rs_leadership": ("RS Leadership", 0.85, [
    _s("is_leader","Sector leader","is_sector_leader",0.30,0,1,evidence="outperforming sector"),
-   _s("rs_mag","RS magnitude","rs_magnitude",0.25,0.02,0.10,evidence="size of outperformance"),
-   _s("lead_rank","Leadership rank","leadership_rank",0.25,0.5,0.85,evidence="momentum percentile in sector"),
    _s("beta_sector","Beta to sector","beta_to_sector",0.20,1.3,0.95,hib=False,evidence="sensitivity to sector moves"),
  ]),
  "sector_risk": ("Sector Risk & Cyclicality", 0.30, [
@@ -61,7 +59,6 @@ CATEGORIES = {
  ]),
  "maturity": ("Maturity & Lifecycle", 0.10, [
    _s("years_public","Years public","years_public",0.40,2,25,evidence="time since IPO"),
-   _s("cap_eff","Capital efficiency","capital_efficiency",0.35,2,20,evidence="market cap per employee ($M)"),
    _s("mcap_emp","Mcap per employee","mcap_per_employee_m",0.25,2,20,evidence="scale efficiency"),
  ]),
  "sector_valuation": ("Sector Valuation Context", 0.50, [
@@ -75,7 +72,6 @@ CATEGORIES = {
  "sector_flows": ("Sector Flows", 0.20, [
    _s("sec_mom_1m","Sector momentum (1m)","sector_momentum_1m",0.40,-0.03,0.05,evidence="recent sector direction"),
    _s("sec_accel","Sector acceleration","sector_acceleration",0.35,-0.03,0.03,evidence="sector momentum accelerating"),
-   _s("sec_rotation","Sector rotation","sector_vs_spy_3m",0.25,-0.05,0.05,evidence="flows into/out of sector"),
  ]),
  # "Geographic & Structural" contained no geographic data: its only two signals
  # were capital_efficiency and size_tier, already scored under Maturity and

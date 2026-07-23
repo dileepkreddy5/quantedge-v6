@@ -11,7 +11,7 @@ CATEGORIES = {
  "block_trade":("Block-Trade Activity",0.35,[
    _s("trade_size","Avg trade size trend","avg_trade_size_trend",0.35,0.0,0.2,evidence="institutional footprint (rising size)"),
    _s("block_freq","Block-trade frequency","block_trade_frequency",0.35,0.1,0.4,evidence="large-trade days"),
-   _s("inst_foot","Institutional footprint","institutional_footprint",0.30,0.0,0.25,evidence="recent vs baseline trade size")]),
+   ]),
  "accumulation":("Accumulation/Distribution",0.35,[
    _s("accum20","20-day accumulation","accumulation_20d",0.45,0.5,0.6,evidence="up vs down volume"),
    _s("dollar_flow","Dollar-flow momentum","dollar_flow_momentum",0.55,0.0,0.2,evidence="dollar-volume acceleration")]),
