@@ -27,8 +27,7 @@ CATEGORIES = {
    _s("risk_on_corr","Risk-on correlation","risk_on_correlation",0.30,0.7,0.3,hib=False,evidence="credit-spread sensitivity"),
    _s("beta_stability","Beta stability","beta_stability",0.30,0.5,0.85,evidence="consistent market exposure")]),
  "commodity":("Commodity Exposure",0.30,[
-   _s("oil_beta","Oil beta","oil_beta",0.50,0.5,-0.1,hib=False,evidence="oil-price sensitivity"),
-   _s("gold_beta2","Gold beta","gold_beta",0.50,-0.2,0.2,evidence="commodity correlation")]),
+   _s("oil_beta","Oil beta","oil_beta",0.50,0.5,-0.1,hib=False,evidence="oil-price sensitivity")]),
  "factor_exposure":("Factor Exposure",0.30,[
    _s("value_tilt","Value tilt","value_tilt",0.35,-0.2,0.5,evidence="value-factor loading"),
    _s("momentum_tilt","Momentum tilt","momentum_tilt",0.35,0.0,0.5,evidence="momentum-factor loading"),

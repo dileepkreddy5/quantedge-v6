@@ -26,7 +26,6 @@ CATEGORIES = {
  "smart_money":("Smart Money Signals",0.55,[
    _s("smart_buy","Smart money buying","smart_money_buying",0.30,0,1,evidence="insider open-market buys"),
    _s("officer_conv","Officer conviction","officer_conviction",0.30,0,1,evidence="net officer buying"),
-   _s("inst_int2","Institutional interest","institutional_interest",0.20,0.2,0.8,evidence="major holder breadth"),
    _s("buyback_int","Buyback intensity","buyback_intensity",0.20,0.005,0.03,evidence="buybacks / mcap")]),
  "float_liquidity":("Float & Liquidity",0.40,[
    _s("float_liq","Float liquidity","float_liquidity",0.35,0.3,0.8,evidence="volume vs shares"),

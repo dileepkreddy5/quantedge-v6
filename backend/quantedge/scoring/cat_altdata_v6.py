@@ -24,15 +24,12 @@ CATEGORIES = {
    _s("vol_attention","Volatility attention","volatility_attention",0.25,0.03,0.01,hib=False,evidence="volatility-as-attention proxy")]),
  "attention_proxy":("Attention & Retail Flow",0.40,[
    _s("txn_surge","Transaction surge","txn_count_surge",0.40,0.0,0.3,evidence="trade-count spike (retail attention)"),
-   _s("dollar_vol","Dollar volume trend","dollar_volume_trend",0.35,0.0,0.2,evidence="liquidity/interest trend"),
-   _s("vol_attn2","Volatility attention","volatility_attention",0.25,0.03,0.015,hib=False,evidence="attention via volatility")]),
+   _s("dollar_vol","Dollar volume trend","dollar_volume_trend",0.35,0.0,0.2,evidence="liquidity/interest trend")]),
  "smart_flow":("Smart-Money Flow",0.35,[
    _s("insider_vel","Insider filing velocity","insider_filing_velocity",0.30,5,30,evidence="Form 4 filing frequency"),
-   _s("insider_buy","Insider buy signal","insider_buy_signal",0.35,0.15,0.5,evidence="insider buy conviction"),
-   _s("accum2","Accumulation","accumulation_ratio",0.35,0.5,0.6,evidence="net accumulation")]),
+   _s("insider_buy","Insider buy signal","insider_buy_signal",0.35,0.15,0.5,evidence="insider buy conviction")]),
  "liquidity_flow":("Liquidity & Flow",0.30,[
    _s("amihud","Amihud illiquidity","amihud_illiquidity",0.40,0.02,0.001,hib=False,evidence="price impact per $ volume (lower=liquid)"),
-   _s("dollar_vol2","Dollar volume trend","dollar_volume_trend",0.30,0.0,0.2,evidence="flow trend"),
    _s("rel_flow","Relative flow vs peers","relative_flow_vs_peers",0.30,0.0,0.05,evidence="momentum vs sector")]),
  "alt_signals_unavailable":("Options & Short Flow",0.30,[
    _s("options_flow","Options flow","options_flow",0.0,0.5,0.8,status="needs_source",evidence="options chain 403 on data tier"),

@@ -22,10 +22,8 @@ CATEGORIES = {
    _s("insider_vel","Insider flow velocity","insider_flow_velocity",0.35,5,30,evidence="Form 4 filing frequency"),
    _s("insider_net","Insider net flow","insider_net_flow",0.40,0.15,0.5,evidence="insider buy conviction"),
    _s("insider_cluster","Insider cluster flow","insider_cluster_flow",0.25,0,1,evidence="3+ insiders buying")]),
- "smart_footprint":("Smart-Money Footprint",0.15,[
-   _s("mfi2","Money-flow strength","money_flow_index",0.40,0.5,0.65,evidence="composite buying pressure"),
-   _s("accum2","Net accumulation","accumulation_20d",0.35,0.5,0.6,evidence="volume accumulation"),
-   _s("foot2","Trade-size footprint","institutional_footprint",0.25,0.0,0.2,evidence="block-trade presence")]),
+ # "Smart-Money Footprint" held only foot2, a second entry on
+ # institutional_footprint already scored elsewhere. Category removed.
 }
 IFLOW_INTELLIGENCE={"label":"Institutional Flow","weight":2.0,"categories":CATEGORIES}
 
