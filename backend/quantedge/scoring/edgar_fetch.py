@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio, datetime as dt
 from typing import Dict, List, Optional
 import httpx
+from loguru import logger
 from quantedge.scoring.edgar_xbrl import (
     SEC_BASE, UA, CONCEPTS, parse_flow_concept, parse_stock_concept)
 
@@ -18,15 +19,44 @@ STOCK = {"receivables","goodwill","intangibles","operating_lease_liab",
          "long_term_debt_edgar"}
 
 async def _ticker_to_cik(ticker: str, client: httpx.AsyncClient) -> Optional[int]:
+    """Resolve a ticker to its SEC CIK.
+
+    This map is a static ~10k-entry file that changes weekly, but it was fetched
+    on every cache miss. Under load the SEC returns 429 here, _ticker_to_cik
+    returns None, and every concept call downstream fails — so EVERY
+    EDGAR-sourced field on EVERY tab goes blank at once, with no error surfaced.
+    Cache it on disk and log the throttle loudly rather than returning None into
+    a pipeline that treats missing data as an ordinary absence.
+    """
     t = ticker.upper().strip()
     if t in _CIK_CACHE:
         return _CIK_CACHE[t]
+    import json as _json, os as _os, time as _time
+    _cache_path = "/app/data/sec_ticker_map.json"
+    try:
+        if _os.path.exists(_cache_path) and _time.time() - _os.path.getmtime(_cache_path) < 7*86400:
+            with open(_cache_path) as fh:
+                for k, v in _json.load(fh).items():
+                    _CIK_CACHE[k] = v
+            if t in _CIK_CACHE:
+                return _CIK_CACHE[t]
+    except Exception as e:
+        logger.warning(f"sec ticker map cache unreadable: {e}")
     r = await client.get("https://www.sec.gov/files/company_tickers.json",
                          headers={"User-Agent": UA}, timeout=30)
     if r.status_code != 200:
+        logger.error(
+            f"SEC ticker map returned HTTP {r.status_code} — CIK lookup for {t} "
+            f"failed, so every EDGAR-sourced field will be empty for this request")
         return None
     for row in r.json().values():
         _CIK_CACHE[row["ticker"].upper()] = int(row["cik_str"])
+    try:
+        _os.makedirs(_os.path.dirname(_cache_path), exist_ok=True)
+        with open(_cache_path, "w") as fh:
+            _json.dump(_CIK_CACHE, fh)
+    except Exception as e:
+        logger.warning(f"could not persist sec ticker map: {e}")
     return _CIK_CACHE.get(t)
 
 async def _fetch_concept(cik: int, tags: List[str], client: httpx.AsyncClient) -> List[dict]:
