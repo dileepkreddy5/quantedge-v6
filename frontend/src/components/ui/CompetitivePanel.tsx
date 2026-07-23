@@ -6,8 +6,8 @@ interface Cat { id:string; label:string; weight:number; score:number|null; n_sig
 interface CData { ticker:string; available:boolean; score:number|null; competitive_rating:string; confidence:number;
   coverage:{scored:number;total:number}; bucket:string; peer_count:number; tree:{categories:Cat[]}; key_metrics:Record<string,number|null>; reason?:string; }
 
-const heat=(s:number|null)=>s==null?'#2a2a2a':s>=75?'#0f6e56':s>=58?'#1d9e75':s>=42?'#8a7519':s>=25?'#a35a1d':'#7a2320';
-const ratingColor=(r:string)=>r==='Dominant'?'#0f9d6e':r==='Strong'?'#1d9e75':r==='Competitive'?'#c9a227':r==='Challenged'?'#c0705a':'#7a2320';
+const heat=(s:number|null)=>s==null?'var(--border-2)':s>=70?'var(--gold)':s>=50?'var(--caramel)':s>=30?'#c9762f':'var(--bear)';
+const ratingColor=(r:string)=>r==='Dominant'?'var(--gold)':r==='Strong'?'var(--gold)':r==='Competitive'?'var(--caramel)':r==='Challenged'?'#c9762f':'var(--bear)';
 const fmt=(id:string,v:number|null):string=>{
   if(v==null) return '—';
   if(id.includes('pctile')||id.includes('rank')||id.includes('_pct')||id.includes('proxy')||id.includes('premium')||id.includes('discount')||id.includes('cheap')||id.includes('dominance')||id.includes('durability')||id.includes('persistence')||id.includes('excess')||id.includes('efficiency')) { if(Math.abs(v)<=1.01) return (v*100).toFixed(0)+'th'; }
@@ -19,29 +19,8 @@ const fmt=(id:string,v:number|null):string=>{
   return typeof v==='number'?v.toFixed(2):v;
 };
 
-const RadialBars=({metrics}:{metrics:Record<string,number|null>})=>{
-  const bars=[['Scale',metrics.scale_rank],['Margin',metrics.net_margin_pctile],['ROIC',metrics.roic_pctile],['Growth',metrics.growth_pctile]];
-  return (
-    <div style={{display:'flex',gap:16,justifyContent:'center',padding:'8px 0',flexWrap:'wrap'}}>
-      {bars.map(([label,v])=>{
-        const val=(v as number)||0; const pct=Math.round(val*100);
-        const col=val>=0.7?'#0f9d6e':val>=0.4?'#c9a227':'#c0705a';
-        const circ=2*Math.PI*32;
-        return (
-          <div key={label as string} style={{textAlign:'center'}}>
-            <svg width="80" height="80" viewBox="0 0 80 80">
-              <circle cx="40" cy="40" r="32" fill="none" stroke="#242424" strokeWidth="7"/>
-              <circle cx="40" cy="40" r="32" fill="none" stroke={col} strokeWidth="7" strokeLinecap="round"
-                strokeDasharray={`${circ*val} ${circ}`} transform="rotate(-90 40 40)"/>
-              <text x="40" y="45" textAnchor="middle" fontSize="17" fontWeight="700" fill={col}>{pct}</text>
-            </svg>
-            <div style={{fontSize:10,color:'#9d8b7a',marginTop:2}}>{label as string}</div>
-          </div>
-        );
-      })}
-    </div>
-  );
-};
+// RadialBars removed — four dials showed a 100th percentile for being the
+// largest of eight peers. The profile chart replaces it.
 
 export default function CompetitivePanel({ ticker }:{ ticker:string }){
   const [d,setD]=useState<CData|null>(null);
@@ -72,46 +51,71 @@ export default function CompetitivePanel({ ticker }:{ ticker:string }){
         </div>
       </div>
 
-      <div style={{background:'#141414',border:'1px solid #2a2a2a',borderRadius:12,padding:'10px',marginBottom:14}}>
-        <div style={{fontSize:12,color:'#9d8b7a',letterSpacing:1,marginBottom:4,textAlign:'center'}}>COMPETITIVE PERCENTILE vs SECTOR</div>
-        <RadialBars metrics={km}/>
-      </div>
-
-      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(140px,1fr))',gap:8,marginBottom:14}}>
-        {[['Market Share',km.market_share_proxy!=null?(km.market_share_proxy*100).toFixed(1)+'%':'—'],
-          ['Margin Advantage',km.margin_advantage!=null?(km.margin_advantage>0?'+':'')+(km.margin_advantage*100).toFixed(1)+'pp':'—'],
-          ['Moat Spread',km.economic_moat_spread!=null?(km.economic_moat_spread>0?'+':'')+(km.economic_moat_spread*100).toFixed(1)+'%':'—'],
-          ['Growth Edge',km.growth_advantage!=null?(km.growth_advantage>0?'+':'')+(km.growth_advantage*100).toFixed(1)+'pp':'—'],
-          ['Gross Margin',km.gross_margin_level!=null?(km.gross_margin_level*100).toFixed(0)+'%':'—'],
-          ['Valuation Rank',km.pe_discount_vs_peers!=null?(km.pe_discount_vs_peers*100).toFixed(0)+'th':'—']].map(([k,v])=>(
-          <div key={k as string} style={{background:'#181818',border:'1px solid #2a2a2a',borderRadius:8,padding:'8px 10px'}}>
-            <div style={{fontSize:9,color:'#9d8b7a'}}>{k}</div>
-            <div style={{fontSize:15,fontWeight:600,color:'#daa520'}}>{v}</div>
+      {(() => {
+        // Eight category scores on one axis beats eight collapsed cards: the
+        // shape is the competitive position, and the distance between the best
+        // and worst factor is the finding. Four radial dials showed a 100th
+        // percentile for being the largest of eight peers, which says least.
+        const cats=[...d.tree.categories].filter(c=>c.score!=null).sort((a,b)=>(b.score!)-(a.score!));
+        if(cats.length<3) return null;
+        const best=cats[0], worst=cats[cats.length-1];
+        const W=1000,H=34*cats.length+34,L=210,R=54;
+        const x=(v:number)=>L+(v/100)*(W-L-R);
+        return (
+          <div style={{background:'var(--surface-2)',border:'1px solid var(--border-1)',borderRadius:6,padding:'16px 18px',marginBottom:14}}>
+            <div style={{fontFamily:'var(--font-mono)',fontSize:9,letterSpacing:2,color:'var(--gold)',marginBottom:4}}>COMPETITIVE PROFILE</div>
+            <div style={{fontFamily:'var(--font-body)',fontSize:11,color:'var(--cocoa-dust)',marginBottom:12}}>
+              Each dimension scored against {d.peer_count} {d.bucket} peers. The centre line is the peer median.
+            </div>
+            <svg viewBox={`0 0 ${W} ${H}`} style={{width:'100%',display:'block'}}>
+              <line x1={x(50)} y1={14} x2={x(50)} y2={H-16} stroke="var(--border-2)" strokeDasharray="3 4"/>
+              <text x={x(50)} y={10} fill="var(--cocoa)" fontSize="9" fontFamily="monospace" textAnchor="middle">peer median</text>
+              {cats.map((c,i)=>{
+                const y=30+i*34, sc=c.score as number;
+                return (
+                  <g key={c.id}>
+                    <text x={L-12} y={y+4} fill="var(--latte)" fontSize="12" fontFamily="var(--font-body)" textAnchor="end">{c.label}</text>
+                    <line x1={L} y1={y} x2={W-R} y2={y} stroke="var(--surface-3)" strokeWidth={6} strokeLinecap="round"/>
+                    <line x1={x(Math.min(50,sc))} y1={y} x2={x(Math.max(50,sc))} y2={y}
+                      stroke={heat(sc)} strokeWidth={6} strokeLinecap="round" opacity={0.55}/>
+                    <circle cx={x(sc)} cy={y} r={6} fill={heat(sc)}/>
+                    <text x={W-R+10} y={y+4} fill={heat(sc)} fontSize="13" fontFamily="monospace" fontWeight="700">{sc.toFixed(0)}</text>
+                  </g>
+                );
+              })}
+            </svg>
+            <div style={{fontFamily:'var(--font-body)',fontSize:12,color:'var(--latte)',marginTop:10,lineHeight:1.55}}>
+              Strongest on <b style={{color:'var(--gold)'}}>{best.label}</b> at {best.score!.toFixed(0)},
+              weakest on <b style={{color:heat(worst.score)}}>{worst.label}</b> at {worst.score!.toFixed(0)}
+              {(best.score!-worst.score!)>45
+                ? ` — a ${(best.score!-worst.score!).toFixed(0)}-point spread, so the composite of ${d.score?.toFixed(0)} averages over a real disagreement rather than describing a consistent position.`
+                : '.'}
+            </div>
           </div>
-        ))}
-      </div>
+        );
+      })()}
 
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-        <span style={{fontSize:12,color:'#9d8b7a',letterSpacing:1}}>11 DIMENSIONS · {d.tree.categories.reduce((a,c)=>a+c.n_signals,0)} SIGNALS</span>
+        <span style={{fontFamily:'var(--font-mono)',fontSize:9,letterSpacing:2,color:'var(--gold)'}}>{d.tree.categories.length} DIMENSIONS \u00b7 {d.tree.categories.reduce((a,c)=>a+c.n_signals,0)} SIGNALS</span>
         <button onClick={()=>{const v=!allOpen;setAllOpen(v);const m:Record<string,boolean>={};d.tree.categories.forEach(c=>m[c.id]=v);setExpanded(m);}}
-          style={{background:'#181818',border:'1px solid #2a2a2a',color:'#9d8b7a',borderRadius:8,padding:'5px 12px',fontSize:11,cursor:'pointer'}}>{allOpen?'Collapse all':'Expand all'}</button>
+          style={{background:'transparent',border:'1px solid var(--border-1)',color:'var(--cocoa-dust)',borderRadius:3,padding:'4px 10px',fontFamily:'var(--font-mono)',fontSize:10,cursor:'pointer'}}>{allOpen?'Collapse all':'Expand all'}</button>
       </div>
       <div style={{display:'flex',flexDirection:'column',gap:8}}>
         {d.tree.categories.map(cat=>{const open=expanded[cat.id];return (
-          <div key={cat.id} style={{background:'#141414',border:'1px solid #2a2a2a',borderRadius:10,overflow:'hidden'}}>
+          <div key={cat.id} style={{background:'var(--surface-2)',border:'1px solid var(--border-1)',borderRadius:4,overflow:'hidden'}}>
             <div onClick={()=>setExpanded(p=>({...p,[cat.id]:!p[cat.id]}))}
-              style={{display:'flex',alignItems:'center',gap:12,padding:'10px 14px',cursor:'pointer',borderLeft:`4px solid ${heat(cat.score)}`}}>
+              style={{display:'flex',alignItems:'center',gap:12,padding:'10px 14px',cursor:'pointer',borderLeft:`3px solid ${heat(cat.score)}`}}>
               <span style={{fontSize:11,color:'#7a7266',width:12}}>{open?'▾':'▸'}</span>
-              <span style={{fontSize:13,fontWeight:600,color:'#e8ddd0',flex:1}}>{cat.label}</span>
+              <span style={{fontSize:13,fontWeight:600,fontFamily:'var(--font-body)',color:'var(--latte)',flex:1}}>{cat.label}</span>
               <span style={{fontSize:10,color:'#7a7266'}}>wt {cat.weight.toFixed(2)} · {cat.n_scored}/{cat.n_signals}</span>
               <span style={{fontSize:18,fontWeight:700,color:heat(cat.score),width:36,textAlign:'right'}}>{cat.score?.toFixed(0)??'—'}</span>
             </div>
             {open && (<div style={{padding:'4px 14px 12px 30px'}}>
               {cat.signals.map(s=>{const pending=s.status==='needs_source'||s.score==null;return (
-                <div key={s.id} title={s.evidence} style={{display:'flex',alignItems:'center',gap:10,padding:'5px 0',borderBottom:'1px solid #1e1e1e',opacity:pending?0.5:1}}>
-                  <span style={{fontSize:12,color:'#cdbfae',flex:1}}>{s.label}</span>
+                <div key={s.id} title={s.evidence} style={{display:'flex',alignItems:'center',gap:10,padding:'5px 0',borderBottom:'1px solid var(--border-1)',opacity:pending?0.5:1}}>
+                  <span style={{fontSize:12,fontFamily:'var(--font-body)',color:'var(--latte)',flex:1}}>{s.label}</span>
                   <span style={{fontSize:12,color:'#9d8b7a',width:70,textAlign:'right'}}>{pending?'—':fmt(s.id,s.raw_value)}</span>
-                  <div style={{width:80,height:6,background:'#242424',borderRadius:3,overflow:'hidden'}}>{!pending && <div style={{height:'100%',width:`${s.score}%`,background:heat(s.score)}}/>}</div>
+                  <div style={{width:80,height:6,background:'var(--surface-3)',borderRadius:2,overflow:'hidden'}}>{!pending && <div style={{height:'100%',width:`${s.score}%`,background:heat(s.score)}}/>}</div>
                   <span style={{fontSize:11,fontWeight:600,color:pending?'#555':heat(s.score),width:26,textAlign:'right'}}>{pending?'—':s.score!.toFixed(0)}</span>
                 </div>);})}
             </div>)}
