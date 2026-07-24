@@ -28,6 +28,18 @@ def compute_risk_features(merged, price_closes=None, market_cap=None, beta=None)
         vals=[_f(x.get(k)) for x in merged]
         vals=[v for v in vals if v is not None]
         return sum(vals[-4:]) if len(vals)>=4 else (sum(vals) if vals else None)
+
+    def ttm_prior(k):
+        """The four quarters before the current TTM window.
+
+        A fixed [-8:-4] slice breaks whenever a null lands inside it — Coca-Cola's
+        latest quarter is a stub and NVIDIA has a gap four quarters back — so the
+        year-ago comparison silently vanished for exactly the companies where the
+        window is ragged. Drop nulls first, as ttm() does, then step back four.
+        """
+        vals=[_f(x.get(k)) for x in merged]
+        vals=[v for v in vals if v is not None]
+        return sum(vals[-8:-4]) if len(vals)>=8 else None
     assets=cur("assets"); liab=cur("liabilities"); eq=cur("equity")
     ca=cur("current_assets"); cl=cur("current_liabilities")
     ni_ttm=ttm("net_income"); rev_ttm=ttm("revenue"); ebit_ttm=ttm("operating_income")
@@ -97,30 +109,26 @@ def compute_risk_features(merged, price_closes=None, market_cap=None, beta=None)
     # centres on 1.0, and since the scale treats anything under 1.0 as pristine,
     # the error read as perfect accounting quality.
     rec = cur("receivables")
-    rev_ttm_y = None
-    _rv = [_f(x.get("revenue")) for x in merged[-8:-4]]
-    _rv = [v for v in _rv if v is not None]
-    if len(_rv) == 4:
-        rev_ttm_y = sum(_rv)
+    rev_ttm_y = ttm_prior("revenue")
     rec_y = _f(qy.get("receivables"))
     if rec and rev_ttm and rec_y and rev_ttm_y and rev_ttm_y > 0:
         dsri = (rec / rev_ttm) / (rec_y / rev_ttm_y)
         f["beneish_dsri"] = round(dsri, 3) if dsri else None
     # GMI has the same span mismatch DSRI had: gross profit over a single
     # year-ago quarter against gross profit over TTM. Both sides now use TTM.
-    gp = cur("gross_profit")
-    _gp = [_f(x.get("gross_profit")) for x in merged[-8:-4]]
-    _gp = [v for v in _gp if v is not None]
-    gp_ttm_y = sum(_gp) if len(_gp) == 4 else None
-    if gp and rev_ttm and gp_ttm_y and rev_ttm_y:
-        gmi = (gp_ttm_y / rev_ttm_y) / (gp / rev_ttm)
+    # cur() returns the latest QUARTER while rev_ttm covers four, so this divided
+    # one quarter's gross profit by a year of revenue and reported a margin a
+    # quarter of its true size — inverted, that gave Coca-Cola a GMI of 3.6 where
+    # the index centres on 1.0. Both sides now TTM.
+    gp_ttm = ttm("gross_profit")
+    gp_ttm_y = ttm_prior("gross_profit")
+    if gp_ttm and rev_ttm and gp_ttm_y and rev_ttm_y:
+        gmi = (gp_ttm_y / rev_ttm_y) / (gp_ttm / rev_ttm)
         f["beneish_gmi"] = round(gmi, 3) if gmi else None
     # Same span mismatch a third time: TTM revenue against a single year-ago
     # quarter reports roughly 300% growth for a flat business, and the same for
     # operating cash flow, so the divergence between them was noise.
-    _ocf = [_f(x.get("operating_cash_flow")) for x in merged[-8:-4]]
-    _ocf = [v for v in _ocf if v is not None]
-    ocf_ttm_y = sum(_ocf) if len(_ocf) == 4 else None
+    ocf_ttm_y = ttm_prior("operating_cash_flow")
     if rev_ttm and rev_ttm_y and ocf_ttm is not None and ocf_ttm_y:
         rev_g = rev_ttm / rev_ttm_y - 1
         ocf_g = (ocf_ttm / ocf_ttm_y - 1) if ocf_ttm_y > 0 else 0

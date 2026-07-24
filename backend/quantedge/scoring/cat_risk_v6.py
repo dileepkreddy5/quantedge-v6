@@ -33,6 +33,9 @@ CATEGORIES = {
    _s("cash_conversion","Cash conversion","cash_conversion",0.22,0.7,1.2,evidence="OCF/NI; low=earnings not cash-backed"),
    _s("earn_vol","Earnings volatility","earnings_volatility",0.20,0.8,0.2,hib=False,evidence="quarterly NI variability"),
    _s("beneish_dsri","Beneish DSRI","beneish_dsri",0.16,1.5,1.0,hib=False,evidence="receivables index; >1.4 manipulation flag"),
+   # beneish_gmi was computed and then discarded — no catalog entry, so the
+   # margin-deterioration half of the Beneish screen never reached a score.
+   _s("beneish_gmi","Beneish GMI","beneish_gmi",0.12,1.2,1.0,hib=False,evidence="gross margin index; >1.2 means margins deteriorating year on year"),
    _s("rev_ocf_div","Revenue-OCF divergence","revenue_ocf_divergence",0.17,0.2,-0.05,hib=False,evidence="revenue up but cash flow down"),
  ]),
  "tail_risk": ("Market & Tail Risk", 0.70, [
