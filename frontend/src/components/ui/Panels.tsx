@@ -81,10 +81,10 @@ export function SignalPanel({ data }: { data: any }) {
     { label: 'ML Ensemble', value: data.predicted_return_1y != null ? (data.predicted_return_1y > 0 ? 'BULLISH' : 'BEARISH') : 'NEUTRAL', color: (data.predicted_return_1y || 0) > 0 ? 'var(--bull)' : 'var(--bear)' },
     { label: 'HMM Regime', value: (data.current_regime || 'UNKNOWN').replace(/_/g, ' '), color: (data.current_regime || '').includes('BULL') ? 'var(--bull)' : 'var(--bear)' },
     { label: 'GARCH Vol', value: data.garch?.vol_regime || '—', color: 'var(--neutral)' },
-    { label: 'Kalman Trend', value: data.kalman?.signal_interpretation?.replace(/_/g, ' ') || '—', color: '#06b6d4' },
+    { label: 'Kalman Trend', value: data.kalman?.signal_interpretation?.replace(/_/g, ' ') || '—', color: 'var(--caramel)' },
     { label: 'NLP Sentiment', value: data.sentiment?.label || '—', color: (data.sentiment?.composite || 0) > 0 ? 'var(--bull)' : 'var(--bear)' },
     { label: 'Options GEX', value: data.options?.gex?.gex_regime || '—', color: data.options?.gex?.gex_regime === 'POSITIVE' ? 'var(--bull)' : 'var(--bear)' },
-    { label: 'Hurst Exponent', value: (data.hurst_exponent || 0.5) > 0.55 ? 'TRENDING' : 'MEAN-REV', color: (data.hurst_exponent || 0.5) > 0.55 ? 'var(--bull)' : '#8b5cf6' },
+    { label: 'Hurst Exponent', value: (data.hurst_exponent || 0.5) > 0.55 ? 'TRENDING' : 'MEAN-REV', color: (data.hurst_exponent || 0.5) > 0.55 ? 'var(--bull)' : 'var(--caramel)' },
   ];
 
   return (
@@ -101,7 +101,7 @@ export function SignalPanel({ data }: { data: any }) {
         {/* Score gauge */}
         <div style={{ position:'relative', width:120, height:60, margin:'0 auto' }}>
           <svg viewBox="0 0 120 60" style={{ width:'100%' }}>
-            <path d="M10,55 A50,50 0 0,1 110,55" fill="none" stroke="#1a0f0a" strokeWidth="8" />
+            <path d="M10,55 A50,50 0 0,1 110,55" fill="none" stroke="var(--surface-3)" strokeWidth="8" />
             <path d="M10,55 A50,50 0 0,1 110,55" fill="none"
               stroke={signalColor} strokeWidth="8" strokeDasharray={`${(score / 100) * 157} 157`}
               style={{ transition:'stroke-dasharray 1.5s ease' }}
@@ -287,10 +287,10 @@ export function MLModelsPanel({ data }: { data: any }) {
               const indep = h.n_independent_val_dates ?? h.indep_dates ?? null;
               const reliableFlag = h.reliable === true || (indep != null && indep >= 5);
               const strong = reliableFlag && icNum != null && icNum >= 0.05;
-              const badgeCol = strong ? 'var(--bull)' : (reliableFlag && icNum != null && icNum > 0.02) ? '#eab308' : 'var(--cocoa)';
+              const badgeCol = strong ? 'var(--bull)' : (reliableFlag && icNum != null && icNum > 0.02) ? 'var(--caramel)' : 'var(--cocoa)';
               const badgeTxt = strong ? 'VALIDATED' : (reliableFlag && icNum != null && icNum > 0.02) ? 'MODERATE' : (reliableFlag ? 'NO EDGE' : 'UNVALIDATED');
               return (
-                <div key={hk} style={{ border:'1px solid #3a2f28', borderRadius:8, padding:'10px 8px',
+                <div key={hk} style={{ border:'1px solid var(--border-2)', borderRadius:8, padding:'10px 8px',
                   background:'var(--surface-1)', textAlign:'center', opacity: reliableFlag ? 1 : 0.45 }}>
                   <div style={{ fontFamily:'var(--font-body)', fontSize:10, color:'var(--cocoa)', letterSpacing:1, marginBottom:6 }}>{h.label}</div>
                   {/* An unvalidated horizon rests on a single independent window. Rendering
@@ -397,7 +397,7 @@ export function MLModelsPanel({ data }: { data: any }) {
                 <div style={{ fontFamily:'var(--font-mono)', fontSize:12, color:dcol, textAlign:'center', paddingTop:1 }}>{arrow}</div>
                 <div>
                   <div style={{ fontFamily:'var(--font-body)', fontSize:11, color:'var(--latte)', lineHeight:1.45 }}>{m.what}</div>
-                  <div style={{ fontFamily:'var(--font-body)', fontSize:10, color:'#7a6b5d', lineHeight:1.45, marginTop:2 }}>
+                  <div style={{ fontFamily:'var(--font-body)', fontSize:10, color:'var(--cocoa)', lineHeight:1.45, marginTop:2 }}>
                     <span style={{ color:'var(--cocoa)' }}>Why it helps:</span> {m.why}
                   </div>
                 </div>
@@ -409,7 +409,7 @@ export function MLModelsPanel({ data }: { data: any }) {
 
       <Card style={{ gridColumn:'span 3' }}>
         <SectionTitle>PER-TICKER ENSEMBLE — MODEL DIAGNOSTICS</SectionTitle>
-        <div style={{ fontFamily:'var(--font-body)', fontSize:11, color:'var(--cocoa-dust)', lineHeight:1.5, marginBottom:12, padding:'8px 10px', background:'var(--surface-1)', borderRadius:6, borderLeft:'2px solid #daa520' }}>
+        <div style={{ fontFamily:'var(--font-body)', fontSize:11, color:'var(--cocoa-dust)', lineHeight:1.5, marginBottom:12, padding:'8px 10px', background:'var(--surface-1)', borderRadius:6, borderLeft:'2px solid var(--gold)' }}>
           A separate ensemble trains on <b style={{color:'var(--latte)'}}>this ticker alone</b> at request time. With only ~80
           usable samples per stock it is too data-starved to forecast reliably, so its point estimates are not shown —
           the cross-sectional panel above is the forecast of record. What remains useful from it is diagnostic:
@@ -448,14 +448,14 @@ export function MLModelsPanel({ data }: { data: any }) {
             <div>
               <div style={{ position:'relative', height:38, marginBottom:10 }}>
                 <div style={{ position:'absolute', top:16, left:`${posOf(vals[0])}%`, width:`${posOf(vals[vals.length-1])-posOf(vals[0])}%`,
-                  height:6, background:'linear-gradient(90deg,#ef444455,#8a756055,#22c55e55)', borderRadius:3 }} />
+                  height:6, background:'linear-gradient(90deg,color-mix(in srgb, var(--bear) 33%, transparent),color-mix(in srgb, var(--cocoa) 33%, transparent),color-mix(in srgb, var(--gold) 33%, transparent))', borderRadius:3 }} />
                 {qs.length >= 4 && (
                   <div style={{ position:'absolute', top:13, left:`${posOf(Number(quantile['q25_1m']))}%`,
                     width:`${posOf(Number(quantile['q75_1m']))-posOf(Number(quantile['q25_1m']))}%`,
-                    height:12, background:'#daa52033', border:'1px solid #daa52066', borderRadius:3 }} />
+                    height:12, background:'color-mix(in srgb, var(--gold) 20%, transparent)', border:'1px solid color-mix(in srgb, var(--gold) 40%, transparent)', borderRadius:3 }} />
                 )}
                 {zero != null && (
-                  <div style={{ position:'absolute', top:6, left:`${zero}%`, width:1, height:26, background:'#9d8b7a88' }} />
+                  <div style={{ position:'absolute', top:6, left:`${zero}%`, width:1, height:26, background:'color-mix(in srgb, var(--cocoa-dust) 53%, transparent)' }} />
                 )}
                 {qs.map(q => {
                   const v = Number(quantile[q.k]);
@@ -482,7 +482,7 @@ export function MLModelsPanel({ data }: { data: any }) {
                   );
                 })}
               </div>
-              <div style={{ fontFamily:'var(--font-body)', fontSize:10, color:'#7a6b5d', marginTop:12, lineHeight:1.5 }}>
+              <div style={{ fontFamily:'var(--font-body)', fontSize:10, color:'var(--cocoa)', marginTop:12, lineHeight:1.5 }}>
                 Eight in ten simulated outcomes fall between the P10 and P90 marks. The shaded box spans the middle 50%.
               </div>
             </div>
@@ -567,7 +567,7 @@ export function VolatilityPanel({ data }: { data: any }) {
         {stance && (
           <div style={{ fontFamily:'var(--font-body)', fontSize:12, color:'var(--latte)', lineHeight:1.6, marginBottom:14 }}>
             Volatility is <b style={{ color: stance.c }}>{stance.t.toLowerCase()}</b> — {stance.s}.
-            <span style={{ color:'#7a6b5d' }}> This is the GARCH model&apos;s conditional estimate, which weights recent
+            <span style={{ color:'var(--cocoa)' }}> This is the GARCH model&apos;s conditional estimate, which weights recent
             observations and mean-reverts. Simple realized volatility over the last 21 days appears below and will read
             higher during a turbulent stretch.</span>
           </div>
@@ -588,7 +588,7 @@ export function VolatilityPanel({ data }: { data: any }) {
             </div>
           ))}
         </div>
-        <div style={{ fontFamily:'var(--font-body)', fontSize:11, color:'var(--cocoa-dust)', lineHeight:1.6, padding:'10px 12px', background:'var(--surface-1)', borderRadius:6, borderLeft:'2px solid #daa520' }}>
+        <div style={{ fontFamily:'var(--font-body)', fontSize:11, color:'var(--cocoa-dust)', lineHeight:1.6, padding:'10px 12px', background:'var(--surface-1)', borderRadius:6, borderLeft:'2px solid var(--gold)' }}>
           <b style={{ color:'var(--latte)' }}>Downside asymmetry.</b>{' '}
           {gamma > 0
             ? <>The GJR term is positive (γ = {gamma.toFixed(3)}), confirming the leverage effect: a negative shock raises
@@ -627,7 +627,7 @@ export function VolatilityPanel({ data }: { data: any }) {
           const vs = estimators.map(e => e.v);
           const spread = Math.max(...vs) - Math.min(...vs);
           return (
-            <div style={{ fontFamily:'var(--font-body)', fontSize:10, color:'#7a6b5d', marginTop:12, paddingTop:10, borderTop:'1px solid rgba(212,149,108,0.12)', lineHeight:1.5 }}>
+            <div style={{ fontFamily:'var(--font-body)', fontSize:10, color:'var(--cocoa)', marginTop:12, paddingTop:10, borderTop:'1px solid rgba(212,149,108,0.12)', lineHeight:1.5 }}>
               Spread of {spread.toFixed(1)} points across estimators —{' '}
               {spread < 4 ? 'tight agreement, the volatility reading is well determined.'
                           : 'material disagreement, likely from overnight gaps or thin intraday liquidity.'}
@@ -657,7 +657,7 @@ export function VolatilityPanel({ data }: { data: any }) {
                 </div>
               ))}
             </div>
-            <div style={{ fontFamily:'var(--font-body)', fontSize:10, color:'#7a6b5d', marginBottom:18, lineHeight:1.5 }}>{em.note}</div>
+            <div style={{ fontFamily:'var(--font-body)', fontSize:10, color:'var(--cocoa)', marginBottom:18, lineHeight:1.5 }}>{em.note}</div>
 
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:18, marginBottom:18 }}>
               <div>
@@ -685,7 +685,7 @@ export function VolatilityPanel({ data }: { data: any }) {
                     <span style={{ fontFamily:'var(--font-mono)', fontSize:9.5, color:'var(--latte)', textAlign:'right' }}>{r.percentile}th</span>
                   </div>
                 ))}
-                <div style={{ fontFamily:'var(--font-body)', fontSize:9.5, color:'#7a6b5d', marginTop:6, lineHeight:1.4 }}>
+                <div style={{ fontFamily:'var(--font-body)', fontSize:9.5, color:'var(--cocoa)', marginTop:6, lineHeight:1.4 }}>
                   Percentile of current volatility within each lookback. Rising left-to-right means elevation is recent;
                   uniformly high means it has been sustained.
                 </div>
@@ -699,7 +699,7 @@ export function VolatilityPanel({ data }: { data: any }) {
               {(rh.segments||[]).map((s:any,i:number) => (
                 <div key={i} title={`${s.regime} · ${s.start} to ${s.end}`}
                   style={{ width:`${(s.days/totalDays)*100}%`, background:rgCol[s.regime], opacity:0.45,
-                    borderRight:'1px solid #1a0f0a', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                    borderRight:'1px solid var(--surface-3)', display:'flex', alignItems:'center', justifyContent:'center' }}>
                   {s.days/totalDays > 0.09 && (
                     <span style={{ fontFamily:'var(--font-mono)', fontSize:8, color:'var(--surface-1)', fontWeight:700 }}>{s.regime}</span>
                   )}
@@ -711,7 +711,7 @@ export function VolatilityPanel({ data }: { data: any }) {
               <span>low below {rh.thresholds.low_below}% · high above {rh.thresholds.high_above}%</span>
               <span>{rh.segments?.[rh.segments.length-1]?.end}</span>
             </div>
-            <div style={{ fontFamily:'var(--font-body)', fontSize:9.5, color:'#7a6b5d', marginTop:8, lineHeight:1.5 }}>{rh.note}</div>
+            <div style={{ fontFamily:'var(--font-body)', fontSize:9.5, color:'var(--cocoa)', marginTop:8, lineHeight:1.5 }}>{rh.note}</div>
           </Card>
         );
       })()}
@@ -767,7 +767,7 @@ export function VolatilityPanel({ data }: { data: any }) {
                     );
                   })}
                 </div>
-                <div style={{ fontFamily:'var(--font-body)', fontSize:9.5, color:'#7a6b5d', marginTop:8, lineHeight:1.5 }}>
+                <div style={{ fontFamily:'var(--font-body)', fontSize:9.5, color:'var(--cocoa)', marginTop:8, lineHeight:1.5 }}>
                   Left is the longest lookback. A rising staircase means buying participation has strengthened over time.
                   50% is neutral — above it, more volume traded on advancing days.
                 </div>
@@ -782,7 +782,7 @@ export function VolatilityPanel({ data }: { data: any }) {
                   <div style={{ fontFamily:'var(--font-body)', fontSize:10.5, color:'var(--cocoa-dust)', lineHeight:1.5, marginTop:4 }}>{fl.pv_note}</div>
                 </div>
                 {fl.exhaustion && (
-                  <div style={{ padding:'10px 12px', background:'var(--surface-1)', borderRadius:6, borderLeft:'2px solid #f59e0b', marginBottom:10 }}>
+                  <div style={{ padding:'10px 12px', background:'var(--surface-1)', borderRadius:6, borderLeft:'2px solid var(--caramel)', marginBottom:10 }}>
                     <div style={{ fontFamily:'var(--font-mono)', fontSize:11, color:'var(--neutral)', letterSpacing:1 }}>
                       {fl.exhaustion.type} EXHAUSTION · {fl.exhaustion.score}
                     </div>
@@ -848,9 +848,9 @@ export function VolatilityPanel({ data }: { data: any }) {
 
             <div style={{ position:'relative', height:42, marginBottom:8 }}>
               <div style={{ position:'absolute', top:18, left:0, right:0, height:6,
-                background:'linear-gradient(90deg,#ef444455,#8a756033,#22c55e55)', borderRadius:3 }} />
+                background:'linear-gradient(90deg,color-mix(in srgb, var(--bear) 33%, transparent),color-mix(in srgb, var(--cocoa) 20%, transparent),color-mix(in srgb, var(--gold) 33%, transparent))', borderRadius:3 }} />
               {lo <= 0 && hi >= 0 && (
-                <div style={{ position:'absolute', top:10, left:`${pos(0)}%`, width:1, height:22, background:'#9d8b7a88' }} />
+                <div style={{ position:'absolute', top:10, left:`${pos(0)}%`, width:1, height:22, background:'color-mix(in srgb, var(--cocoa-dust) 53%, transparent)' }} />
               )}
               {band.map(x => (
                 <div key={x.k} style={{ position:'absolute', left:`${pos(x.v)}%`, top: x.k==='p50'?8:13,
@@ -936,8 +936,8 @@ export function VolatilityPanel({ data }: { data: any }) {
             <div style={{ marginBottom:18 }}>
               <div style={{ position:'relative', height:30 }}>
                 <div style={{ position:'absolute', top:12, left:0, right:0, height:6,
-                  background:'linear-gradient(90deg,#22c55e44,#f59e0b44,#ef444444)', borderRadius:3 }} />
-                <div style={{ position:'absolute', top:6, left:`${posOf(vh.median)}%`, width:1, height:18, background:'#9d8b7a88' }} />
+                  background:'linear-gradient(90deg,color-mix(in srgb, var(--gold) 27%, transparent),color-mix(in srgb, var(--caramel) 27%, transparent),color-mix(in srgb, var(--bear) 27%, transparent))', borderRadius:3 }} />
+                <div style={{ position:'absolute', top:6, left:`${posOf(vh.median)}%`, width:1, height:18, background:'color-mix(in srgb, var(--cocoa-dust) 53%, transparent)' }} />
                 <div style={{ position:'absolute', top:3, left:`${posOf(vh.current)}%`, transform:'translateX(-50%)' }}>
                   <div style={{ width:3, height:24, background:'var(--gold)', borderRadius:1 }} />
                 </div>
@@ -968,7 +968,7 @@ export function VolatilityPanel({ data }: { data: any }) {
               })}
             </div>
 
-            <div style={{ fontFamily:'var(--font-body)', fontSize:10, color:'#7a6b5d', marginTop:12, lineHeight:1.5 }}>
+            <div style={{ fontFamily:'var(--font-body)', fontSize:10, color:'var(--cocoa)', marginTop:12, lineHeight:1.5 }}>
               Red means volatility has risen since that point, green that it has fallen. Rising volatility signals growing
               disagreement or uncertainty — it does not indicate direction, and spikes accompany panic selling as readily
               as aggressive buying. {vh.observations} daily observations available.
@@ -997,7 +997,7 @@ export function VolatilityPanel({ data }: { data: any }) {
               {pts.map(p => (
                 <div key={p.d} style={{ textAlign:'center' }}>
                   <div style={{ fontFamily:'var(--font-mono)', fontSize:12, color:'var(--latte)', fontWeight:600, marginBottom:5 }}>{p.v.toFixed(1)}%</div>
-                  <div style={{ height:Math.max(8, 12 + ((p.v-mn)/rng)*58), background:'linear-gradient(180deg,#daa52099,#daa52033)', borderRadius:'3px 3px 0 0' }} />
+                  <div style={{ height:Math.max(8, 12 + ((p.v-mn)/rng)*58), background:'linear-gradient(180deg,color-mix(in srgb, var(--gold) 60%, transparent),color-mix(in srgb, var(--gold) 20%, transparent))', borderRadius:'3px 3px 0 0' }} />
                   <div style={{ fontFamily:'var(--font-mono)', fontSize:9, color:'var(--cocoa)', marginTop:5 }}>{p.d}d</div>
                 </div>
               ))}
@@ -1018,7 +1018,7 @@ export function RegimePanel({ data }: { data: any }) {
   const probs = regime.regime_probabilities || {};
   const trans = regime.next_regime_probabilities || {};
   const current = data.current_regime || 'UNKNOWN';
-  const C: any = { BULL_LOW_VOL:'var(--bull)', BULL_HIGH_VOL:'#86efac', MEAN_REVERT:'var(--neutral)', BEAR_LOW_VOL:'#f87171', BEAR_HIGH_VOL:'var(--bear)' };
+  const C: any = { BULL_LOW_VOL:'var(--bull)', BULL_HIGH_VOL:'var(--gold)', MEAN_REVERT:'var(--neutral)', BEAR_LOW_VOL:'var(--bear)', BEAR_HIGH_VOL:'var(--bear)' };
   const pretty = (s:string) => (s||'').replace(/_/g,' ');
 
   const TRAITS: any = {
@@ -1110,7 +1110,7 @@ export function RegimePanel({ data }: { data: any }) {
                   {eps.map((e:any,i:number)=>(
                     <div key={i} title={`${pretty(e.regime)} · ${e.start} → ${e.end} · ${e.days}d · ${e.return_pct}%`}
                       style={{ width:`${(e.days/tot)*100}%`, background:C[e.regime]||'var(--cocoa)', opacity:e.ongoing?0.75:0.4,
-                        borderRight:'1px solid #1a0f0a', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                        borderRight:'1px solid var(--surface-3)', display:'flex', alignItems:'center', justifyContent:'center' }}>
                       {e.days/tot > 0.07 && <span style={{ fontFamily:'var(--font-mono)', fontSize:8, color:'var(--surface-1)', fontWeight:700 }}>{e.days}d</span>}
                     </div>
                   ))}
@@ -1158,15 +1158,15 @@ export function RegimePanel({ data }: { data: any }) {
                   <div style={{ fontFamily:'var(--font-body)', fontSize:9, color:'var(--cocoa)' }}>median outcome</div>
                   <div style={{ position:'relative', height:16, marginTop:9 }}>
                     <div style={{ position:'absolute', top:6, left:0, right:0, height:4,
-                      background:'linear-gradient(90deg,#ef444455,#8a756033,#22c55e55)', borderRadius:2 }} />
-                    <div style={{ position:'absolute', top:2, left:`${zeroPos}%`, width:1, height:12, background:'#9d8b7a66' }} />
+                      background:'linear-gradient(90deg,color-mix(in srgb, var(--bear) 33%, transparent),color-mix(in srgb, var(--cocoa) 20%, transparent),color-mix(in srgb, var(--gold) 33%, transparent))', borderRadius:2 }} />
+                    <div style={{ position:'absolute', top:2, left:`${zeroPos}%`, width:1, height:12, background:'color-mix(in srgb, var(--cocoa-dust) 40%, transparent)' }} />
                     <div style={{ position:'absolute', top:1, left:`${medPos}%`, transform:'translateX(-50%)',
                       width:2.5, height:14, background:c, borderRadius:1 }} />
                   </div>
                   <div style={{ display:'flex', justifyContent:'space-between', fontFamily:'var(--font-mono)', fontSize:8, color:'var(--cocoa)', marginTop:1 }}>
                     <span>{x.worst_pct}%</span><span>{x.best_pct}%</span>
                   </div>
-                  <div style={{ fontFamily:'var(--font-body)', fontSize:9, color:'#7a6b5d', marginTop:6 }}>
+                  <div style={{ fontFamily:'var(--font-body)', fontSize:9, color:'var(--cocoa)', marginTop:6 }}>
                     {x.positive_pct}% positive · n={x.n}
                   </div>
                 </div>
@@ -1246,7 +1246,7 @@ export function RegimePanel({ data }: { data: any }) {
                     <span style={{ fontFamily:'var(--font-mono)', fontSize:10.5, color:C[n]||'var(--latte)' }}>{((p||0)*100).toFixed(1)}%</span>
                   </div>
                   <div style={{ height:4, background:'var(--surface-1)', borderRadius:2 }}>
-                    <div style={{ height:'100%', background:C[n]||'#3a2920', borderRadius:2, width:`${(p||0)*100}%` }} />
+                    <div style={{ height:'100%', background:C[n]||'var(--border-2)', borderRadius:2, width:`${(p||0)*100}%` }} />
                   </div>
                 </div>
               ))}
@@ -1260,7 +1260,7 @@ export function RegimePanel({ data }: { data: any }) {
                     <span style={{ fontFamily:'var(--font-mono)', fontSize:10.5, color:C[n]||'var(--latte)' }}>{((p||0)*100).toFixed(1)}%</span>
                   </div>
                   <div style={{ height:4, background:'var(--surface-1)', borderRadius:2 }}>
-                    <div style={{ height:'100%', background:C[n]||'#3a2920', borderRadius:2, width:`${(p||0)*100}%` }} />
+                    <div style={{ height:'100%', background:C[n]||'var(--border-2)', borderRadius:2, width:`${(p||0)*100}%` }} />
                   </div>
                 </div>
               ))}
@@ -1316,7 +1316,7 @@ export function OptionsPanel({ data }: { data: any }) {
         <Row label="Delta (∂C/∂S)" value={fmtN(greeks.delta,4)} />
         <Row label="Gamma (∂²C/∂S²)" value={fmtN(greeks.gamma,6)} />
         <Row label="Vega (∂C/∂σ per 1%)" value={fmtN(greeks.vega,4)} />
-        <Row label="Theta (∂C/∂T per day)" value={fmtN(greeks.theta,4)} highlight="#ef4444" />
+        <Row label="Theta (∂C/∂T per day)" value={fmtN(greeks.theta,4)} highlight="var(--bear)" />
         <Row label="Rho (∂C/∂r per 1%)" value={fmtN(greeks.rho,4)} />
         <SectionTitle>HIGHER-ORDER GREEKS</SectionTitle>
         <Row label="Vanna (∂Δ/∂σ)" value={fmtN(greeks.vanna,4)} />
@@ -1377,7 +1377,7 @@ export function SentimentPanel({ data }: { data: any }) {
         ))}
         <SectionTitle>RECENT HEADLINES</SectionTitle>
         {(s.headlines||[]).slice(0,5).map((h: string, i: number) => (
-          <div key={i} style={{ fontFamily:'var(--font-body)', fontSize:10, color:'var(--cocoa-dust)', borderLeft:'2px solid #3a2920', paddingLeft:8, marginBottom:8, lineHeight:1.5 }}>
+          <div key={i} style={{ fontFamily:'var(--font-body)', fontSize:10, color:'var(--cocoa-dust)', borderLeft:'2px solid var(--border-2)', paddingLeft:8, marginBottom:8, lineHeight:1.5 }}>
             {h}
           </div>
         ))}
@@ -1492,15 +1492,15 @@ export function RiskPanel({ data }: { data: any }) {
               <svg viewBox={`0 0 100 ${H}`} preserveAspectRatio="none" style={{ width:'100%', height:150, display:'block' }}>
                 <defs>
                   <linearGradient id="uwg" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#ef4444" stopOpacity="0.05" />
-                    <stop offset="100%" stopColor="#ef4444" stopOpacity="0.45" />
+                    <stop offset="0%" stopColor="var(--bear)" stopOpacity="0.05" />
+                    <stop offset="100%" stopColor="var(--bear)" stopOpacity="0.45" />
                   </linearGradient>
                 </defs>
                 <path d={areaD} fill="url(#uwg)" />
-                <path d={pathD} fill="none" stroke="#ef4444" strokeWidth="0.4" vectorEffect="non-scaling-stroke" />
+                <path d={pathD} fill="none" stroke="var(--bear)" strokeWidth="0.4" vectorEffect="non-scaling-stroke" />
                 {[0.25, 0.5, 0.75].map(f => (
                   <line key={f} x1="0" x2="100" y1={H * f} y2={H * f}
-                    stroke="#3a2f28" strokeWidth="0.3" vectorEffect="non-scaling-stroke" />
+                    stroke="var(--border-2)" strokeWidth="0.3" vectorEffect="non-scaling-stroke" />
                 ))}
               </svg>
               <div style={{ position:'absolute', top:0, left:4, fontFamily:'var(--font-mono)', fontSize:9, color:'var(--cocoa)' }}>peak</div>
@@ -1574,7 +1574,7 @@ export function RiskPanel({ data }: { data: any }) {
               })}
               <path d={di.normal.map((v: number, i: number) =>
                 `${i === 0 ? 'M' : 'L'} ${i * 4 + 2} ${H - (v / mx) * H}`).join(' ')}
-                fill="none" stroke="#9d8b7a" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+                fill="none" stroke="var(--cocoa-dust)" strokeWidth="1" vectorEffect="non-scaling-stroke" />
             </svg>
             <div style={{ display:'flex', justifyContent:'space-between', fontFamily:'var(--font-mono)',
               fontSize:9, color:'var(--cocoa)', marginTop:4 }}>
@@ -1685,8 +1685,8 @@ export function FundamentalsPanel({ data }: { data: any }) {
     return `$${n.toFixed(2)}`;
   };
   const gc = (v: any, good=true) => {
-    if (v==null) return "#9d8b7a";
-    return (Number(v)>0)===good ? "#40dda0" : "#ff8090";
+    if (v==null) return "var(--cocoa-dust)";
+    return (Number(v)>0)===good ? "var(--gold)" : "var(--bear)";
   };
   // ETF detection: SPY/QQQ/IWM etc have no income statement data
   // Use ticker check as primary, data absence as secondary
@@ -1704,25 +1704,25 @@ export function FundamentalsPanel({ data }: { data: any }) {
           {[["Market Cap",fm(data.market_cap)],["Annual Vol",fp(data.annual_vol)],["Sharpe",f(data.sharpe_ratio)],["Max DD",fp(data.max_drawdown)],
             ["Hurst",f(data.hurst_exponent,4)],["Regime",data.current_regime?.replace(/_/g," ")??"—"],["Beta",f(data.capm_beta,3)],["1Y Ret",fp(data.annual_return)]
           ].map(([l,v])=>(
-            <div key={l} style={{background:"#1a0f0a",borderRadius:6,padding:"12px 14px",border:"1px solid rgba(212,149,108,0.1)"}}>
-              <div style={{fontFamily:'var(--font-mono)',fontSize:8,color:"#9d8b7a",letterSpacing:2,marginBottom:6}}>{l}</div>
-              <div style={{fontFamily:'var(--font-mono)',fontSize:15,color:"#d4c4b0",fontWeight:700}}>{v}</div>
+            <div key={l} style={{background:"var(--surface-3)",borderRadius:6,padding:"12px 14px",border:"1px solid rgba(212,149,108,0.1)"}}>
+              <div style={{fontFamily:'var(--font-mono)',fontSize:8,color:"var(--cocoa-dust)",letterSpacing:2,marginBottom:6}}>{l}</div>
+              <div style={{fontFamily:'var(--font-mono)',fontSize:15,color:"var(--latte)",fontWeight:700}}>{v}</div>
             </div>
           ))}
         </div>
-        <div style={{marginTop:12,fontFamily:'var(--font-mono)',fontSize:9,color:"#8a7560"}}>ETFs do not report income statements. Use Volatility, Regime, and Risk tabs for quantitative analysis.</div>
+        <div style={{marginTop:12,fontFamily:'var(--font-mono)',fontSize:9,color:"var(--cocoa)"}}>ETFs do not report income statements. Use Volatility, Regime, and Risk tabs for quantitative analysis.</div>
       </Card>
     </div>
   );
 
   const FRow = ({l,v,c}:{l:string,v:string,c?:string}) => (
     <div style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid rgba(212,149,108,0.05)"}}>
-      <span style={{fontFamily:'var(--font-body)',fontSize:11,color:"#9d8b7a"}}>{l}</span>
-      <span style={{fontFamily:'var(--font-mono)',fontSize:11,fontWeight:700,color:c||"#d4c4b0"}}>{v}</span>
+      <span style={{fontFamily:'var(--font-body)',fontSize:11,color:"var(--cocoa-dust)"}}>{l}</span>
+      <span style={{fontFamily:'var(--font-mono)',fontSize:11,fontWeight:700,color:c||"var(--latte)"}}>{v}</span>
     </div>
   );
   const SubTitle = ({children}:{children:React.ReactNode}) => (
-    <div style={{fontFamily:'var(--font-mono)',fontSize:8,color:"#daa520",letterSpacing:2,margin:"10px 0 6px",paddingTop:8,borderTop:"1px solid rgba(212,149,108,0.08)"}}>{children}</div>
+    <div style={{fontFamily:'var(--font-mono)',fontSize:8,color:"var(--gold)",letterSpacing:2,margin:"10px 0 6px",paddingTop:8,borderTop:"1px solid rgba(212,149,108,0.08)"}}>{children}</div>
   );
 
   return (
@@ -1731,19 +1731,19 @@ export function FundamentalsPanel({ data }: { data: any }) {
       {/* VALUATION */}
       <Card>
         <SectionTitle>◈ VALUATION MULTIPLES</SectionTitle>
-        <FRow l="P/E Ratio (TTM)"  v={f(data.pe_ratio)}        c={data.pe_ratio&&data.pe_ratio<25?"#40dda0":"#e8b84b"} />
+        <FRow l="P/E Ratio (TTM)"  v={f(data.pe_ratio)}        c={data.pe_ratio&&data.pe_ratio<25?"var(--gold)":"var(--caramel)"} />
         <FRow l="Forward P/E"      v={f(data.forward_pe)}       />
-        <FRow l="PEG Ratio"        v={f(data.peg_ratio)}        c={data.peg_ratio?data.peg_ratio<1?"#40dda0":data.peg_ratio<2?"#e8b84b":"#ff8090":undefined} />
+        <FRow l="PEG Ratio"        v={f(data.peg_ratio)}        c={data.peg_ratio?data.peg_ratio<1?"var(--gold)":data.peg_ratio<2?"var(--caramel)":"var(--bear)":undefined} />
         <FRow l="Price / Book"     v={f(data.price_to_book??data.pb_ratio)} />
         <FRow l="Price / Sales"    v={f(data.price_to_sales)}   />
-        <FRow l="EV / EBITDA"      v={f(data.ev_ebitda)}        c={data.ev_ebitda&&data.ev_ebitda<15?"#40dda0":"#e8b84b"} />
+        <FRow l="EV / EBITDA"      v={f(data.ev_ebitda)}        c={data.ev_ebitda&&data.ev_ebitda<15?"var(--gold)":"var(--caramel)"} />
         <FRow l="EV / Revenue"     v={f(data.ev_revenue)}       />
         <SubTitle>PRICE TARGETS</SubTitle>
         <FRow l="Current Price"    v={`$${data.price?.toFixed(2)??"—"}`} />
-        <FRow l="52W High"         v={`$${data.week_52_high?.toFixed(2)??"—"}`} c="#40dda0" />
-        <FRow l="52W Low"          v={`$${data.week_52_low?.toFixed(2)??"—"}`}  c="#ff8090" />
-        <FRow l="Analyst Target"   v={data.analyst_ratings?.consensus?.avg_target?`$${data.analyst_ratings.consensus.avg_target}`:"—"} c="#daa520" />
-        <FRow l="Upside to Target" v={data.analyst_ratings?.consensus?.avg_target&&data.price?`${((data.analyst_ratings.consensus.avg_target/data.price-1)*100).toFixed(1)}%`:"—"} c="#40dda0" />
+        <FRow l="52W High"         v={`$${data.week_52_high?.toFixed(2)??"—"}`} c="var(--gold)" />
+        <FRow l="52W Low"          v={`$${data.week_52_low?.toFixed(2)??"—"}`}  c="var(--bear)" />
+        <FRow l="Analyst Target"   v={data.analyst_ratings?.consensus?.avg_target?`$${data.analyst_ratings.consensus.avg_target}`:"—"} c="var(--gold)" />
+        <FRow l="Upside to Target" v={data.analyst_ratings?.consensus?.avg_target&&data.price?`${((data.analyst_ratings.consensus.avg_target/data.price-1)*100).toFixed(1)}%`:"—"} c="var(--gold)" />
       </Card>
 
       {/* INCOME STATEMENT */}
@@ -1776,11 +1776,11 @@ export function FundamentalsPanel({ data }: { data: any }) {
         <FRow l="Rev Growth YoY (Est.)" v={earn.rev_growth!=null?`${earn.rev_growth>0?"+":""}${earn.rev_growth}%`:"—"} c={gc(earn.rev_growth)} />
         <SubTitle>NEXT EARNINGS</SubTitle>
         <div style={{textAlign:"center",padding:"10px 0"}}>
-          <div style={{fontFamily:'var(--font-display)',fontSize:24,color:earn.days_to!=null&&earn.days_to<=14?"#ff8090":"#daa520",letterSpacing:3}}>{earn.date??"NO DATE"}</div>
-          {earn.days_to!=null&&<div style={{fontFamily:'var(--font-mono)',fontSize:10,color:"#9d8b7a",marginTop:4}}>{earn.days_to>0?`${earn.days_to} days away`:earn.days_to===0?"TODAY":`${Math.abs(earn.days_to)} days ago`}</div>}
+          <div style={{fontFamily:'var(--font-display)',fontSize:24,color:earn.days_to!=null&&earn.days_to<=14?"var(--bear)":"var(--gold)",letterSpacing:3}}>{earn.date??"NO DATE"}</div>
+          {earn.days_to!=null&&<div style={{fontFamily:'var(--font-mono)',fontSize:10,color:"var(--cocoa-dust)",marginTop:4}}>{earn.days_to>0?`${earn.days_to} days away`:earn.days_to===0?"TODAY":`${Math.abs(earn.days_to)} days ago`}</div>}
         </div>
         <SubTitle>ANALYST CONSENSUS</SubTitle>
-        <FRow l="Rating"     v={data.analyst_ratings?.consensus?.label??"—"} c={data.analyst_ratings?.consensus?.color??"#9d8b7a"} />
+        <FRow l="Rating"     v={data.analyst_ratings?.consensus?.label??"—"} c={data.analyst_ratings?.consensus?.color??"var(--cocoa-dust)"} />
         <FRow l="# Analysts" v={String(data.analyst_ratings?.consensus?.n_analysts??0)} />
         <FRow l="Avg Target" v={data.analyst_ratings?.consensus?.avg_target?`$${data.analyst_ratings.consensus.avg_target}`:"—"} />
       </Card>
@@ -1792,11 +1792,11 @@ export function FundamentalsPanel({ data }: { data: any }) {
         <FRow l="Total Assets"   v={fm(data.total_assets)} />
         <FRow l="Total Equity"   v={fm(data.total_equity)} />
         <FRow l="Long-Term Debt" v={fm(data.total_debt??data.long_term_debt)} />
-        <FRow l="Total Cash"     v={fm(data.total_cash)} c="#40dda0" />
+        <FRow l="Total Cash"     v={fm(data.total_cash)} c="var(--gold)" />
         <FRow l="Net Cash/Debt"  v={data.total_cash!=null&&data.total_debt!=null?fm(data.total_cash-data.total_debt):"—"} c={data.total_cash!=null&&data.total_debt!=null?gc(data.total_cash-data.total_debt):undefined} />
-        <FRow l="Debt / Equity"  v={f(data.debt_to_equity)} c={data.debt_to_equity&&data.debt_to_equity<1?"#40dda0":"#e8b84b"} />
-        <FRow l="Current Ratio"  v={f(data.current_ratio)} c={data.current_ratio&&data.current_ratio>1.5?"#40dda0":"#e8b84b"} />
-        <FRow l="Quick Ratio"    v={f(data.quick_ratio)}   c={data.quick_ratio&&data.quick_ratio>1?"#40dda0":"#e8b84b"} />
+        <FRow l="Debt / Equity"  v={f(data.debt_to_equity)} c={data.debt_to_equity&&data.debt_to_equity<1?"var(--gold)":"var(--caramel)"} />
+        <FRow l="Current Ratio"  v={f(data.current_ratio)} c={data.current_ratio&&data.current_ratio>1.5?"var(--gold)":"var(--caramel)"} />
+        <FRow l="Quick Ratio"    v={f(data.quick_ratio)}   c={data.quick_ratio&&data.quick_ratio>1?"var(--gold)":"var(--caramel)"} />
         <FRow l="Shares Out."    v={data.shares_outstanding?`${(Number(data.shares_outstanding)/1e9).toFixed(2)}B`:"—"} />
       </Card>
 
@@ -1812,10 +1812,10 @@ export function FundamentalsPanel({ data }: { data: any }) {
         <SubTitle>OWNERSHIP</SubTitle>
         <FRow l="Institutional" v={fp(data.institutional_ownership)} />
         <FRow l="Insider Own."  v={fp(data.insider_ownership)} />
-        <FRow l="Short Interest" v={fp(data.short_interest)} c={data.short_interest&&data.short_interest>0.05?"#ff8090":"#d4c4b0"} />
+        <FRow l="Short Interest" v={fp(data.short_interest)} c={data.short_interest&&data.short_interest>0.05?"var(--bear)":"var(--latte)"} />
         <FRow l="Beta (5Y)"     v={f(data.beta??data.capm_beta,3)} />
         <SubTitle>QUALITY SCORES</SubTitle>
-        <FRow l="Piotroski F-Score" v={data.gross_margin&&data.roe&&data.current_ratio?String(Math.min(9,Math.round((data.gross_margin>0.4?1:0)+(data.roe>0.1?1:0)+(data.current_ratio>1.5?1:0)+(data.revenue_growth>0.05?1:0)+(data.debt_to_equity<1?1:0)*2+3))):"—"} c="#daa520" />
+        <FRow l="Piotroski F-Score" v={data.gross_margin&&data.roe&&data.current_ratio?String(Math.min(9,Math.round((data.gross_margin>0.4?1:0)+(data.roe>0.1?1:0)+(data.current_ratio>1.5?1:0)+(data.revenue_growth>0.05?1:0)+(data.debt_to_equity<1?1:0)*2+3))):"—"} c="var(--gold)" />
         <FRow l="Altman Z-Score"    v="N/A (public)" />
       </Card>
 
@@ -1825,24 +1825,24 @@ export function FundamentalsPanel({ data }: { data: any }) {
         <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:0,marginBottom:16}}>
           {[
             ["NET MARGIN", fp(data.net_margin), "Profitability / Net Income / Revenue", gc(data.net_margin)],
-            ["×", "", "", "#8a7560"],
-            ["ASSET TURNOVER", data.revenue_ttm&&data.total_assets?f(Number(data.revenue_ttm)/Number(data.total_assets),3):"—", "Efficiency / Revenue / Assets", "#d4c4b0"],
-            ["×", "", "", "#8a7560"],
-            ["LEVERAGE", data.total_assets&&data.total_equity?f(Number(data.total_assets)/Number(data.total_equity),2)+"×":"—", "Financial Leverage / Assets / Equity", "#e8b84b"],
+            ["×", "", "", "var(--cocoa)"],
+            ["ASSET TURNOVER", data.revenue_ttm&&data.total_assets?f(Number(data.revenue_ttm)/Number(data.total_assets),3):"—", "Efficiency / Revenue / Assets", "var(--latte)"],
+            ["×", "", "", "var(--cocoa)"],
+            ["LEVERAGE", data.total_assets&&data.total_equity?f(Number(data.total_assets)/Number(data.total_equity),2)+"×":"—", "Financial Leverage / Assets / Equity", "var(--caramel)"],
           ].map(([l,v,desc,c],i)=>(
             <div key={i} style={{textAlign:"center",padding:"12px 8px",borderRight:i<4?"1px solid rgba(212,149,108,0.08)":"none",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column"}}>
               {l!=="×" ? <>
-                <div style={{fontFamily:'var(--font-mono)',fontSize:8,color:"#9d8b7a",letterSpacing:1,marginBottom:6,whiteSpace:"pre-line",lineHeight:1.5}}>{l}</div>
+                <div style={{fontFamily:'var(--font-mono)',fontSize:8,color:"var(--cocoa-dust)",letterSpacing:1,marginBottom:6,whiteSpace:"pre-line",lineHeight:1.5}}>{l}</div>
                 <div style={{fontFamily:'var(--font-display)',fontSize:26,color:c as string,letterSpacing:2}}>{v}</div>
-                <div style={{fontFamily:'var(--font-mono)',fontSize:7,color:"#8a7560",marginTop:4,whiteSpace:"pre-line",lineHeight:1.5}}>{desc}</div>
-              </> : <div style={{fontFamily:'var(--font-display)',fontSize:32,color:"#8a7560"}}>×</div>}
+                <div style={{fontFamily:'var(--font-mono)',fontSize:7,color:"var(--cocoa)",marginTop:4,whiteSpace:"pre-line",lineHeight:1.5}}>{desc}</div>
+              </> : <div style={{fontFamily:'var(--font-display)',fontSize:32,color:"var(--cocoa)"}}>×</div>}
             </div>
           ))}
         </div>
-        <div style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",background:"#1a0f0a",borderRadius:6,border:"1px solid rgba(212,149,108,0.1)"}}>
-          <div style={{fontFamily:'var(--font-mono)',fontSize:9,color:"#daa520",letterSpacing:2,whiteSpace:"nowrap"}}>= ROE</div>
+        <div style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",background:"var(--surface-3)",borderRadius:6,border:"1px solid rgba(212,149,108,0.1)"}}>
+          <div style={{fontFamily:'var(--font-mono)',fontSize:9,color:"var(--gold)",letterSpacing:2,whiteSpace:"nowrap"}}>= ROE</div>
           <div style={{fontFamily:'var(--font-display)',fontSize:28,color:gc(data.roe)}}>{fp(data.roe)}</div>
-          <div style={{fontFamily:'var(--font-mono)',fontSize:9,color:"#8a7560",lineHeight:1.6}}>
+          <div style={{fontFamily:'var(--font-mono)',fontSize:9,color:"var(--cocoa)",lineHeight:1.6}}>
             DuPont identity decomposes return on equity into its three drivers.<br/>
             High ROE from leverage ({">"} 3×) is riskier than ROE from margin or turnover.
           </div>
@@ -1861,7 +1861,7 @@ export function FundamentalsPanel({ data }: { data: any }) {
         </>) : (
         <FRow l="Market regression"   v="unavailable" />
         )}
-        <div style={{fontFamily:'var(--font-mono)',fontSize:7,color:"#8a7560",marginTop:12,lineHeight:1.7}}>
+        <div style={{fontFamily:'var(--font-mono)',fontSize:7,color:"var(--cocoa)",marginTop:12,lineHeight:1.7}}>
           Fama & French (1993, 2015) · Carhart (1997)<br/>
           Kenneth French Data Library · 60M rolling OLS<br/>
           t-stat threshold: 1.96 · Newey-West HAC errors
@@ -1880,7 +1880,7 @@ export function ScenarioPanel({ data, compact }: { data: any; compact?: boolean 
   const sc = Object.entries(scenarios).filter(([k]) => k !== 'expected_value');
   const ev = scenarios.expected_value;
 
-  const colors: any = { bull:'var(--bull)', base:'var(--neutral)', bear:'var(--bear)', tail:'#7f1d1d' };
+  const colors: any = { bull:'var(--bull)', base:'var(--neutral)', bear:'var(--bear)', tail:'var(--bear)' };
   const icons: any = { bull:'🐂', base:'📊', bear:'🐻', tail:'⚡' };
 
   return (
@@ -1973,7 +1973,7 @@ export function Watchlist({ onAnalyze }: { onAnalyze: (t: string) => void }) {
         </div>
         <a href="/login" style={{
           display: 'inline-block',
-          background: 'linear-gradient(135deg,#daa520,#b8860b)',
+          background: 'linear-gradient(135deg,var(--gold),var(--caramel))',
           color: 'var(--surface-1)', fontFamily: 'var(--font-mono)',
           fontWeight: 700, fontSize: 10, letterSpacing: 2,
           padding: '10px 24px', borderRadius: 4, textDecoration: 'none',
@@ -1987,8 +1987,8 @@ export function Watchlist({ onAnalyze }: { onAnalyze: (t: string) => void }) {
       <SectionTitle>★ PERSONAL WATCHLIST</SectionTitle>
       <div style={{ display:'flex', gap:8, marginBottom:20 }}>
         <input value={input} onChange={e => setInput(e.target.value.toUpperCase())} onKeyDown={e => e.key==='Enter'&&add()}
-          placeholder="Add ticker..." style={{ flex:1, background:'var(--surface-1)', border:'1px solid rgba(212,149,108,0.2)', borderRadius:6, color:'#f4e8d8', fontFamily:'var(--font-mono)', fontSize:12, padding:'8px 12px', outline:'none' }} />
-        <button onClick={add} style={{ background:'linear-gradient(135deg,#daa520,#b8860b)', color:'var(--surface-1)', fontFamily:'var(--font-mono)', fontWeight:700, fontSize:10, letterSpacing:2, padding:'8px 16px', border:'none', borderRadius:6, cursor:'pointer' }}>+ ADD</button>
+          placeholder="Add ticker..." style={{ flex:1, background:'var(--surface-1)', border:'1px solid rgba(212,149,108,0.2)', borderRadius:6, color:'var(--latte)', fontFamily:'var(--font-mono)', fontSize:12, padding:'8px 12px', outline:'none' }} />
+        <button onClick={add} style={{ background:'linear-gradient(135deg,var(--gold),var(--caramel))', color:'var(--surface-1)', fontFamily:'var(--font-mono)', fontWeight:700, fontSize:10, letterSpacing:2, padding:'8px 16px', border:'none', borderRadius:6, cursor:'pointer' }}>+ ADD</button>
       </div>
       {items.length === 0 && (
         <div style={{ textAlign:'center', color:'var(--cocoa)', fontFamily:'var(--font-mono)', fontSize:11, padding:30 }}>No tickers in watchlist</div>
@@ -2042,16 +2042,16 @@ export function WallStreetPanel({ data }: { data: any }) {
 
   const daysToEarnings = earnings.days_to;
   const earningsUrgency = daysToEarnings != null && daysToEarnings <= 14
-    ? '#e05252' : daysToEarnings != null && daysToEarnings <= 30
-    ? '#d4943a' : '#4caf82';
+    ? 'var(--bear)' : daysToEarnings != null && daysToEarnings <= 30
+    ? 'var(--caramel)' : 'var(--gold)';
 
   // 5-bucket breakdown
   const buckets = [
-    { label: "STRONG BUY",  count: consensus.strong_buy  || 0, color: "#00c896" },
-    { label: "BUY",         count: consensus.buy         || 0, color: "#40dda0" },
-    { label: "HOLD",        count: consensus.hold        || 0, color: "#e8b84b" },
-    { label: "SELL",        count: consensus.sell        || 0, color: "#ff8090" },
-    { label: "STRONG SELL", count: consensus.strong_sell || 0, color: "#ff6080" },
+    { label: "STRONG BUY",  count: consensus.strong_buy  || 0, color: "var(--gold)" },
+    { label: "BUY",         count: consensus.buy         || 0, color: "var(--gold)" },
+    { label: "HOLD",        count: consensus.hold        || 0, color: "var(--caramel)" },
+    { label: "SELL",        count: consensus.sell        || 0, color: "var(--bear)" },
+    { label: "STRONG SELL", count: consensus.strong_sell || 0, color: "var(--bear)" },
   ];
   const totalAnalysts = consensus.n_analysts || 0;
 
@@ -2062,37 +2062,37 @@ export function WallStreetPanel({ data }: { data: any }) {
         <SectionTitle>SELL-SIDE ANALYST CONSENSUS</SectionTitle>
 
         {/* Source badge */}
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: source === 'finnhub' ? "#4caf82" : "#e05252", letterSpacing: 2, marginBottom: 12 }}>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: source === 'finnhub' ? "var(--gold)" : "var(--bear)", letterSpacing: 2, marginBottom: 12 }}>
           SOURCE: {source === 'finnhub' ? '● LIVE · FINNHUB' : '○ UNAVAILABLE'}
         </div>
 
         {/* Consensus summary — 2-box (removed avg target since free tier doesn't have it) */}
         <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
-          <div style={{ flex: 1, textAlign: "center", background: "#1a0f0a", borderRadius: 6, padding: "10px 8px", border: `1px solid ${consensus.color || "#555"}40` }}>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: "#9d8b7a", letterSpacing: 2, marginBottom: 4 }}>CONSENSUS</div>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, color: consensus.color || "#f59e0b", letterSpacing: 2 }}>{consensus.label || "—"}</div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: "#8a7560", marginTop: 2 }}>score {consensus.score?.toFixed(2) ?? "—"}/5</div>
+          <div style={{ flex: 1, textAlign: "center", background: "var(--surface-3)", borderRadius: 6, padding: "10px 8px", border: `1px solid ${consensus.color || "#555"}40` }}>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: "var(--cocoa-dust)", letterSpacing: 2, marginBottom: 4 }}>CONSENSUS</div>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, color: consensus.color || "var(--caramel)", letterSpacing: 2 }}>{consensus.label || "—"}</div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: "var(--cocoa)", marginTop: 2 }}>score {consensus.score?.toFixed(2) ?? "—"}/5</div>
           </div>
-          <div style={{ flex: 1, textAlign: "center", background: "#1a0f0a", borderRadius: 6, padding: "10px 8px" }}>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: "#9d8b7a", letterSpacing: 2, marginBottom: 4 }}>ANALYSTS</div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 24, color: "#d4c4b0", fontWeight: 700 }}>{totalAnalysts}</div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: "#8a7560" }}>covering this name</div>
+          <div style={{ flex: 1, textAlign: "center", background: "var(--surface-3)", borderRadius: 6, padding: "10px 8px" }}>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: "var(--cocoa-dust)", letterSpacing: 2, marginBottom: 4 }}>ANALYSTS</div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 24, color: "var(--latte)", fontWeight: 700 }}>{totalAnalysts}</div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: "var(--cocoa)" }}>covering this name</div>
           </div>
         </div>
 
         {/* 5-bucket breakdown */}
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: "#daa520", letterSpacing: 2, marginBottom: 8 }}>RATING BREAKDOWN</div>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: "var(--gold)", letterSpacing: 2, marginBottom: 8 }}>RATING BREAKDOWN</div>
         <div style={{ display: "grid", gap: 6, marginBottom: 16 }}>
           {buckets.map(({ label, count, color }) => {
             const pct = totalAnalysts > 0 ? (count / totalAnalysts) * 100 : 0;
             return (
               <div key={label} style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color, width: 78 }}>{label}</div>
-                <div style={{ flex: 1, height: 8, background: "#1a0f0a", borderRadius: 2, overflow: "hidden" }}>
+                <div style={{ flex: 1, height: 8, background: "var(--surface-3)", borderRadius: 2, overflow: "hidden" }}>
                   <div style={{ height: "100%", background: color, width: `${pct}%`, transition: "width 1s ease" }} />
                 </div>
                 <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color, fontWeight: 700, width: 28, textAlign: "right" }}>{count}</div>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: "#9d8b7a", width: 36, textAlign: "right" }}>{pct.toFixed(0)}%</div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: "var(--cocoa-dust)", width: 36, textAlign: "right" }}>{pct.toFixed(0)}%</div>
               </div>
             );
           })}
@@ -2101,21 +2101,21 @@ export function WallStreetPanel({ data }: { data: any }) {
         {/* 6-month trend */}
         {trend.length > 0 && (
           <>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: "#daa520", letterSpacing: 2, marginBottom: 8 }}>CONSENSUS TREND (last {trend.length} months)</div>
-            <div style={{ background: "#1a0f0a", borderRadius: 6, padding: "10px 8px", marginBottom: 12 }}>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: "var(--gold)", letterSpacing: 2, marginBottom: 8 }}>CONSENSUS TREND (last {trend.length} months)</div>
+            <div style={{ background: "var(--surface-3)", borderRadius: 6, padding: "10px 8px", marginBottom: 12 }}>
               {trend.slice().reverse().map((t: any, i: number) => {
                 const n = (t.strong_buy + t.buy + t.hold + t.sell + t.strong_sell) || 1;
                 return (
                   <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: i < trend.length - 1 ? 4 : 0 }}>
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: "#9d8b7a", width: 56 }}>{t.period?.slice(0,7)}</div>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: "var(--cocoa-dust)", width: 56 }}>{t.period?.slice(0,7)}</div>
                     <div style={{ flex: 1, display: "flex", height: 6, borderRadius: 2, overflow: "hidden" }}>
-                      <div style={{ background: "#00c896", width: `${(t.strong_buy/n)*100}%` }} />
-                      <div style={{ background: "#40dda0", width: `${(t.buy/n)*100}%` }} />
-                      <div style={{ background: "#e8b84b", width: `${(t.hold/n)*100}%` }} />
-                      <div style={{ background: "#ff8090", width: `${(t.sell/n)*100}%` }} />
-                      <div style={{ background: "#ff6080", width: `${(t.strong_sell/n)*100}%` }} />
+                      <div style={{ background: "var(--gold)", width: `${(t.strong_buy/n)*100}%` }} />
+                      <div style={{ background: "var(--gold)", width: `${(t.buy/n)*100}%` }} />
+                      <div style={{ background: "var(--caramel)", width: `${(t.hold/n)*100}%` }} />
+                      <div style={{ background: "var(--bear)", width: `${(t.sell/n)*100}%` }} />
+                      <div style={{ background: "var(--bear)", width: `${(t.strong_sell/n)*100}%` }} />
                     </div>
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: "#d4c4b0", width: 24, textAlign: "right" }}>{n}</div>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: "var(--latte)", width: 24, textAlign: "right" }}>{n}</div>
                   </div>
                 );
               })}
@@ -2123,69 +2123,69 @@ export function WallStreetPanel({ data }: { data: any }) {
           </>
         )}
 
-        <div style={{ display: "flex", gap: 16, marginTop: 10, fontFamily: 'var(--font-mono)', fontSize: 9, color: "#8a7560" }}>
-          <span style={{ color: "#40dda0" }}>▲ {consensus.upgrades_30d || 0} consensus up</span>
-          <span style={{ color: "#ff8090" }}>▼ {consensus.downgrades_30d || 0} consensus down</span>
+        <div style={{ display: "flex", gap: 16, marginTop: 10, fontFamily: 'var(--font-mono)', fontSize: 9, color: "var(--cocoa)" }}>
+          <span style={{ color: "var(--gold)" }}>▲ {consensus.upgrades_30d || 0} consensus up</span>
+          <span style={{ color: "var(--bear)" }}>▼ {consensus.downgrades_30d || 0} consensus down</span>
           <span>vs prev month</span>
         </div>
 
         {/* ── ANALYST SIGNAL ANALYTICS (computed) ── */}
         {(analytics.beat_rate != null || analytics.revision_momentum != null) && (
           <>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: "#daa520", letterSpacing: 2, margin: "6px 0 8px" }}>ANALYST SIGNAL ANALYTICS</div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: "var(--gold)", letterSpacing: 2, margin: "6px 0 8px" }}>ANALYST SIGNAL ANALYTICS</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
-              <div style={{ background: "#1a0f0a", borderRadius: 6, padding: "8px 10px" }}>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: "#9d8b7a", marginBottom: 3 }}>EARNINGS BEAT RATE</div>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 15, fontWeight: 700, color: (analytics.beat_rate ?? 0) >= 0.6 ? "#40dda0" : (analytics.beat_rate ?? 0) >= 0.4 ? "#e8b84b" : "#ff8090" }}>
+              <div style={{ background: "var(--surface-3)", borderRadius: 6, padding: "8px 10px" }}>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: "var(--cocoa-dust)", marginBottom: 3 }}>EARNINGS BEAT RATE</div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 15, fontWeight: 700, color: (analytics.beat_rate ?? 0) >= 0.6 ? "var(--gold)" : (analytics.beat_rate ?? 0) >= 0.4 ? "var(--caramel)" : "var(--bear)" }}>
                   {analytics.beat_rate != null ? `${Math.round(analytics.beat_rate * analytics.n_quarters)} of ${analytics.n_quarters}` : "—"}
-                  <span style={{ fontSize: 10, color: "#8a7560", marginLeft: 6 }}>{pct1(analytics.beat_rate)}</span>
+                  <span style={{ fontSize: 10, color: "var(--cocoa)", marginLeft: 6 }}>{pct1(analytics.beat_rate)}</span>
                 </div>
               </div>
-              <div style={{ background: "#1a0f0a", borderRadius: 6, padding: "8px 10px" }}>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: "#9d8b7a", marginBottom: 3 }}>AVG SURPRISE</div>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 15, fontWeight: 700, color: (analytics.avg_surprise_pct ?? 0) > 0 ? "#40dda0" : "#ff8090" }}>
+              <div style={{ background: "var(--surface-3)", borderRadius: 6, padding: "8px 10px" }}>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: "var(--cocoa-dust)", marginBottom: 3 }}>AVG SURPRISE</div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 15, fontWeight: 700, color: (analytics.avg_surprise_pct ?? 0) > 0 ? "var(--gold)" : "var(--bear)" }}>
                   {analytics.avg_surprise_pct != null ? `${analytics.avg_surprise_pct > 0 ? "+" : ""}${analytics.avg_surprise_pct}%` : "—"}
                   {analytics.surprise_trend != null && (
-                    <span style={{ fontSize: 9, color: analytics.surprise_trend >= 0 ? "#40dda0" : "#ff8090", marginLeft: 6 }}>
+                    <span style={{ fontSize: 9, color: analytics.surprise_trend >= 0 ? "var(--gold)" : "var(--bear)", marginLeft: 6 }}>
                       {arrow(analytics.surprise_trend)} {analytics.surprise_trend >= 0 ? "improving" : "cooling"}
                     </span>
                   )}
                 </div>
               </div>
-              <div style={{ background: "#1a0f0a", borderRadius: 6, padding: "8px 10px" }}>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: "#9d8b7a", marginBottom: 3 }}>REVISION MOMENTUM</div>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, color: analytics.revision_direction === "improving" ? "#40dda0" : analytics.revision_direction === "deteriorating" ? "#ff8090" : "#e8b84b" }}>
+              <div style={{ background: "var(--surface-3)", borderRadius: 6, padding: "8px 10px" }}>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: "var(--cocoa-dust)", marginBottom: 3 }}>REVISION MOMENTUM</div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, color: analytics.revision_direction === "improving" ? "var(--gold)" : analytics.revision_direction === "deteriorating" ? "var(--bear)" : "var(--caramel)" }}>
                   {analytics.revision_direction || "—"}
                 </div>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 7, color: "#8a7560" }}>Jegadeesh: changes &gt; levels</div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 7, color: "var(--cocoa)" }}>Jegadeesh: changes &gt; levels</div>
               </div>
-              <div style={{ background: "#1a0f0a", borderRadius: 6, padding: "8px 10px" }}>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: "#9d8b7a", marginBottom: 3 }}>BULL SHARE · CONVICTION</div>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, color: "#d4c4b0" }}>
-                  {pct1(analytics.bull_share)} <span style={{ fontSize: 9, color: "#8a7560" }}>· HHI {analytics.rating_conviction ?? "—"}</span>
+              <div style={{ background: "var(--surface-3)", borderRadius: 6, padding: "8px 10px" }}>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: "var(--cocoa-dust)", marginBottom: 3 }}>BULL SHARE · CONVICTION</div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, color: "var(--latte)" }}>
+                  {pct1(analytics.bull_share)} <span style={{ fontSize: 9, color: "var(--cocoa)" }}>· HHI {analytics.rating_conviction ?? "—"}</span>
                 </div>
               </div>
             </div>
 
             {/* QuantEdge vs Street */}
             {divergence != null && (
-              <div style={{ background: "#140c08", border: "1px solid #3a2920", borderRadius: 8, padding: "10px 12px", marginBottom: 12 }}>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: "#daa520", letterSpacing: 2, marginBottom: 8 }}>QUANTEDGE vs THE STREET</div>
+              <div style={{ background: "var(--surface-3)", border: "1px solid var(--border-2)", borderRadius: 8, padding: "10px 12px", marginBottom: 12 }}>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: "var(--gold)", letterSpacing: 2, marginBottom: 8 }}>QUANTEDGE vs THE STREET</div>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
                   <div style={{ textAlign: "center", flex: 1 }}>
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: "#9d8b7a" }}>QUANTEDGE</div>
-                    <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, color: "#daa520" }}>{ourConviction?.toFixed(0) ?? "—"}</div>
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: "#8a7560" }}>{ourVerdict || ""}</div>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: "var(--cocoa-dust)" }}>QUANTEDGE</div>
+                    <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, color: "var(--gold)" }}>{ourConviction?.toFixed(0) ?? "—"}</div>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: "var(--cocoa)" }}>{ourVerdict || ""}</div>
                   </div>
                   <div style={{ textAlign: "center" }}>
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, color: Math.abs(divergence) <= 5 ? "#8a7560" : divergence > 0 ? "#40dda0" : "#ff8090" }}>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, color: Math.abs(divergence) <= 5 ? "var(--cocoa)" : divergence > 0 ? "var(--gold)" : "var(--bear)" }}>
                       {Math.abs(divergence) <= 5 ? "≈ ALIGNED" : divergence > 0 ? `+${divergence} MORE BULLISH` : `${divergence} MORE BEARISH`}
                     </div>
                   </div>
                   <div style={{ textAlign: "center", flex: 1 }}>
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: "#9d8b7a" }}>STREET</div>
-                    <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, color: consensus.color || "#40dda0" }}>{streetPct?.toFixed(0) ?? "—"}</div>
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: "#8a7560" }}>{consensus.label || ""}</div>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: "var(--cocoa-dust)" }}>STREET</div>
+                    <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, color: consensus.color || "var(--gold)" }}>{streetPct?.toFixed(0) ?? "—"}</div>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: "var(--cocoa)" }}>{consensus.label || ""}</div>
                   </div>
                 </div>
               </div>
@@ -2193,7 +2193,7 @@ export function WallStreetPanel({ data }: { data: any }) {
           </>
         )}
 
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: "#8a7560", marginTop: 12, lineHeight: 1.6 }}>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: "var(--cocoa)", marginTop: 12, lineHeight: 1.6 }}>
           Individual analyst names and price targets require paid Finnhub plan.<br/>
           Free tier provides consensus counts and historical trends — shown above.
         </div>
@@ -2206,19 +2206,19 @@ export function WallStreetPanel({ data }: { data: any }) {
         {/* Earnings countdown */}
         {earnings.date ? (
           <div style={{ textAlign: "center", padding: "16px 0 20px", borderBottom: "1px solid rgba(212,149,108,0.08)", marginBottom: 16 }}>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: "#9d8b7a", letterSpacing: 2, marginBottom: 6 }}>ESTIMATED EARNINGS DATE</div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: "var(--cocoa-dust)", letterSpacing: 2, marginBottom: 6 }}>ESTIMATED EARNINGS DATE</div>
             <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, color: earningsUrgency, letterSpacing: 3, marginBottom: 4 }}>{earnings.date}</div>
             {daysToEarnings != null && (
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: earningsUrgency }}>
                 {daysToEarnings > 0 ? `${daysToEarnings} days away` : daysToEarnings === 0 ? "TODAY" : `${Math.abs(daysToEarnings)} days ago`}
               </div>
             )}
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: "#8a7560", marginTop: 4 }}>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: "var(--cocoa)", marginTop: 4 }}>
               (last report + ~90d; exact date not in free tier)
             </div>
           </div>
         ) : (
-          <div style={{ textAlign: "center", padding: "16px 0", color: "#8a7560", fontFamily: 'var(--font-mono)', fontSize: 10 }}>
+          <div style={{ textAlign: "center", padding: "16px 0", color: "var(--cocoa)", fontFamily: 'var(--font-mono)', fontSize: 10 }}>
             No earnings history available
           </div>
         )}
@@ -2226,15 +2226,15 @@ export function WallStreetPanel({ data }: { data: any }) {
         {/* Recent EPS with YoY growth */}
         {earnings.eps_prev_year != null && (
           <>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: "#daa520", letterSpacing: 2, marginBottom: 10 }}>MOST RECENT QUARTER (ACTUAL)</div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: "var(--gold)", letterSpacing: 2, marginBottom: 10 }}>MOST RECENT QUARTER (ACTUAL)</div>
             <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
-              <div style={{ flex: 1, textAlign: "center", background: "#1a0f0a", borderRadius: 6, padding: "12px 8px" }}>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: "#9d8b7a", marginBottom: 4 }}>EPS (Q LATEST)</div>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 20, color: "#d4c4b0", fontWeight: 700 }}>${earnings.eps_prev_year?.toFixed(2)}</div>
+              <div style={{ flex: 1, textAlign: "center", background: "var(--surface-3)", borderRadius: 6, padding: "12px 8px" }}>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: "var(--cocoa-dust)", marginBottom: 4 }}>EPS (Q LATEST)</div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 20, color: "var(--latte)", fontWeight: 700 }}>${earnings.eps_prev_year?.toFixed(2)}</div>
               </div>
-              <div style={{ flex: 1, textAlign: "center", background: "#1a0f0a", borderRadius: 6, padding: "12px 8px" }}>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: "#9d8b7a", marginBottom: 4 }}>YoY GROWTH</div>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 20, fontWeight: 700, color: (earnings.eps_growth || 0) > 0 ? "#40dda0" : "#ff8090" }}>
+              <div style={{ flex: 1, textAlign: "center", background: "var(--surface-3)", borderRadius: 6, padding: "12px 8px" }}>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: "var(--cocoa-dust)", marginBottom: 4 }}>YoY GROWTH</div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 20, fontWeight: 700, color: (earnings.eps_growth || 0) > 0 ? "var(--gold)" : "var(--bear)" }}>
                   {earnings.eps_growth != null ? `${earnings.eps_growth > 0 ? "+" : ""}${earnings.eps_growth}%` : "—"}
                 </div>
               </div>
@@ -2245,9 +2245,9 @@ export function WallStreetPanel({ data }: { data: any }) {
         {/* Surprise history */}
         {surpriseHistory.length > 0 && (
           <>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: "#daa520", letterSpacing: 2, marginBottom: 10 }}>EARNINGS SURPRISE HISTORY</div>
-            <div style={{ background: "#1a0f0a", borderRadius: 6, padding: "10px 12px" }}>
-              <div style={{ display: "flex", fontFamily: 'var(--font-mono)', fontSize: 8, color: "#9d8b7a", letterSpacing: 1, marginBottom: 6, paddingBottom: 4, borderBottom: "1px solid rgba(212,149,108,0.08)" }}>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: "var(--gold)", letterSpacing: 2, marginBottom: 10 }}>EARNINGS SURPRISE HISTORY</div>
+            <div style={{ background: "var(--surface-3)", borderRadius: 6, padding: "10px 12px" }}>
+              <div style={{ display: "flex", fontFamily: 'var(--font-mono)', fontSize: 8, color: "var(--cocoa-dust)", letterSpacing: 1, marginBottom: 6, paddingBottom: 4, borderBottom: "1px solid rgba(212,149,108,0.08)" }}>
                 <div style={{ flex: 1 }}>QUARTER</div>
                 <div style={{ width: 60, textAlign: "right" }}>ACTUAL</div>
                 <div style={{ width: 60, textAlign: "right" }}>EST</div>
@@ -2258,10 +2258,10 @@ export function WallStreetPanel({ data }: { data: any }) {
                 const beat = sp != null && sp > 0;
                 return (
                   <div key={i} style={{ display: "flex", fontFamily: 'var(--font-mono)', fontSize: 10, padding: "4px 0", borderBottom: i < surpriseHistory.length - 1 ? "1px solid rgba(212,149,108,0.04)" : "none" }}>
-                    <div style={{ flex: 1, color: "#9d8b7a" }}>{s.period?.slice(0,7)}</div>
-                    <div style={{ width: 60, textAlign: "right", color: "#d4c4b0" }}>${s.actual?.toFixed(2) ?? "—"}</div>
-                    <div style={{ width: 60, textAlign: "right", color: "#9d8b7a" }}>${s.estimate?.toFixed(2) ?? "—"}</div>
-                    <div style={{ width: 60, textAlign: "right", color: beat ? "#40dda0" : "#ff8090", fontWeight: 700 }}>
+                    <div style={{ flex: 1, color: "var(--cocoa-dust)" }}>{s.period?.slice(0,7)}</div>
+                    <div style={{ width: 60, textAlign: "right", color: "var(--latte)" }}>${s.actual?.toFixed(2) ?? "—"}</div>
+                    <div style={{ width: 60, textAlign: "right", color: "var(--cocoa-dust)" }}>${s.estimate?.toFixed(2) ?? "—"}</div>
+                    <div style={{ width: 60, textAlign: "right", color: beat ? "var(--gold)" : "var(--bear)", fontWeight: 700 }}>
                       {sp != null ? `${sp > 0 ? "+" : ""}${sp.toFixed(1)}%` : "—"}
                     </div>
                   </div>
@@ -2271,7 +2271,7 @@ export function WallStreetPanel({ data }: { data: any }) {
           </>
         )}
 
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: "#8a7560", marginTop: 14, lineHeight: 1.6 }}>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: "var(--cocoa)", marginTop: 14, lineHeight: 1.6 }}>
           Source: Finnhub free tier · Forward estimates + price targets require paid plan<br/>
           Jegadeesh et al. (2004): consensus changes carry more signal than levels
         </div>
@@ -2289,7 +2289,7 @@ export function PortfolioPanel({ data }: { data: any }) {
   const gov = data.governance || {};
   const risk = data.risk_engine || {};
   const dsr = gov.deflated_sharpe_ratio;
-  const dsrColor = dsr == null ? "#9d8b7a" : dsr > 0.5 ? "#40dda0" : dsr > 0 ? "#e8b84b" : "#ff8090";
+  const dsrColor = dsr == null ? "var(--cocoa-dust)" : dsr > 0.5 ? "var(--gold)" : dsr > 0 ? "var(--caramel)" : "var(--bear)";
 
   const volScale = pc.vol_scale_factor ?? 1.0;
   const targetVol = (pc.target_vol ?? 0.10) * 100;
@@ -2298,10 +2298,10 @@ export function PortfolioPanel({ data }: { data: any }) {
   const leverage = pc.leverage_signal ?? "NEUTRAL";
   const governorActive = pc.governor_active ?? false;
 
-  const leverageColor = leverage === "INCREASE" ? "#40dda0"
-    : leverage === "REDUCE" ? "#ff8090"
-    : leverage === "HALT" ? "#ff4060"
-    : "#e8b84b";
+  const leverageColor = leverage === "INCREASE" ? "var(--gold)"
+    : leverage === "REDUCE" ? "var(--bear)"
+    : leverage === "HALT" ? "var(--bear)"
+    : "var(--caramel)";
 
   const labeling = gov.labeling || {};
 
@@ -2312,35 +2312,35 @@ export function PortfolioPanel({ data }: { data: any }) {
       <Card>
         <SectionTitle>VOLATILITY-TARGETED POSITION SIZING</SectionTitle>
         <div style={{ textAlign: "center", padding: "16px 0 20px" }}>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: "#9d8b7a", letterSpacing: 2, marginBottom: 8 }}>RECOMMENDED POSITION SIZE</div>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: "var(--cocoa-dust)", letterSpacing: 2, marginBottom: 8 }}>RECOMMENDED POSITION SIZE</div>
           <div style={{ position: "relative", width: 120, height: 120, margin: "0 auto 12px" }}>
             <svg viewBox="0 0 120 120" style={{ width: "100%", transform: "rotate(-90deg)" }}>
-              <circle cx="60" cy="60" r="50" fill="none" stroke="#1a0f0a" strokeWidth="12" />
+              <circle cx="60" cy="60" r="50" fill="none" stroke="var(--surface-3)" strokeWidth="12" />
               <circle cx="60" cy="60" r="50" fill="none"
-                stroke={governorActive ? "#ff8090" : "#daa520"}
+                stroke={governorActive ? "var(--bear)" : "var(--gold)"}
                 strokeWidth="12"
                 strokeDasharray={`${recommendedPos * 314} 314`}
                 style={{ transition: "stroke-dasharray 1.5s ease" }}
               />
             </svg>
             <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column" }}>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 700, color: governorActive ? "#ff8090" : "#daa520" }}>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 700, color: governorActive ? "var(--bear)" : "var(--gold)" }}>
                 {(recommendedPos * 100).toFixed(0)}%
               </div>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: "#8a7560" }}>OF CAPITAL</div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: "var(--cocoa)" }}>OF CAPITAL</div>
             </div>
           </div>
           {governorActive && (
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: "#ff8090", background: "rgba(224,82,82,0.1)", padding: "4px 12px", marginBottom: 8, letterSpacing: 1 }}>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: "var(--bear)", background: "rgba(224,82,82,0.1)", padding: "4px 12px", marginBottom: 8, letterSpacing: 1 }}>
               ⚠ DRAWDOWN GOVERNOR ACTIVE
             </div>
           )}
         </div>
-        <Row label="Vol Scale Factor" value={volScale.toFixed(4)} highlight={volScale < 0.8 ? "#ff8090" : "#d4c4b0"} />
+        <Row label="Vol Scale Factor" value={volScale.toFixed(4)} highlight={volScale < 0.8 ? "var(--bear)" : "var(--latte)"} />
         <Row label="Target Vol" value={`${targetVol.toFixed(1)}%`} />
-        <Row label="Realized Vol" value={`${realizedVol.toFixed(1)}%`} highlight={realizedVol > targetVol * 1.5 ? "#ff8090" : "#d4c4b0"} />
+        <Row label="Realized Vol" value={`${realizedVol.toFixed(1)}%`} highlight={realizedVol > targetVol * 1.5 ? "var(--bear)" : "var(--latte)"} />
         <Row label="Leverage Signal" value={leverage} highlight={leverageColor} />
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: "#8a7560", marginTop: 12, lineHeight: 1.7 }}>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: "var(--cocoa)", marginTop: 12, lineHeight: 1.7 }}>
           Vol targeting: scale = target_vol / realized_vol<br />
           Position halts at -20% drawdown (governor)<br />
           Reduces at -15% drawdown threshold
@@ -2352,12 +2352,12 @@ export function PortfolioPanel({ data }: { data: any }) {
         <SectionTitle>RISK ENGINE — CVaR BUDGET</SectionTitle>
         {risk.cvar ? (
           <>
-            <Row label="CVaR 95% (worst case)" value={fmtN((risk.cvar?.worst_case_daily || 0) * 100, 2) + "%"} highlight="#ff8090" />
-            <Row label="CVaR 95% (historical)" value={fmtN((risk.cvar?.historical?.cvar || 0) * 100, 2) + "%"} highlight="#ff8090" />
-            <Row label="CVaR (Cornish-Fisher)" value={fmtN((risk.cvar?.cornish_fisher?.cvar || 0) * 100, 2) + "%"} highlight="#ff8090" />
+            <Row label="CVaR 95% (worst case)" value={fmtN((risk.cvar?.worst_case_daily || 0) * 100, 2) + "%"} highlight="var(--bear)" />
+            <Row label="CVaR 95% (historical)" value={fmtN((risk.cvar?.historical?.cvar || 0) * 100, 2) + "%"} highlight="var(--bear)" />
+            <Row label="CVaR (Cornish-Fisher)" value={fmtN((risk.cvar?.cornish_fisher?.cvar || 0) * 100, 2) + "%"} highlight="var(--bear)" />
           </>
         ) : (
-          <div style={{ color: "#8a7560", fontFamily: 'var(--font-mono)', fontSize: 10, padding: "20px 0" }}>Risk engine data unavailable</div>
+          <div style={{ color: "var(--cocoa)", fontFamily: 'var(--font-mono)', fontSize: 10, padding: "20px 0" }}>Risk engine data unavailable</div>
         )}
 
         <SectionTitle>POSITION LIMITS</SectionTitle>
@@ -2370,7 +2370,7 @@ export function PortfolioPanel({ data }: { data: any }) {
           <Row key={k} label={k.replace(/_/g, " ")} value={typeof v === "number" ? fmtN(v, 4) : String(v)} />
         )) : null}
 
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: "#8a7560", marginTop: 12, lineHeight: 1.7 }}>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: "var(--cocoa)", marginTop: 12, lineHeight: 1.7 }}>
           CVaR = Expected Shortfall beyond VaR threshold<br />
           Preferred over VaR for Basel III / FRTB compliance<br />
           Cornish-Fisher: adjusts for skewness + kurtosis
@@ -2381,18 +2381,18 @@ export function PortfolioPanel({ data }: { data: any }) {
       <Card>
         <SectionTitle>MODEL GOVERNANCE — DEFLATED SHARPE</SectionTitle>
         <div style={{ textAlign: "center", padding: "16px 0 20px" }}>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: "#9d8b7a", letterSpacing: 2, marginBottom: 8 }}>DEFLATED SHARPE RATIO</div>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: "var(--cocoa-dust)", letterSpacing: 2, marginBottom: 8 }}>DEFLATED SHARPE RATIO</div>
           <div style={{ fontFamily: 'var(--font-display)', fontSize: 42, color: dsrColor, letterSpacing: 2, lineHeight: 1 }}>
             {dsr != null ? dsr.toFixed(3) : "—"}
           </div>
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: dsrColor, marginTop: 6, letterSpacing: 1 }}>
             {gov.is_genuine_alpha ? "✓ DSR > 0 · UNLIKELY CHANCE" : "✗ DSR ≤ 0 · COULD BE CHANCE"}
           </div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: "#8a7560", marginTop: 4 }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: "var(--cocoa)", marginTop: 4 }}>
             Raw Sharpe: {fmtN(gov.sharpe_ratio_raw, 3)} · {gov.n_models_tested || 8} models tested
           </div>
         </div>
-        <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: "#9d8b7a", lineHeight: 1.6, marginBottom: 16 }}>
+        <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: "var(--cocoa-dust)", lineHeight: 1.6, marginBottom: 16 }}>
           DSR corrects for multiple testing bias across {gov.n_models_tested || 8} model variants.
           A DSR {">"} 0 indicates the Sharpe is unlikely to be due to chance.
         </div>
@@ -2405,7 +2405,7 @@ export function PortfolioPanel({ data }: { data: any }) {
           <Row key={k} label={`Label ${k}`} value={fmtN(v, 3)} />
         ))}
 
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: "#8a7560", marginTop: 12, lineHeight: 1.7 }}>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: "var(--cocoa)", marginTop: 12, lineHeight: 1.7 }}>
           Lopez de Prado (2018) AFML Ch.7<br />
           60-day embargo prevents autocorrelation leakage<br />
           DSR: Bailey {"&"} Lopez de Prado (2014)
@@ -2433,13 +2433,13 @@ export function PerformancePanel({ data }: { data: any }) {
       {/* Signal Quality */}
       <Card>
         <SectionTitle>SIGNAL QUALITY METRICS</SectionTitle>
-        <Row label="IC (in-sample, XGB train)" value={fmtN(ml.ic_estimate, 4)} highlight="#e8b84b" />
+        <Row label="IC (in-sample, XGB train)" value={fmtN(ml.ic_estimate, 4)} highlight="var(--caramel)" />
         <Row label="Rank IC (out-of-sample)" value={ml.rank_ic_estimate != null ? fmtN(ml.rank_ic_estimate, 4) : "—"} />
         <Row label="Model Disagreement" value={fmtN(ens.model_disagreement, 3) + "%"} />
-        <Row label="Deflated Sharpe (DSR)" value={fmtN(gov.deflated_sharpe_ratio, 3)} highlight={(gov.deflated_sharpe_ratio || 0) > 0.5 ? "#40dda0" : "#e8b84b"} />
-        <Row label="DSR verdict" value={gov.is_genuine_alpha ? "unlikely chance" : "could be chance"} highlight={gov.is_genuine_alpha ? "#40dda0" : "#e8b84b"} />
+        <Row label="Deflated Sharpe (DSR)" value={fmtN(gov.deflated_sharpe_ratio, 3)} highlight={(gov.deflated_sharpe_ratio || 0) > 0.5 ? "var(--gold)" : "var(--caramel)"} />
+        <Row label="DSR verdict" value={gov.is_genuine_alpha ? "unlikely chance" : "could be chance"} highlight={gov.is_genuine_alpha ? "var(--gold)" : "var(--caramel)"} />
 
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: "#8a7560", marginTop: 12, lineHeight: 1.7 }}>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: "var(--cocoa)", marginTop: 12, lineHeight: 1.7 }}>
           IC = Spearman rank correlation of predictions vs realized returns.<br />
           The in-sample IC is measured on training data and is optimistic; the out-of-sample<br />
           Rank IC is the honest read (real-world equity IC is typically 0.02–0.05).<br />
@@ -2451,40 +2451,40 @@ export function PerformancePanel({ data }: { data: any }) {
       {/* Return Attribution */}
       <Card>
         <SectionTitle>RETURN ATTRIBUTION</SectionTitle>
-        <Row label="Annual Return" value={fmtN((risk.annual_return || 0) * 100, 2) + "%"} highlight={(risk.annual_return || 0) > 0 ? "#40dda0" : "#ff8090"} />
+        <Row label="Annual Return" value={fmtN((risk.annual_return || 0) * 100, 2) + "%"} highlight={(risk.annual_return || 0) > 0 ? "var(--gold)" : "var(--bear)"} />
         <Row label="Annual Volatility" value={fmtN((risk.annual_volatility || 0) * 100, 2) + "%"} />
-        <Row label="Sharpe Ratio" value={fmtN(risk.sharpe_ratio, 3)} highlight={(risk.sharpe_ratio || 0) > 1 ? "#40dda0" : (risk.sharpe_ratio || 0) > 0.5 ? "#e8b84b" : "#ff8090"} />
+        <Row label="Sharpe Ratio" value={fmtN(risk.sharpe_ratio, 3)} highlight={(risk.sharpe_ratio || 0) > 1 ? "var(--gold)" : (risk.sharpe_ratio || 0) > 0.5 ? "var(--caramel)" : "var(--bear)"} />
         <Row label="Sortino Ratio" value={fmtN(risk.sortino_ratio, 3)} />
-        <Row label="Max Drawdown" value={fmtN((risk.max_drawdown || 0) * 100, 2) + "%"} highlight="#ff8090" />
+        <Row label="Max Drawdown" value={fmtN((risk.max_drawdown || 0) * 100, 2) + "%"} highlight="var(--bear)" />
         <Row label="Calmar Ratio" value={fmtN(risk.calmar_ratio, 3)} />
-        <Row label="Omega Ratio" value={fmtN(risk.omega_ratio, 3)} highlight={(risk.omega_ratio || 0) > 1 ? "#40dda0" : "#ff8090"} />
+        <Row label="Omega Ratio" value={fmtN(risk.omega_ratio, 3)} highlight={(risk.omega_ratio || 0) > 1 ? "var(--gold)" : "var(--bear)"} />
 
         <SectionTitle>DISTRIBUTION MOMENTS</SectionTitle>
-        <Row label="Skewness" value={fmtN(risk.skewness, 4)} highlight={(risk.skewness || 0) > 0 ? "#40dda0" : "#ff8090"} />
-        <Row label="Excess Kurtosis" value={fmtN(risk.excess_kurtosis, 4)} highlight={(risk.excess_kurtosis || 0) > 3 ? "#ff8090" : "#d4c4b0"} />
-        <Row label="Hurst Exponent" value={fmtN(data.hurst_exponent, 4)} highlight={(data.hurst_exponent || 0.5) > 0.55 ? "#40dda0" : "#8b5cf6"} />
+        <Row label="Skewness" value={fmtN(risk.skewness, 4)} highlight={(risk.skewness || 0) > 0 ? "var(--gold)" : "var(--bear)"} />
+        <Row label="Excess Kurtosis" value={fmtN(risk.excess_kurtosis, 4)} highlight={(risk.excess_kurtosis || 0) > 3 ? "var(--bear)" : "var(--latte)"} />
+        <Row label="Hurst Exponent" value={fmtN(data.hurst_exponent, 4)} highlight={(data.hurst_exponent || 0.5) > 0.55 ? "var(--gold)" : "var(--caramel)"} />
       </Card>
 
       {/* IC Tracking — honest accumulating state */}
       <Card>
         <SectionTitle>OUT-OF-SAMPLE IC TRACKING</SectionTitle>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: "#d4c4b0", marginBottom: 14, lineHeight: 1.6 }}>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: "var(--latte)", marginBottom: 14, lineHeight: 1.6 }}>
           Every signal this engine generates is recorded with a timestamp, then scored
-          against the stock's <span style={{color:"#daa520"}}>realized 21-day forward return</span> once
+          against the stock's <span style={{color:"var(--gold)"}}>realized 21-day forward return</span> once
           that horizon completes. The out-of-sample Information Coefficient — the honest
           measure of whether the signal actually predicts returns — accumulates from those
           matured signals.
         </div>
-        <div style={{ display:"flex", alignItems:"center", gap:10, padding:"12px 14px", background:"#1a0f0a", borderRadius:6, border:"1px solid rgba(212,149,108,0.12)", marginBottom:12 }}>
-          <div style={{ fontFamily:'var(--font-display)', fontSize:30, color:"#daa520", lineHeight:1 }}>⏳</div>
-          <div style={{ fontFamily:'var(--font-mono)', fontSize:11, color:"#9d8b7a", lineHeight:1.5 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:10, padding:"12px 14px", background:"var(--surface-3)", borderRadius:6, border:"1px solid rgba(212,149,108,0.12)", marginBottom:12 }}>
+          <div style={{ fontFamily:'var(--font-display)', fontSize:30, color:"var(--gold)", lineHeight:1 }}>⏳</div>
+          <div style={{ fontFamily:'var(--font-mono)', fontSize:11, color:"var(--cocoa-dust)", lineHeight:1.5 }}>
             Signal history is still maturing. A meaningful IC series needs several months of
             signals that have each reached their 21-day evaluation horizon. Until then, the
-            honest IC read is the per-analysis <span style={{color:"#daa520"}}>out-of-sample Rank IC</span> on
+            honest IC read is the per-analysis <span style={{color:"var(--gold)"}}>out-of-sample Rank IC</span> on
             the left, not a backfilled track record.
           </div>
         </div>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: "#8a7560", marginTop: 8, lineHeight: 1.7 }}>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: "var(--cocoa)", marginTop: 8, lineHeight: 1.7 }}>
           Why no 12-month chart? Because the platform doesn't have 12 months of live signals
           yet — and showing a backfilled one would misrepresent the track record.<br />
           IC = Spearman rank correlation of signal vs realized forward returns.<br />
