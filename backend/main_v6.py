@@ -323,7 +323,34 @@ async def lifespan(app: FastAPI):
                 name="Weekly universe refresh",
                 replace_existing=True, max_instances=1, coalesce=True,
             )
-            logger.info("daily bars sync + weekly universe refresh scheduled")
+            async def _refresh_13f():
+                """Check weekly for a new 13F dataset; download only when the quarter changes.
+
+                Managers file within 45 days of quarter end, so a new dataset appears
+                four times a year. Checking weekly means the data is never more than a
+                week behind whatever the SEC has published, at the cost of four
+                downloads a year — load_quarter returns early when the latest quarter
+                is already in the table.
+                """
+                try:
+                    from services.holdings_13f import load_quarter
+                    res = await load_quarter(app.state.db)
+                    if res.get("loaded"):
+                        logger.info(f"13F loaded {res['quarter']}: {res['n_rows']:,} positions "
+                                    f"from {res['n_managers']:,} managers")
+                    else:
+                        logger.info(f"13F: {res.get('reason')} ({res.get('quarter')})")
+                except Exception as e:
+                    logger.warning(f"13F refresh failed: {type(e).__name__}: {e}")
+
+            scheduler.add_job(
+                _refresh_13f,
+                trigger=CronTrigger(day_of_week="sun", hour=5, minute=0, timezone=et),
+                id="holdings_13f_refresh",
+                name="Weekly 13F holdings check",
+                replace_existing=True, max_instances=1, coalesce=True,
+            )
+            logger.info("daily bars sync + weekly universe refresh + weekly 13F check scheduled")
 
         # Disclosed relationships from 10-K filings. SEC throttles aggressively,
         # so this works through the universe a slice at a time and picks up where

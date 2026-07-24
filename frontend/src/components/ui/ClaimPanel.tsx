@@ -22,8 +22,12 @@ export default function ClaimPanel({ ticker }:{ ticker:string }){
   if(err) return null;
   if(!q || q.length<4) return null;
 
-  const shares=q.map(r=>r.diluted_shares).filter(v=>v!=null) as number[];
-  if(shares.length<4) return null;
+  // Quarters with no reported share count must be skipped, not drawn. Plotting
+  // a null as zero produced a V crashing to the axis and back, and made the
+  // axis label read "0.01B low" for a company with 7.4bn shares.
+  const pts=q.map((r,i)=>({i, v:r.diluted_shares})).filter(p=>p.v!=null && (p.v as number)>0) as {i:number;v:number}[];
+  if(pts.length<4) return null;
+  const shares=pts.map(p=>p.v);
   const first=shares[0], last=shares[shares.length-1];
   const totalChange=((last/first)-1)*100;
   const bbTot=q.reduce((s,r)=>s+(r.buybacks||0),0);
@@ -35,7 +39,7 @@ export default function ClaimPanel({ ticker }:{ ticker:string }){
   const sLo=Math.min(...shares), sHi=Math.max(...shares);
   const sx=(i:number)=>PAD.l+(i/(q.length-1))*(W-PAD.l-PAD.r);
   const sy=(v:number)=>H-PAD.b-((v-sLo)/((sHi-sLo)||1))*(H-PAD.t-PAD.b);
-  const path=q.map((r,i)=>r.diluted_shares==null?null:`${i===0?'M':'L'}${sx(i).toFixed(1)},${sy(r.diluted_shares).toFixed(1)}`).filter(Boolean).join(' ');
+  const path=pts.map((p,k)=>`${k===0?'M':'L'}${sx(p.i).toFixed(1)},${sy(p.v).toFixed(1)}`).join(' ');
 
   const flowMax=Math.max(...q.map(r=>Math.max(r.buybacks||0,r.sbc||0)),1);
 
@@ -68,7 +72,7 @@ export default function ClaimPanel({ ticker }:{ ticker:string }){
       <div style={{fontFamily:'var(--font-mono)',fontSize:9,color:'var(--cocoa)',letterSpacing:1,marginBottom:2}}>DILUTED SHARES OUTSTANDING</div>
       <svg viewBox={`0 0 ${W} ${H}`} style={{width:'100%',display:'block'}}>
         <path d={path} fill="none" stroke="var(--gold)" strokeWidth={2}/>
-        {q.map((r,i)=>r.diluted_shares==null?null:<circle key={i} cx={sx(i)} cy={sy(r.diluted_shares)} r={2.5} fill="var(--gold)"/>)}
+        {pts.map(p=><circle key={p.i} cx={sx(p.i)} cy={sy(p.v)} r={2.5} fill="var(--gold)"/>)}
         <text x={PAD.l} y={H-4} fill="var(--cocoa)" fontSize="9" fontFamily="monospace">{(sLo/1e9).toFixed(2)}B low</text>
         <text x={W-PAD.r} y={H-4} fill="var(--cocoa)" fontSize="9" fontFamily="monospace" textAnchor="end">{q[q.length-1].fiscal}</text>
       </svg>
