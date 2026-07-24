@@ -85,6 +85,10 @@ async def compute_ownership_intelligence(ticker: str, api_key: str, pool=None) -
         try:
             from services.holdings_13f import ownership_for
             institutional = await ownership_for(pool, ticker, company_name, shares_out)
+            if institutional.get("available") and institutional.get("cusip"):
+                from services.holdings_13f import notable_holders
+                institutional["notable"] = await notable_holders(
+                    pool, institutional["cusip"], shares_out)
         except Exception as e:
             logger.debug(f"13F lookup failed for {ticker}: {e}")
             institutional={"available": False, "reason": str(e)[:120]}
@@ -113,8 +117,10 @@ async def compute_ownership_intelligence(ticker: str, api_key: str, pool=None) -
             "top_holders":ownership.get("holders",[])[:5] if ownership.get("available") else [],
             "coverage":{"scored":n_scored,"total":n_total},"tree":tree,
             "key_metrics":{k:feats.get(k) for k in
-                ["share_count_trend","insider_net_conviction","major_holder_count","top_holder_pct",
-                 "dilution_pressure","buyback_intensity","ownership_conviction","insider_buy_ratio","float_liquidity","insider_cluster"]}}
+                # The insider fields went with the Insider Activity category —
+                # they were reporting 0.0 from a source that no longer runs.
+                ["share_count_trend","major_holder_count","top_holder_pct",
+                 "dilution_pressure","buyback_intensity","float_liquidity"]}}
 
 @router.get("/ownership/{ticker}")
 async def get_ownership(ticker: str, http_request: Request,

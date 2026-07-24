@@ -2,8 +2,11 @@ import { useEffect, useState } from 'react';
 import { api } from '../../auth/authStore';
 
 interface H { manager:string; shares:number; value_usd:number; n_entities:number; pct_of_company:number|null; }
+interface N { manager:string; shares:number; value_usd:number;
+  pct_of_company:number|null; pct_of_their_book:number|null; }
 interface Inst {
   available:boolean; quarter?:string; issuer?:string; n_managers?:number;
+  notable?:{available:boolean; n_notable?:number; holders?:N[]};
   institutional_pct?:number; other_pct?:number; shares_outstanding?:number;
   institutional_shares?:number; top_holders?:H[]; note?:string; reason?:string;
 }
@@ -114,6 +117,50 @@ export default function HoldersPanel({ ticker }:{ ticker:string }){
           ))}
         </div>
       </div>
+
+      {(() => {
+        const nb = d.notable;
+        if (!nb?.available || !(nb.holders||[]).length) return null;
+        // Sorted by weight in their own book, not by size. An index fund holds
+        // every large company by construction; a manager with 2.5% of what they
+        // run in one name has made a decision, and that ordering surfaces it.
+        const rows = [...(nb.holders||[])]
+          .filter(h => h.pct_of_their_book != null)
+          .sort((a,b) => (b.pct_of_their_book!) - (a.pct_of_their_book!))
+          .slice(0, 8);
+        if (!rows.length) return null;
+        const maxBook = Math.max(...rows.map(r => r.pct_of_their_book!));
+        return (
+          <div style={{marginTop:18,paddingTop:14,borderTop:'1px solid var(--border-1)'}}>
+            <div style={{fontFamily:'var(--font-mono)',fontSize:9,letterSpacing:2,color:'var(--gold)',marginBottom:4}}>
+              MANAGERS WHO CHOSE THIS POSITION
+            </div>
+            <div style={{fontFamily:'var(--font-body)',fontSize:11,color:'var(--cocoa-dust)',marginBottom:10,lineHeight:1.55}}>
+              Index funds hold every large company by construction, so their presence says nothing.
+              These are discretionary managers, ranked by how much of their own book sits in this name —
+              the measure of conviction rather than of size.
+            </div>
+            {rows.map(h => (
+              <div key={h.manager} style={{display:'grid',gridTemplateColumns:'minmax(140px,190px) 1fr 74px 66px',
+                gap:12,alignItems:'center',padding:'6px 0',borderBottom:'1px solid var(--border-1)'}}>
+                <span style={{fontFamily:'var(--font-body)',fontSize:12,color:'var(--latte)'}}>{h.manager}</span>
+                <div style={{height:5,background:'var(--surface-3)',borderRadius:2,minWidth:60}}>
+                  <div style={{height:'100%',width:`${(h.pct_of_their_book!/maxBook)*100}%`,
+                    background:'var(--gold)',borderRadius:2,opacity:0.85}}/></div>
+                <span style={{fontFamily:'var(--font-mono)',fontSize:12,color:'var(--gold)',textAlign:'right'}}>
+                  {h.pct_of_their_book!.toFixed(2)}%
+                </span>
+                <span style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--cocoa)',textAlign:'right'}}>
+                  ${(h.value_usd/1e9).toFixed(1)}B
+                </span>
+              </div>
+            ))}
+            <div style={{fontFamily:'var(--font-body)',fontSize:10.5,color:'var(--cocoa)',marginTop:8}}>
+              Percentage is this holding as a share of the manager's entire reported book · dollar figure is the position's value
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
