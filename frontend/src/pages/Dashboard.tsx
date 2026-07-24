@@ -18,7 +18,6 @@ import {
   RegimePanel,
   OptionsPanel,
   SentimentPanel,
-  FundamentalsPanel,
   ScenarioPanel,
   Watchlist,
 } from '../components/ui';
@@ -27,6 +26,7 @@ import Screener from './Screener';
 import OverviewV2 from './overview_v2/OverviewV2';
 import NewsPanel from '../components/ui/NewsPanel';
 import RiskPanel from '../components/ui/RiskPanel';
+import QuartersPanel from '../components/ui/QuartersPanel';
 import IndustryPanel from '../components/ui/IndustryPanel';
 import CompetitivePanel from '../components/ui/CompetitivePanel';
 import ManagementPanel from '../components/ui/ManagementPanel';
@@ -58,7 +58,6 @@ const TABS = [
   { id: 'forecast',    label: '🔮 FORECAST' },
   { id: 'altdata',     label: '📡 ALT-DATA' },
   { id: 'iflow',       label: '💸 INST FLOW' },
-  { id: 'fundamental', label: '📋 FUNDAMENTALS' },
   { id: 'financial',   label: '💎 FINANCIAL' },
   { id: 'valuation',   label: '⚖️ VALUATION' },
   { id: 'market',      label: '📈 MARKET' },
@@ -431,8 +430,7 @@ export default function Dashboard() {
               {activeTab === 'forecast'    && <ForecastPanel ticker={ticker} />}
               {activeTab === 'altdata'     && <AltDataPanel ticker={ticker} />}
               {activeTab === 'iflow'       && <IFlowPanel ticker={ticker} />}
-              {activeTab === 'fundamental' && <FundamentalsPanel data={data} />}
-              {activeTab === 'financial'   && <FinancialIntelligencePanel ticker={ticker} />}
+              {activeTab === 'financial'   && <><QuartersPanel ticker={ticker} /><FinancialIntelligencePanel ticker={ticker} /></>}
               {activeTab === 'valuation'   && <ValuationPanel ticker={ticker} />}
               {activeTab === 'market'      && <MarketPanel ticker={ticker} />}
               {activeTab === 'business'    && <BusinessPanel ticker={ticker} />}

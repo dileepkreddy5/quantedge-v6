@@ -105,7 +105,7 @@ export default function FinancialIntelligencePanel({ ticker }: { ticker: string 
   };
 
   if (!ticker) return <div style={{ color: '#9d8b7a', padding: 24 }}>Enter a ticker to load Financial Intelligence.</div>;
-  if (loading) return <div style={{ color: '#daa520', padding: 24 }}>Computing Financial Intelligence — hybrid Polygon + SEC EDGAR, 58 signals, 6 models…</div>;
+  if (loading) return <div style={{ color: '#daa520', padding: 24 }}>Computing Financial Intelligence — hybrid Polygon + SEC EDGAR…</div>;
   if (err) return <div style={{ color: '#c0705a', padding: 24 }}>Financial Intelligence: {err}</div>;
   if (!data) return null;
   const km = data.key_metrics;
