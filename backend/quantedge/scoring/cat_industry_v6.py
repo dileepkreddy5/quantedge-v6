@@ -42,7 +42,7 @@ CATEGORIES = {
    _s("composite_rank","Composite sector rank","composite_sector_rank",0.30,0.5,0.85,evidence="average percentile across all factors"),
    _s("top_quartile","Top-quartile factor share","top_quartile_flags",0.20,0.2,0.6,evidence="share of factors in sector top quartile"),
    _s("bottom_quartile","Bottom-quartile share","bottom_quartile_flags",0.15,0.4,0.1,hib=False,evidence="share of factors in sector bottom quartile"),
-   _s("mom_vs_avg","Momentum vs sector avg","momentum_vs_sector_avg",0.20,-2,8,evidence="momentum above sector average"),
+   _s("mom_vs_avg","Momentum vs sector avg","momentum_vs_sector_avg",0.20,-5,10,evidence="three-month momentum in percentage points above the sector average"),
    _s("obv_pct","OBV accumulation percentile","obv_pctile_sector",0.08,0.5,0.85,evidence="accumulation rank vs sector"),
    _s("ma200_pct","Trend (MA200) percentile","ma200_pctile_sector",0.07,0.5,0.85,evidence="long-trend rank vs sector"),
  ]),

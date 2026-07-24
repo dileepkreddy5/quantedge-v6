@@ -9,7 +9,7 @@ interface IndData {
   tree:{categories:Cat[]}; key_metrics:Record<string,number|null>; reason?:string;
 }
 const heat=(s:number|null)=>s==null?'var(--border-2)':s>=70?'var(--gold)':s>=50?'var(--caramel)':s>=30?'#c9762f':'var(--bear)';
-const ratingColor=(r:string)=>r.includes('Leader')?'#0f9d6e':r.includes('Above')?'#1d9e75':r.includes('In-Line')?'#c9a227':r.includes('Below')?'#c0705a':'#7a2320';
+const ratingColor=(r:string)=>r.includes('Leader')?'var(--gold)':r.includes('Above')?'var(--gold)':r.includes('In-Line')?'var(--caramel)':r.includes('Below')?'#c9762f':'var(--bear)';
 
 const fmtVal=(id:string,v:number|null):string=>{
   if(v==null) return '—';
@@ -40,10 +40,10 @@ const RSBar=({label,value}:{label:string,value:number|null})=>{
       <div style={{flex:1,height:16,position:'relative',background:'#181818',borderRadius:4}}>
         <div style={{position:'absolute',left:'50%',top:0,bottom:0,width:1,background:'#3a3a3a'}}/>
         <div style={{position:'absolute',top:2,bottom:2,borderRadius:2,
-          background:isPos?'#0f9d6e':'#c0705a',
+          background:isPos?'var(--gold)':'var(--caramel)',
           left:isPos?'50%':`${50+pct*50}%`, width:`${Math.abs(pct)*50}%`}}/>
       </div>
-      <span style={{fontSize:11,fontWeight:600,color:isPos?'#0f9d6e':'#c0705a',width:52,textAlign:'right'}}>
+      <span style={{fontFamily:'var(--font-mono)',fontSize:11,fontWeight:600,color:isPos?'var(--gold)':'var(--caramel)',width:52,textAlign:'right'}}>
         {isPos?'+':''}{(value*100).toFixed(1)}%</span>
     </div>
   );
@@ -67,7 +67,7 @@ export default function IndustryPanel({ ticker }:{ ticker:string }){
 
   if(!ticker)return <div style={{color:'#9d8b7a',padding:24}}>Enter a ticker for Industry Intelligence.</div>;
   if(loading)return <div style={{color:'#daa520',padding:24}}>Analyzing sector positioning — relative strength, peer rank, and 48 signals…</div>;
-  if(err)return <div style={{color:'#c0705a',padding:24}}>Industry: {err}</div>;
+  if(err)return <div style={{fontFamily:'var(--font-body)',color:'var(--bear)',padding:24}}>Industry: {err}</div>;
   if(!d)return null;
 
   const km=d.key_metrics||{};
@@ -107,7 +107,7 @@ export default function IndustryPanel({ ticker }:{ ticker:string }){
               <span style={{fontSize:11,color:'#cdbfae',width:150}}>{s.label.replace(' percentile','')}</span>
               <div style={{flex:1,height:14,background:'#181818',borderRadius:4,overflow:'hidden'}}>
                 <div style={{height:'100%',width:`${(s.raw_value||0)*100}%`,
-                  background:(s.raw_value||0)>=0.6?'#0f9d6e':(s.raw_value||0)>=0.4?'#c9a227':'#c0705a'}}/>
+                  background:(s.raw_value||0)>=0.6?'var(--gold)':(s.raw_value||0)>=0.4?'var(--caramel)':'#c9762f'}}/>
               </div>
               <span style={{fontSize:11,fontWeight:600,color:'#cdbfae',width:44,textAlign:'right'}}>{((s.raw_value||0)*100).toFixed(0)}th</span>
             </div>
