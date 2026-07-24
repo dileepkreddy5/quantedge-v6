@@ -31,8 +31,8 @@ CATEGORIES = {
    _s("float_liq","Float liquidity","float_liquidity",0.35,0.3,0.8,evidence="volume vs shares"),
    _s("turnover","Turnover ratio","turnover_ratio",0.35,0.002,0.01,evidence="daily volume / shares"),
    _s("mcap_liq","Market cap ($B)","market_cap_b",0.30,10,200,evidence="size/liquidity")]),
- "conviction":("Ownership Conviction",0.40,[
-   ]),
+ # "Ownership Conviction" held only buyback_int2, a second entry on
+ # buyback_intensity already scored under Smart Money Signals.
  "concentration":("Concentration Risk",0.35,[
    _s("top_pct","Largest holder","top_holder_pct",0.50,20,7,hib=False,evidence="stake of the single largest institutional holder")]),
 }
