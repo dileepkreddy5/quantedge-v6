@@ -11,9 +11,9 @@ interface NewsData {
   sentiment_dist:{positive:number;neutral:number;negative:number};
   brief:BriefItem[]; recent_headlines:Headline[]; key_facts?:{fact:string;group:string;source:string;date:string;url:string;headline:string;weight:number}[]; tree:{categories:Cat[]}; key_metrics:Record<string,number|null>; reason?:string;
 }
-const heat=(s:number|null)=>s==null?'rgba(212,149,108,0.12)':s>=75?'#0f6e56':s>=58?'#1d9e75':s>=42?'#8a7519':s>=25?'#a35a1d':'#7a2320';
-const ratingColor=(r:string)=>r.includes('Very Positive')?'#0f9d6e':r.includes('Positive')?'#1d9e75':r.includes('Mixed')?'#c9a227':r.includes('Negative')?'#c0705a':'#7a2320';
-const sentDot=(s:string)=>s==='positive'?'#0f9d6e':s==='negative'?'#c0705a':'#9d8b7a';
+const heat=(s:number|null)=>s==null?'var(--border-2)':s>=70?'var(--gold)':s>=50?'var(--caramel)':s>=30?'#c9762f':'var(--bear)';
+const ratingColor=(r:string)=>r.includes('Very Positive')?'var(--gold)':r.includes('Positive')?'var(--gold)':r.includes('Mixed')?'var(--caramel)':r.includes('Negative')?'#c9762f':'var(--bear)';
+const sentDot=(s:string)=>s==='positive'?'var(--gold)':s==='negative'?'var(--bear)':'var(--cocoa)';
 
 const fmtVal=(id:string,v:number|null):string=>{
   if(v==null) return '—';
@@ -41,7 +41,7 @@ export default function NewsPanel({ ticker, data }:{ ticker:string; data?:any })
 
   if(!ticker)return <div style={{color:'#9d8b7a',padding:24}}>Enter a ticker for News Intelligence.</div>;
   if(loading)return <div style={{color:'#daa520',padding:24}}>Analyzing news — sentiment, events, and 47 signals across recent coverage…</div>;
-  if(err)return <div style={{color:'#c0705a',padding:24}}>News: {err}</div>;
+  if(err)return <div style={{fontFamily:'var(--font-body)',color:'var(--bear)',padding:24}}>News: {err}</div>;
   if(!d)return null;
 
   const sd=d.sentiment_dist||{positive:0,neutral:0,negative:0};
@@ -88,15 +88,15 @@ export default function NewsPanel({ ticker, data }:{ ticker:string; data?:any })
         <div style={{display:'flex',gap:26,alignItems:'flex-start',flexWrap:'wrap'}}>
           <div style={{textAlign:'center',minWidth:96}}>
             <div style={{fontFamily:"'Fira Code',monospace",fontSize:44,fontWeight:800,color:heat(d.score),lineHeight:1}}>{d.score?.toFixed(0)??'—'}</div>
-            <div style={{fontFamily:"'Fira Code',monospace",fontSize:8,color:'#8a7560',letterSpacing:2,marginTop:4}}>NEWS SCORE</div>
+            <div style={{fontFamily:"'Fira Code',monospace",fontSize:8,color:'var(--cocoa)',letterSpacing:2,marginTop:4}}>NEWS SCORE</div>
             <div style={{fontFamily:"'Outfit',sans-serif",fontSize:12,color:ratingColor(d.news_rating),marginTop:2}}>{d.news_rating}</div>
           </div>
           <div style={{flex:1,minWidth:300}}>
             <div style={{fontFamily:"'Outfit',sans-serif",fontSize:13.5,color:'#d4c4b0',lineHeight:1.6}}>{verdict}</div>
             <div style={{display:'flex',height:8,borderRadius:4,overflow:'hidden',marginTop:14}}>
-              <div style={{width:`${sd.positive/total*100}%`,background:'#22c55e',opacity:0.65}}/>
-              <div style={{width:`${sd.neutral/total*100}%`,background:'#8a7560',opacity:0.35}}/>
-              <div style={{width:`${sd.negative/total*100}%`,background:'#ef4444',opacity:0.65}}/>
+              <div style={{width:`${sd.positive/total*100}%`,background:'var(--gold)',opacity:0.85}}/>
+              <div style={{width:`${sd.neutral/total*100}%`,background:'var(--border-2)',opacity:0.7}}/>
+              <div style={{width:`${sd.negative/total*100}%`,background:'var(--bear)',opacity:0.75}}/>
             </div>
             <div style={{display:'flex',justifyContent:'space-between',fontFamily:"'Fira Code',monospace",fontSize:8.5,color:'#6b5d52',marginTop:4}}>
               <span>{sd.positive} positive</span><span>{sd.neutral} neutral</span><span>{sd.negative} negative</span>
@@ -112,14 +112,14 @@ export default function NewsPanel({ ticker, data }:{ ticker:string; data?:any })
             {l:'SOURCE QUALITY',v:km.tier1_source_share!=null?`${(km.tier1_source_share*100).toFixed(0)}%`:'—', n:'from tier-1 outlets'},
           ].map(x=>(
             <div key={x.l} style={{background:'#1a0f0a',borderRadius:6,padding:'9px 10px'}}>
-              <div style={{fontFamily:"'Fira Code',monospace",fontSize:8,color:'#8a7560',letterSpacing:1}}>{x.l}</div>
+              <div style={{fontFamily:"'Fira Code',monospace",fontSize:8,color:'var(--cocoa)',letterSpacing:1}}>{x.l}</div>
               <div style={{fontFamily:"'Fira Code',monospace",fontSize:15,fontWeight:700,color:'#d4c4b0',marginTop:3}}>{x.v}</div>
               <div style={{fontFamily:"'Outfit',sans-serif",fontSize:8.5,color:'#6b5d52',marginTop:1}}>{x.n}</div>
             </div>
           ))}
         </div>
         {km.fraud_litigation_flag ? (
-          <div style={{marginTop:12,padding:'8px 12px',background:'rgba(239,68,68,0.08)',borderLeft:'2px solid #ef4444',borderRadius:4,
+          <div style={{marginTop:12,padding:'8px 12px',background:'rgba(192,112,90,0.08)',borderLeft:'2px solid var(--bear)',borderRadius:4,
             fontFamily:"'Outfit',sans-serif",fontSize:11,color:'#d4c4b0'}}>
             Litigation or fraud language detected in recent coverage — worth reading the source articles directly.
           </div>
@@ -240,7 +240,7 @@ export default function NewsPanel({ ticker, data }:{ ticker:string; data?:any })
                       <div style={{marginTop:3}}>
                         {k.url
                           ? <a href={k.url} target="_blank" rel="noopener noreferrer"
-                              style={{fontFamily:"'Outfit',sans-serif",fontSize:9,color:'#8a7560',textDecoration:'none'}}>
+                              style={{fontFamily:"'Outfit',sans-serif",fontSize:9,color:'var(--cocoa)',textDecoration:'none'}}>
                               {k.source} · {k.date} ↗
                             </a>
                           : <span style={{fontFamily:"'Outfit',sans-serif",fontSize:9,color:'#6b5d52'}}>{k.source} · {k.date}</span>}
@@ -261,7 +261,7 @@ export default function NewsPanel({ ticker, data }:{ ticker:string; data?:any })
           Most financial coverage is opinion; this section is deliberately short, and empty when nothing has been reported.
         </div>
         {events.length === 0 && (
-          <div style={{fontFamily:"'Outfit',sans-serif",fontSize:12,color:'#8a7560',padding:'14px 0',lineHeight:1.6}}>
+          <div style={{fontFamily:"'Outfit',sans-serif",fontSize:12,color:'var(--cocoa)',padding:'14px 0',lineHeight:1.6}}>
             No reported events in recent coverage. Everything currently written about this company is commentary,
             comparison or speculation — listed below.
           </div>
@@ -280,9 +280,9 @@ export default function NewsPanel({ ticker, data }:{ ticker:string; data?:any })
                 <div style={{fontFamily:"'Outfit',sans-serif",fontSize:11.5,color:'#9d8b7a',lineHeight:1.5,marginTop:5}}>{h.reason}</div>
                 <div style={{display:'flex',gap:10,alignItems:'center',marginTop:7,flexWrap:'wrap'}}>
                   <span style={{fontFamily:"'Fira Code',monospace",fontSize:8,letterSpacing:1,padding:'2px 6px',borderRadius:3,
-                    color: h.kind==='EVENT' ? '#22c55e' : '#daa520',
-                    border: `1px solid ${h.kind==='EVENT' ? '#22c55e' : '#daa520'}44`,
-                    background: `${h.kind==='EVENT' ? '#22c55e' : '#daa520'}12`}}>
+                    color: h.kind==='EVENT' ? 'var(--gold)' : 'var(--caramel)',
+                    border: `1px solid ${h.kind==='EVENT' ? 'var(--gold)' : 'var(--caramel)'}44`,
+                    background: `${h.kind==='EVENT' ? 'var(--gold)' : 'var(--caramel)'}12`}}>
                     {h.event_kind || h.kind}
                   </span>
                   <span style={{fontFamily:"'Fira Code',monospace",fontSize:9,color:sentDot(h.sentiment),textTransform:'uppercase',letterSpacing:1}}>{h.sentiment}</span>
@@ -297,7 +297,7 @@ export default function NewsPanel({ ticker, data }:{ ticker:string; data?:any })
         ))}
         {rest.length > 0 && (
           <div style={{marginTop:16,paddingTop:14,borderTop:'1px solid rgba(212,149,108,0.1)'}}>
-            <div style={{fontFamily:"'Fira Code',monospace",fontSize:9,color:'#8a7560',letterSpacing:2,marginBottom:8}}>
+            <div style={{fontFamily:"'Fira Code',monospace",fontSize:9,color:'var(--cocoa)',letterSpacing:2,marginBottom:8}}>
               COMMENTARY &amp; ANALYSIS · {rest.length}
             </div>
             {rest.map((h,i)=>(
@@ -357,14 +357,14 @@ export default function NewsPanel({ ticker, data }:{ ticker:string; data?:any })
             <div style={{display:'flex',gap:20,alignItems:'center',flexWrap:'wrap'}}>
               <div style={{textAlign:'center',minWidth:90}}>
                 <div style={{fontFamily:"'Fira Code',monospace",fontSize:26,fontWeight:800,
-                  color: comp > 0.15 ? '#22c55e' : comp < -0.15 ? '#ef4444' : '#f59e0b', lineHeight:1}}>
+                  color: comp > 0.15 ? 'var(--gold)' : comp < -0.15 ? 'var(--bear)' : 'var(--caramel)', lineHeight:1}}>
                   {comp != null ? (comp > 0 ? '+' : '') + comp.toFixed(2) : '—'}
                 </div>
-                <div style={{fontFamily:"'Fira Code',monospace",fontSize:8,color:'#8a7560',letterSpacing:1,marginTop:3}}>COMPOSITE</div>
+                <div style={{fontFamily:"'Fira Code',monospace",fontSize:8,color:'var(--cocoa)',letterSpacing:1,marginTop:3}}>COMPOSITE</div>
                 <div style={{fontFamily:"'Outfit',sans-serif",fontSize:10,color:'#9d8b7a'}}>{data.sentiment.label || ''}</div>
               </div>
               <div style={{flex:1,minWidth:240}}>
-                {[{l:'Positive',v:p,c:'#22c55e'},{l:'Neutral',v:nu,c:'#8a7560'},{l:'Negative',v:ng,c:'#ef4444'}].map(x=>(
+                {[{l:'Positive',v:p,c:'var(--gold)'},{l:'Neutral',v:nu,c:'var(--border-2)'},{l:'Negative',v:ng,c:'var(--bear)'}].map(x=>(
                   <div key={x.l} style={{display:'grid',gridTemplateColumns:'70px 1fr 46px',gap:10,alignItems:'center',marginBottom:5}}>
                     <span style={{fontFamily:"'Outfit',sans-serif",fontSize:11,color:'#9d8b7a'}}>{x.l}</span>
                     <div style={{height:10,background:'#1a0f0a',borderRadius:2,overflow:'hidden'}}>
