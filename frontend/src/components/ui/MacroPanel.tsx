@@ -17,7 +17,7 @@ const BetaBar=({label,val,desc}:{label:string;val:number|null;desc:string})=>{
     <div title={desc} style={{display:'flex',alignItems:'center',gap:10,padding:'5px 0'}}>
       <span style={{fontFamily:'var(--font-body)',fontSize:11.5,color:'var(--latte)',width:130}}>{label}</span>
       <div style={{flex:1,height:18,position:'relative',background:'var(--surface-3)',borderRadius:2}}>
-        <div style={{position:'absolute',left:'50%',top:0,bottom:0,width:1,background:'#3a3a3a'}}/>
+        <div style={{position:'absolute',left:'50%',top:0,bottom:0,width:1,background:'var(--border-2)'}}/>
         <div style={{position:'absolute',top:3,bottom:3,borderRadius:3,background:col,
           left:pos?'50%':`${50-mag*50}%`,width:`${mag*50}%`}}/>
       </div>
@@ -35,7 +35,7 @@ export default function MacroPanel({ ticker }:{ ticker:string }){
   },[ticker]);
   if(!ticker)return <div style={{fontFamily:'var(--font-body)',color:'var(--cocoa-dust)',padding:24}}>Enter a ticker for Macro Sensitivity.</div>;
   if(loading)return <div style={{fontFamily:'var(--font-body)',color:'var(--gold)',padding:24}}>Analyzing macro exposures — rates, dollar, inflation, cycle, factors…</div>;
-  if(err)return <div style={{color:'#c0705a',padding:24}}>Macro: {err}</div>;
+  if(err)return <div style={{fontFamily:'var(--font-body)',color:'var(--bear)',padding:24}}>Macro: {err}</div>;
   if(!d)return null;
   const km=d.key_metrics||{};
   const betas=[['Rates (TLT)',km.rate_beta,'Sensitivity to long-bond/rate moves'],
