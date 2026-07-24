@@ -60,21 +60,34 @@ async def _avg_volume(ticker, api_key):
     except Exception: pass
     return None
 
-async def compute_ownership_intelligence(ticker: str, api_key: str) -> Dict[str,Any]:
+async def compute_ownership_intelligence(ticker: str, api_key: str, pool=None) -> Dict[str,Any]:
     ticker=ticker.upper().strip()
     pq=await fetch_quarterly_financials(ticker, api_key, limit=12)
     if not pq: return {"ticker":ticker,"available":False,"reason":"no financial data"}
     ed=await fetch_edgar_supplement(ticker, years_back=4)
     merged=merge_quarters(pq, ed)
     if not merged or len(merged)<4: return {"ticker":ticker,"available":False,"reason":"insufficient history"}
-    mcap=None; shares_out=None
+    mcap=None; shares_out=None; company_name=None
     try:
         async with httpx.AsyncClient(timeout=10) as c:
             r=await c.get(f"https://api.polygon.io/v3/reference/tickers/{ticker}?apiKey={api_key}")
             if r.status_code==200:
                 res=(r.json() or {}).get("results",{}); mcap=res.get("market_cap")
                 shares_out=res.get("weighted_shares_outstanding") or res.get("share_class_shares_outstanding")
+                company_name=res.get("name")
     except Exception: pass
+
+    # Institutional ownership from the quarterly 13F bulk dataset. Positions are
+    # as at quarter end and filed up to 45 days later — a regulatory deadline
+    # that applies to every source of this data, so the quarter is served with it.
+    institutional={"available": False, "reason": "no database pool"}
+    if pool is not None:
+        try:
+            from services.holdings_13f import ownership_for
+            institutional = await ownership_for(pool, ticker, company_name, shares_out)
+        except Exception as e:
+            logger.debug(f"13F lookup failed for {ticker}: {e}")
+            institutional={"available": False, "reason": str(e)[:120]}
     global _CIK
     if not _CIK:
         try: _CIK=ticker_cik_map()
@@ -96,7 +109,7 @@ async def compute_ownership_intelligence(ticker: str, api_key: str) -> Dict[str,
     return {"ticker":ticker,"available":True,"intelligence":"ownership",
             "score":tree["score"],"confidence":tree["confidence"],
             "ownership_rating":ownership_rating(tree["score"]),"weight_in_conviction":4.0,
-            "insider_available":insider.get("available",False),"institutional_available":ownership.get("available",False),
+            "insider_available":insider.get("available",False),"disclosed_5pct_available":ownership.get("available",False),"institutional":institutional,
             "top_holders":ownership.get("holders",[])[:5] if ownership.get("available") else [],
             "coverage":{"scored":n_scored,"total":n_total},"tree":tree,
             "key_metrics":{k:feats.get(k) for k in
@@ -108,4 +121,5 @@ async def get_ownership(ticker: str, http_request: Request,
                         current_user: Optional[CognitoUser]=Depends(get_optional_user)):
     api_key=getattr(settings,"POLYGON_API_KEY","") or ""
     if not api_key: raise HTTPException(503,"data source unavailable")
-    return {"data":_san(await compute_ownership_intelligence(ticker, api_key))}
+    pool = getattr(http_request.app.state, "db", None)
+    return {"data":_san(await compute_ownership_intelligence(ticker, api_key, pool))}
