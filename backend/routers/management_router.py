@@ -141,7 +141,9 @@ async def get_quarters(ticker: str, http_request: Request,
             "operating_cash_flow": q.get("operating_cash_flow"),
             "capex": q.get("capex"),
             "rd": q.get("rd"), "sbc": q.get("sbc"),
+            "buybacks": q.get("buybacks"), "dividends_paid": q.get("dividends_paid"),
             "diluted_shares": q.get("diluted_shares"),
+            "diluted_shares_yoy_pct": _pct(q.get("diluted_shares"), (yoy or {}).get("diluted_shares")),
         })
     return {"data": {"available": True, "ticker": ticker,
                      "n_quarters": len(rows), "quarters": rows}}

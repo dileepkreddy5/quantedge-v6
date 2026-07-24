@@ -27,6 +27,7 @@ import OverviewV2 from './overview_v2/OverviewV2';
 import NewsPanel from '../components/ui/NewsPanel';
 import RiskPanel from '../components/ui/RiskPanel';
 import QuartersPanel from '../components/ui/QuartersPanel';
+import ClaimPanel from '../components/ui/ClaimPanel';
 import IndustryPanel from '../components/ui/IndustryPanel';
 import CompetitivePanel from '../components/ui/CompetitivePanel';
 import ManagementPanel from '../components/ui/ManagementPanel';
@@ -425,7 +426,7 @@ export default function Dashboard() {
               {activeTab === 'industry'    && <IndustryPanel ticker={ticker} />}
               {activeTab === 'competitive' && <CompetitivePanel ticker={ticker} />}
               {activeTab === 'management'  && <ManagementPanel ticker={ticker} />}
-              {activeTab === 'ownership'   && <OwnershipPanel ticker={ticker} />}
+              {activeTab === 'ownership'   && <><ClaimPanel ticker={ticker} /><OwnershipPanel ticker={ticker} /></>}
               {activeTab === 'macro'       && <MacroPanel ticker={ticker} />}
               {activeTab === 'forecast'    && <ForecastPanel ticker={ticker} />}
               {activeTab === 'altdata'     && <AltDataPanel ticker={ticker} />}
