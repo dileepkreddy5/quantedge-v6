@@ -9,11 +9,14 @@ const rc=(r:string)=>r==='Insulated'?'var(--gold)':r==='Resilient'?'var(--gold)'
 const fmt=(v:number|null):string=>v==null?'—':(v>=0?'+':'')+v.toFixed(2);
 const BetaBar=({label,val,desc}:{label:string;val:number|null;desc:string})=>{
   const v=val??0; const mag=Math.min(1,Math.abs(v)); const pos=v>=0;
-  const col=Math.abs(v)<0.15?'#5a6b5f':Math.abs(v)<0.4?'#c9a227':pos?'#0f9d6e':'#c0705a';
+  // Magnitude carries the meaning here, not direction: a beta of -0.3 to the
+  // dollar is as much an exposure as +0.3. Gold for the strong ones, caramel for
+  // moderate, muted surface for anything close to no exposure at all.
+  const col=Math.abs(v)<0.15?'var(--border-2)':Math.abs(v)<0.4?'var(--caramel)':'var(--gold)';
   return (
     <div title={desc} style={{display:'flex',alignItems:'center',gap:10,padding:'5px 0'}}>
       <span style={{fontSize:11,color:'#cdbfae',width:120}}>{label}</span>
-      <div style={{flex:1,height:18,position:'relative',background:'#181818',borderRadius:4}}>
+      <div style={{flex:1,height:18,position:'relative',background:'var(--surface-3)',borderRadius:2}}>
         <div style={{position:'absolute',left:'50%',top:0,bottom:0,width:1,background:'#3a3a3a'}}/>
         <div style={{position:'absolute',top:3,bottom:3,borderRadius:3,background:col,
           left:pos?'50%':`${50-mag*50}%`,width:`${mag*50}%`}}/>
@@ -30,7 +33,7 @@ export default function MacroPanel({ ticker }:{ ticker:string }){
     api.get(`/api/v6/macro/${ticker}`).then(r=>{const x=r.data?.data;if(!x?.available)setErr(x?.reason||'No data');else setD(x);})
       .catch(e=>setErr(e?.message||'Request failed')).finally(()=>setLoading(false));
   },[ticker]);
-  if(!ticker)return <div style={{color:'#9d8b7a',padding:24}}>Enter a ticker for Macro Sensitivity.</div>;
+  if(!ticker)return <div style={{fontFamily:'var(--font-body)',color:'var(--cocoa-dust)',padding:24}}>Enter a ticker for Macro Sensitivity.</div>;
   if(loading)return <div style={{color:'#daa520',padding:24}}>Analyzing macro exposures — rates, dollar, inflation, cycle, factors…</div>;
   if(err)return <div style={{color:'#c0705a',padding:24}}>Macro: {err}</div>;
   if(!d)return null;
@@ -48,19 +51,25 @@ export default function MacroPanel({ ticker }:{ ticker:string }){
       <div style={{display:'flex',alignItems:'center',gap:24,marginBottom:14,flexWrap:'wrap'}}>
         <div style={{display:'flex',alignItems:'baseline',gap:10}}>
           <span style={{fontSize:46,fontWeight:700,color:heat(d.score),lineHeight:1}}>{d.score?.toFixed(0)??'—'}</span>
-          <span style={{fontSize:16,color:'#9d8b7a'}}>/100</span>
+          <span style={{fontFamily:'var(--font-mono)',fontSize:16,color:'var(--cocoa)'}}>/100</span>
         </div>
         <div>
           <div style={{fontSize:22,fontWeight:700,color:rc(d.macro_rating),letterSpacing:0.5}}>{d.macro_rating}</div>
-          <div style={{fontSize:11,color:'#9d8b7a',marginTop:2}}>{d.coverage.scored}/{d.coverage.total} exposures measured</div>
+          <div style={{fontFamily:'var(--font-body)',fontSize:11,color:'var(--cocoa-dust)',marginTop:2}}>{d.coverage.scored}/{d.coverage.total} exposures measured</div>
         </div>
       </div>
-      <div style={{background:'#141414',border:'1px solid #2a2a2a',borderRadius:12,padding:'12px 16px',marginBottom:14}}>
-        <div style={{display:'flex',justifyContent:'space-between',fontSize:11,color:'#9d8b7a',letterSpacing:1,marginBottom:8}}>
+      <div style={{background:'var(--surface-2)',border:'1px solid var(--border-1)',borderRadius:4,padding:'12px 16px',marginBottom:14}}>
+        <div style={{display:'flex',justifyContent:'space-between',fontFamily:'var(--font-mono)',fontSize:9,color:'var(--gold)',letterSpacing:2,marginBottom:8}}>
           <span>MACRO FACTOR EXPOSURE (β)</span><span style={{fontSize:9}}>← negative · positive →</span></div>
         {betas.map(([l,v,desc])=><BetaBar key={l} label={l} val={v} desc={desc}/>)}
-        <div style={{marginTop:8,paddingTop:8,borderTop:'1px solid #242424',fontSize:10,color:'#7a7266'}}>
-          Resilience {km.macro_resilience!=null?(km.macro_resilience*100).toFixed(0)+'%':'—'} · Defensiveness {km.defensiveness!=null?(km.defensiveness*100).toFixed(0)+'%':'—'}
+        <div style={{marginTop:8,paddingTop:8,borderTop:'1px solid var(--border-1)',fontFamily:'var(--font-body)',fontSize:10.5,color:'var(--cocoa)'}}>
+          {/* "Defensiveness -86%" is a double negative a reader has to unpick. The
+              number is market beta minus one, so state it as sensitivity in the
+              direction it actually runs. */}
+          Macro resilience {km.macro_resilience!=null?(km.macro_resilience*100).toFixed(0)+'%':'—'}
+          {km.defensiveness!=null && (km.defensiveness < 0
+            ? ` · ${Math.abs(km.defensiveness*100).toFixed(0)}% more market-sensitive than the index`
+            : ` · ${(km.defensiveness*100).toFixed(0)}% less market-sensitive than the index`)}
         </div>
       </div>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
