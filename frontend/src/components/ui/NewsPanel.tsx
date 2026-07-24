@@ -347,7 +347,11 @@ export default function NewsPanel({ ticker, data }:{ ticker:string; data?:any })
             {comp != null && net != null && Math.abs(comp - net) > 0.12 && (
               <div style={{fontFamily:"'Outfit',sans-serif",fontSize:11,color:'var(--latte)',lineHeight:1.55,
                 marginBottom:14,paddingLeft:10,borderLeft:'2px solid rgba(212,149,108,0.35)'}}>
-                This is the <b>unweighted</b> mean across every article ({comp > 0 ? '+' : ''}{comp.toFixed(2)}).
+                {/* FinBERT scores the headline set, not the full article count above.
+                    "68% positive" read as a view of ninety-eight articles when it
+                    describes fifteen headlines; say which. */}
+                This is the <b>unweighted</b> mean across {data?.sentiment?.news?.n_headlines ?? 'the'} scored
+                headlines ({comp > 0 ? '+' : ''}{comp.toFixed(2)}), a smaller set than the article count above.
                 The net sentiment above ({net > 0 ? '+' : ''}{net.toFixed(2)}) weights each article by materiality.
                 {comp < net
                   ? ' The gap means the more negative writing sits in lower-impact coverage — an unweighted average here would be dominated by filler.'
