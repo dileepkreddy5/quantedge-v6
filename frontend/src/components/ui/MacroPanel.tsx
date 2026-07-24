@@ -25,7 +25,7 @@ const BetaBar=({label,val,desc}:{label:string;val:number|null;desc:string})=>{
 export default function MacroPanel({ ticker }:{ ticker:string }){
   const [d,setD]=useState<MData|null>(null);
   const [loading,setLoading]=useState(false); const [err,setErr]=useState('');
-  const [expanded,setExpanded]=useState<Record<string,boolean>>({}); const [allOpen,setAllOpen]=useState(false);
+  // No collapse state — the cards always show their signals, so nothing expands.
   useEffect(()=>{ if(!ticker)return; setLoading(true);setErr('');setD(null);
     api.get(`/api/v6/macro/${ticker}`).then(r=>{const x=r.data?.data;if(!x?.available)setErr(x?.reason||'No data');else setD(x);})
       .catch(e=>setErr(e?.message||'Request failed')).finally(()=>setLoading(false));
@@ -64,15 +64,13 @@ export default function MacroPanel({ ticker }:{ ticker:string }){
         </div>
       </div>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-        <span style={{fontSize:12,color:'#9d8b7a',letterSpacing:1}}>{d.tree.categories.length} REGIMES · {d.tree.categories.reduce((a,c)=>a+c.n_signals,0)} SIGNALS</span>
-        <button onClick={()=>{const v=!allOpen;setAllOpen(v);const m:Record<string,boolean>={};d.tree.categories.forEach(c=>m[c.id]=v);setExpanded(m);}}
-          style={{background:'#181818',border:'1px solid #2a2a2a',color:'#9d8b7a',borderRadius:8,padding:'5px 12px',fontSize:11,cursor:'pointer'}}>{allOpen?'Collapse all':'Expand all'}</button>
+        <span style={{fontFamily:'var(--font-mono)',fontSize:9,letterSpacing:2,color:'var(--gold)'}}>{d.tree.categories.length} REGIMES · {d.tree.categories.reduce((a,c)=>a+c.n_signals,0)} SIGNALS</span>
       </div>
       {/* Eight regimes are peers rather than a ranked list — you compare them, so
           they sit as cards in a grid instead of stacked full-width rows with the
           label at one edge and the number at the other. Each card carries its own
           signals at their natural width and the tab fits on one screen. */}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:10,alignItems:'start'}}>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(420px,1fr))',gap:10,alignItems:'start'}}>
         {d.tree.categories.map(cat=>(
           <div key={cat.id} style={{background:'var(--surface-2)',border:'1px solid var(--border-1)',
             borderTop:`2px solid ${heat(cat.score)}`,borderRadius:4,padding:'12px 14px'}}>
