@@ -41,13 +41,12 @@ export default function ManagementPanel({ ticker }:{ ticker:string }){
         </div>
         <div>
           <div style={{fontSize:22,fontWeight:700,color:rc(d.management_rating),letterSpacing:0.5}}>{d.management_rating}</div>
-          <div style={{fontSize:11,color:'#9d8b7a',marginTop:2}}>{d.coverage.scored}/{d.coverage.total} signals {d.insider_available?'· insider data live':''}</div>
+          <div style={{fontSize:11,color:'#9d8b7a',marginTop:2}}>{d.coverage.scored}/{d.coverage.total} signals</div>
         </div>
       </div>
 
       {/* Insider strip removed with the Insider Activity category — Form 4
           data cannot be served per request; see cat_management_v6. */}
-      </div>
 
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(130px,1fr))',gap:8,marginBottom:14}}>
         {[['ROIC',km.roic_level!=null?(km.roic_level*100).toFixed(1)+'%':'—'],
