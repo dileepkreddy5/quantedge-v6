@@ -104,8 +104,26 @@ async def compute_ownership_intelligence(ticker: str, api_key: str, pool=None) -
         try: ownership=await fetch_ownership(cik)
         except Exception: pass
     avgvol=await _avg_volume(ticker, api_key)
+    # Concentration from 13F rather than 13D/G. The threshold disclosures fire
+    # only when someone crosses 5%, so these signals were blank for Microsoft and
+    # described two filings for Apple; 13F covers every manager over $100M.
+    conc = {}
+    if pool is not None and institutional.get("available") and institutional.get("cusip"):
+        try:
+            from services.holdings_13f import concentration_for
+            conc = await concentration_for(pool, institutional["cusip"], shares_out)
+        except Exception as e:
+            logger.debug(f"13F concentration failed for {ticker}: {e}")
+
     feats=compute_ownership_features(merged, shares_out=shares_out, market_cap=mcap,
                                       insider=insider, ownership=ownership, avg_volume=avgvol)
+    if conc.get("available"):
+        feats["major_holder_count"]=conc["holder_families"]
+        feats["institutional_concentration"]=conc["top3_pct"]
+        feats["avg_holder_stake"]=conc["avg_holder_pct"]
+        feats["institutional_interest"]=conc["n_above_5pct"]
+        feats["top_holder_pct"]=conc["top_holder_pct"]
+        feats["ownership_hhi"]=conc["hhi"]
     if feats.get("available") is False:
         return {"ticker":ticker,"available":False,"reason":"insufficient data"}
     tree=score_ownership(feats)

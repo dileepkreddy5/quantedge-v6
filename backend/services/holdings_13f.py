@@ -415,3 +415,57 @@ async def notable_holders(pool, cusip: str, shares_outstanding: float | None = N
 
     return {"available": True, "quarter": now_q, 
             "n_notable": len(rows), "holders": rows[:12]}
+
+
+async def concentration_for(pool, cusip: str, shares_outstanding: float | None) -> dict:
+    """Ownership concentration measured from 13F filings.
+
+    These figures previously came from Schedule 13D/G, which is filed only when a
+    holder crosses 5%. For Microsoft nobody has, so five signals were blank; for
+    Apple two filings existed and the numbers described those two rather than the
+    ownership structure. 13F covers every manager over $100M, so the same
+    questions — how many holders, how concentrated, how large is the largest —
+    can be answered from thousands of positions instead of a handful.
+    """
+    async with pool.acquire() as conn:
+        q = await conn.fetchval(
+            "SELECT max(quarter) FROM holdings_13f_meta "
+            "WHERE quarter NOT LIKE 'file:%' AND n_managers >= 2000")
+        if not q:
+            return {"available": False, "reason": "no covered quarter loaded"}
+        rows = await conn.fetch(
+            """SELECT manager, sum(shares)::bigint sh FROM holdings_13f
+               WHERE quarter=$1 AND cusip=$2 GROUP BY manager""", q, cusip)
+    if not rows:
+        return {"available": False, "reason": "no 13F positions for this CUSIP"}
+
+    grouped: dict[str, int] = {}
+    for r in rows:
+        k = _family(r["manager"])
+        grouped[k] = grouped.get(k, 0) + int(r["sh"] or 0)
+    sizes = sorted(grouped.values(), reverse=True)
+    total = sum(sizes)
+    if not total:
+        return {"available": False, "reason": "positions sum to zero"}
+
+    def pct_of_co(n):
+        return (n / shares_outstanding * 100) if shares_outstanding else None
+
+    # Herfindahl over institutional holders: 0 = spread across many, 1 = one holder.
+    hhi = sum((s / total) ** 2 for s in sizes)
+    above5 = sum(1 for s in sizes if shares_outstanding and s / shares_outstanding > 0.05)
+
+    return {
+        "available": True, "quarter": q,
+        "holder_families": len(sizes),
+        "top_holder_pct": round(pct_of_co(sizes[0]), 2) if pct_of_co(sizes[0]) is not None else None,
+        "top3_pct": round(pct_of_co(sum(sizes[:3])), 2) if pct_of_co(sum(sizes[:3])) is not None else None,
+        "top10_pct": round(pct_of_co(sum(sizes[:10])), 2) if pct_of_co(sum(sizes[:10])) is not None else None,
+        "avg_holder_pct": round(pct_of_co(total / len(sizes)), 4) if pct_of_co(total / len(sizes)) is not None else None,
+        "n_above_5pct": above5,
+        "hhi": round(hhi, 4),
+        "concentration_note": (
+            f"{len(sizes):,} institutional holders; the largest holds "
+            f"{round(pct_of_co(sizes[0]),1) if shares_outstanding else '—'}% of the company "
+            f"and the top ten hold {round(pct_of_co(sum(sizes[:10])),1) if shares_outstanding else '—'}%."),
+    }
