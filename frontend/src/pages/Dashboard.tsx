@@ -427,7 +427,7 @@ export default function Dashboard() {
               {activeTab === 'industry'    && <IndustryPanel ticker={ticker} />}
               {activeTab === 'competitive' && <CompetitivePanel ticker={ticker} />}
               {activeTab === 'management'  && <ManagementPanel ticker={ticker} />}
-              {activeTab === 'ownership'   && <><HoldersPanel ticker={ticker} /><ClaimPanel ticker={ticker} /><OwnershipPanel ticker={ticker} /></>}
+              {activeTab === 'ownership'   && <><HoldersPanel ticker={ticker} /><OwnershipPanel ticker={ticker} /></>}
               {activeTab === 'macro'       && <MacroPanel ticker={ticker} />}
               {activeTab === 'forecast'    && <ForecastPanel ticker={ticker} />}
               {activeTab === 'altdata'     && <AltDataPanel ticker={ticker} />}

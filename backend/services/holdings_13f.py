@@ -11,6 +11,7 @@ already loaded, so the cost is one download per quarter rather than per request.
 """
 from __future__ import annotations
 import io, re, zipfile, asyncio
+import datetime as _dt
 import httpx
 from loguru import logger
 from quantedge.scoring.edgar_xbrl import UA
@@ -38,6 +39,65 @@ CREATE TABLE IF NOT EXISTS holdings_13f_meta (
     n_managers INT
 );
 """
+
+
+
+FAMILIES = [
+    ("Vanguard", "VANGUARD"), ("BlackRock", "BLACKROCK"), ("BlackRock", "ISHARES"),
+    ("State Street", "STATE STREET"), ("Fidelity", "FMR "), ("Fidelity", "FIDELITY"),
+    ("Geode Capital", "GEODE"), ("Charles Schwab", "SCHWAB"),
+    ("JPMorgan", "JPMORGAN"), ("JPMorgan", "J.P. MORGAN"), ("JPMorgan", "JP MORGAN"),
+    ("Morgan Stanley", "MORGAN STANLEY"), ("Goldman Sachs", "GOLDMAN"),
+    ("Bank of America", "BANK OF AMERICA"), ("Wells Fargo", "WELLS FARGO"),
+    ("Northern Trust", "NORTHERN TRUST"), ("Invesco", "INVESCO"),
+    ("T. Rowe Price", "T. ROWE"), ("T. Rowe Price", "T ROWE"),
+    ("Capital Group", "CAPITAL RESEARCH"), ("Capital Group", "CAPITAL WORLD"),
+    ("Amundi", "AMUNDI"), ("UBS", "UBS "), ("Deutsche Bank", "DEUTSCHE"),
+    ("Norges Bank", "NORGES"), ("Legal & General", "LEGAL & GENERAL"),
+    ("Franklin Resources", "FRANKLIN"), ("Dimensional", "DIMENSIONAL"),
+    ("Nuveen", "NUVEEN"), ("Nuveen", "TEACHERS INSURANCE"),
+]
+
+# Managers whose positions are a decision rather than an index weight. An index
+# fund holds every large company by construction; these hold what they chose.
+NOTABLE = [
+    ("Berkshire Hathaway", "BERKSHIRE"), ("Pershing Square", "PERSHING SQUARE"),
+    ("Bridgewater", "BRIDGEWATER"), ("Baupost", "BAUPOST"),
+    ("Tiger Global", "TIGER GLOBAL"), ("Appaloosa", "APPALOOSA"),
+    ("Third Point", "THIRD POINT"), ("Elliott", "ELLIOTT"),
+    ("Renaissance Technologies", "RENAISSANCE TECH"), ("Citadel", "CITADEL"),
+    ("Millennium", "MILLENNIUM MANAGEMENT"), ("Point72", "POINT72"),
+    ("Lone Pine", "LONE PINE"), ("Viking Global", "VIKING GLOBAL"),
+    ("Coatue", "COATUE"), ("Greenlight", "GREENLIGHT CAPITAL"),
+    ("Icahn", "ICAHN"), ("ValueAct", "VALUEACT"), ("Starboard", "STARBOARD VALUE"),
+    ("Duquesne", "DUQUESNE"), ("Soros", "SOROS FUND"), ("Two Sigma", "TWO SIGMA"),
+    ("AQR", "AQR CAPITAL"), ("Marshall Wace", "MARSHALL WACE"),
+]
+
+
+def _family(name: str) -> str:
+    """Group a filing entity into its parent. BlackRock files through iShares and
+    several trusts, Vanguard through ten entities; ungrouped, every large holder
+    appears as a set of fragments and its real stake is invisible."""
+    up = (name or "").upper()
+    for label, needle in FAMILIES:
+        if needle in up:
+            return label
+    base = re.sub(r"[.,]", " ", name or "")
+    base = re.sub(r"\b(LLC|L\.?P|INC|CORP|CO|LTD|PLC|GROUP|HOLDINGS|ADVISORS?|"
+                  r"ADVISERS?|MANAGEMENT|MGMT|CAPITAL|PARTNERS|TRUST|BANK|"
+                  r"INVESTMENTS?|ASSET|INTERNATIONAL|GLOBAL|COMPANY)\b", " ",
+                  base, flags=re.I)
+    base = " ".join(base.split())
+    return base.title() if base else (name or "unknown")
+
+
+def _notable(name: str) -> str | None:
+    up = (name or "").upper()
+    for label, needle in NOTABLE:
+        if needle in up:
+            return label
+    return None
 
 
 async def latest_dataset_url(client: httpx.AsyncClient) -> tuple[str, str] | None:
@@ -68,7 +128,7 @@ async def load_quarter(pool, force: bool = False) -> dict:
 
         async with pool.acquire() as conn:
             existing = await conn.fetchrow(
-                "SELECT n_rows, loaded_at FROM holdings_13f_meta WHERE quarter=$1", quarter)
+                "SELECT n_rows, loaded_at FROM holdings_13f_meta WHERE quarter=$1", "file:" + quarter)
         if existing and not force:
             return {"loaded": False, "quarter": quarter, "reason": "already loaded",
                     "n_rows": existing["n_rows"], "loaded_at": str(existing["loaded_at"])}
@@ -81,9 +141,40 @@ async def load_quarter(pool, force: bool = False) -> dict:
 
     z = zipfile.ZipFile(io.BytesIO(r.content))
 
+    # Older archives nest the files inside a folder; newer ones do not.
+    def member(name: str) -> str:
+        for n in z.namelist():
+            if n.rsplit("/", 1)[-1] == name:
+                return n
+        raise KeyError(f"{name} not in archive")
+
+    # accession -> reported period, and which accessions actually carry holdings.
+    # The dataset filename is a FILING-DATE range, not a position date: the first
+    # row of one file is a 31-MAR-2026 filing reporting positions as at
+    # 30-SEP-2025. Keying on the filename mixed periods, so a manager who filed
+    # late appeared to open an enormous new position. PERIODOFREPORT is the
+    # as-of date and is what the table is keyed on.
+    # 13F-NT is a notice that nothing is reportable; only 13F-HR carries holdings.
+    periods: dict[str, str] = {}
+    with z.open(member("SUBMISSION.tsv")) as fh:
+        cols = fh.readline().decode("utf-8", "replace").rstrip("\r\n").split("\t")
+        ix = {c: i for i, c in enumerate(cols)}
+        for line in fh:
+            p = line.decode("utf-8", "replace").rstrip("\r\n").split("\t")
+            if len(p) < len(cols):
+                continue
+            if not p[ix["SUBMISSIONTYPE"]].startswith("13F-HR"):
+                continue
+            raw_period = (p[ix["PERIODOFREPORT"]] or "").strip()   # 31-MAR-2026
+            try:
+                d = _dt.datetime.strptime(raw_period, "%d-%b-%Y").date()
+            except ValueError:
+                continue
+            periods[p[ix["ACCESSION_NUMBER"]]] = d.isoformat()
+
     # accession -> manager name
     managers: dict[str, str] = {}
-    with z.open("COVERPAGE.tsv") as fh:
+    with z.open(member("COVERPAGE.tsv")) as fh:
         cols = fh.readline().decode("utf-8", "replace").rstrip("\r\n").split("\t")
         try:
             i_acc, i_name = cols.index("ACCESSION_NUMBER"), cols.index("FILINGMANAGER_NAME")
@@ -96,7 +187,7 @@ async def load_quarter(pool, force: bool = False) -> dict:
 
     rows: list[tuple] = []
     seen: set[tuple] = set()
-    with z.open("INFOTABLE.tsv") as fh:
+    with z.open(member("INFOTABLE.tsv")) as fh:
         cols = fh.readline().decode("utf-8", "replace").rstrip("\r\n").split("\t")
         ix = {c: i for i, c in enumerate(cols)}
         for line in fh:
@@ -112,7 +203,10 @@ async def load_quarter(pool, force: bool = False) -> dict:
             cusip = (p[ix["CUSIP"]] or "").strip().upper()
             if not mgr or not cusip:
                 continue
-            key = (quarter, cusip, mgr)
+            period = periods.get(p[ix["ACCESSION_NUMBER"]])
+            if not period:
+                continue          # 13F-NT, an amendment, or an unparseable date
+            key = (period, cusip, mgr)
             if key in seen:      # a manager can report one issuer across several lines
                 continue
             seen.add(key)
@@ -121,25 +215,35 @@ async def load_quarter(pool, force: bool = False) -> dict:
                 value = int(float(p[ix["VALUE"]] or 0))
             except ValueError:
                 continue
-            rows.append((quarter, cusip, (p[ix["NAMEOFISSUER"]] or "").strip(), mgr, shares, value))
+            rows.append((period, cusip, (p[ix["NAMEOFISSUER"]] or "").strip(), mgr, shares, value))
 
     logger.info(f"13F: parsed {len(rows):,} positions from {len(managers):,} managers")
 
+    touched = sorted({r[0] for r in rows})
     async with pool.acquire() as conn:
-        await conn.execute("DELETE FROM holdings_13f WHERE quarter=$1", quarter)
+        for per in touched:
+            await conn.execute("DELETE FROM holdings_13f WHERE quarter=$1", per)
         CHUNK = 50_000
         for i in range(0, len(rows), CHUNK):
             await conn.copy_records_to_table(
                 "holdings_13f",
                 records=rows[i:i + CHUNK],
                 columns=["quarter", "cusip", "issuer", "manager", "shares", "value_usd"])
+        for per in touched:
+            n = sum(1 for r in rows if r[0] == per)
+            m = len({r[3] for r in rows if r[0] == per})
+            await conn.execute(
+                "INSERT INTO holdings_13f_meta (quarter, n_rows, n_managers) VALUES ($1,$2,$3) "
+                "ON CONFLICT (quarter) DO UPDATE SET n_rows=EXCLUDED.n_rows, "
+                "n_managers=EXCLUDED.n_managers, loaded_at=now()", per, n, m)
+        # Record the source file so the weekly check can skip it next time.
         await conn.execute(
             "INSERT INTO holdings_13f_meta (quarter, n_rows, n_managers) VALUES ($1,$2,$3) "
-            "ON CONFLICT (quarter) DO UPDATE SET n_rows=EXCLUDED.n_rows, "
-            "n_managers=EXCLUDED.n_managers, loaded_at=now()",
-            quarter, len(rows), len(managers))
+            "ON CONFLICT (quarter) DO UPDATE SET n_rows=EXCLUDED.n_rows, loaded_at=now()",
+            "file:" + quarter, len(rows), len(managers))
 
-    return {"loaded": True, "quarter": quarter, "n_rows": len(rows), "n_managers": len(managers)}
+    return {"loaded": True, "source_file": quarter, "periods": touched,
+            "n_rows": len(rows), "n_managers": len(managers)}
 
 
 async def ownership_for(pool, ticker: str, company_name: str | None,
@@ -163,7 +267,7 @@ async def ownership_for(pool, ticker: str, company_name: str | None,
         return {"available": False, "reason": "company name too short to match"}
 
     async with pool.acquire() as conn:
-        q = await conn.fetchval("SELECT max(quarter) FROM holdings_13f_meta")
+        q = await conn.fetchval("SELECT max(quarter) FROM holdings_13f_meta WHERE quarter NOT LIKE 'file:%'")
         if not q:
             return {"available": False, "reason": "no 13F quarter loaded yet"}
 
@@ -200,35 +304,7 @@ async def ownership_for(pool, ticker: str, company_name: str | None,
                GROUP BY manager""", q, pick["cusip"])
         n_managers_here = len(raw)
 
-    FAMILIES = [
-        ("Vanguard", "VANGUARD"), ("BlackRock", "BLACKROCK"), ("BlackRock", "ISHARES"),
-        ("State Street", "STATE STREET"), ("Fidelity", "FMR "), ("Fidelity", "FIDELITY"),
-        ("Geode Capital", "GEODE"), ("Charles Schwab", "SCHWAB"),
-        ("JPMorgan", "JPMORGAN"), ("JPMorgan", "J.P. MORGAN"), ("JPMorgan", "JP MORGAN"),
-        ("Morgan Stanley", "MORGAN STANLEY"), ("Goldman Sachs", "GOLDMAN"),
-        ("Bank of America", "BANK OF AMERICA"), ("Wells Fargo", "WELLS FARGO"),
-        ("Northern Trust", "NORTHERN TRUST"), ("Invesco", "INVESCO"),
-        ("T. Rowe Price", "T. ROWE"), ("T. Rowe Price", "T ROWE"),
-        ("Capital Group", "CAPITAL RESEARCH"), ("Capital Group", "CAPITAL WORLD"),
-        ("Amundi", "AMUNDI"), ("UBS", "UBS "), ("Deutsche Bank", "DEUTSCHE"),
-        ("Norges Bank", "NORGES"), ("Legal & General", "LEGAL & GENERAL"),
-        ("Franklin Resources", "FRANKLIN"), ("Dimensional", "DIMENSIONAL"),
-        ("Nuveen", "NUVEEN"), ("Nuveen", "TEACHERS INSURANCE"),
-    ]
-
-    def family(name: str) -> str:
-        up = (name or "").upper()
-        for label, needle in FAMILIES:
-            if needle in up:
-                return label
-        # Otherwise strip the entity suffix so "X Advisors LLC" and "X LP" merge.
-        base = re.sub(r"[.,]", " ", name or "")
-        base = re.sub(r"\b(LLC|L\.?P|INC|CORP|CO|LTD|PLC|GROUP|HOLDINGS|ADVISORS?|"
-                      r"ADVISERS?|MANAGEMENT|MGMT|CAPITAL|PARTNERS|TRUST|BANK|"
-                      r"INVESTMENTS?|ASSET|INTERNATIONAL|GLOBAL|COMPANY)\b", " ",
-                      base, flags=re.I)
-        base = " ".join(base.split())
-        return base.title() if base else (name or "unknown")
+    family = _family
 
     grouped: dict[str, dict] = {}
     for h in raw:
@@ -267,3 +343,75 @@ async def ownership_for(pool, ticker: str, company_name: str | None,
                  "not held by a 13F filer: retail, insiders, and managers under the $100M "
                  "reporting threshold."),
     }
+
+
+
+# flow_for (quarter-over-quarter institutional change) was removed rather than
+# shipped. Managers reorganise which subsidiary files: between 2025-09-30 and
+# 2026-03-31 VANGUARD GROUP INC stopped filing and five Vanguard entities began,
+# so a comparison of filer positions reported +5,474% for a holding where
+# nothing had moved. Filer-level names are not stable across quarters and no
+# grouping heuristic can separate a restructured filing from real accumulation.
+# A correct version needs position-level continuity the 13F data does not carry.
+
+
+async def notable_holders(pool, cusip: str, shares_outstanding: float | None = None) -> dict:
+    """Discretionary managers holding this company, with conviction and direction.
+
+    Index funds hold every large company by construction, so their presence says
+    nothing. A manager who chose the position is different, and three things make
+    that choice legible: how much of the company they hold, how much of THEIR OWN
+    book it represents, and whether they added or cut it last quarter. A name
+    that is 8% of Berkshire's portfolio is a statement; the same dollar value
+    inside Vanguard's index is arithmetic.
+    """
+    async with pool.acquire() as conn:
+        qs = [r["quarter"] for r in await conn.fetch(
+            "SELECT quarter FROM holdings_13f_meta WHERE quarter NOT LIKE 'file:%' ORDER BY quarter DESC LIMIT 8")]
+    if not qs:
+        return {"available": False, "reason": "no 13F quarter loaded"}
+
+    ordered = sorted(qs, reverse=True)
+    now_q = ordered[0]
+
+    async with pool.acquire() as conn:
+        held = await conn.fetch(
+            """SELECT manager, sum(shares)::bigint sh, sum(value_usd)::bigint val
+               FROM holdings_13f WHERE quarter=$1 AND cusip=$2 GROUP BY manager""",
+            now_q, cusip)
+        # Each notable manager's total book, so the position can be expressed as
+        # a share of what they actually run.
+        books = {}
+        names = {r["manager"] for r in held if _notable(r["manager"])}
+        if names:
+            for r in await conn.fetch(
+                """SELECT manager, sum(value_usd)::bigint total FROM holdings_13f
+                   WHERE quarter=$1 AND manager = ANY($2::text[]) GROUP BY manager""",
+                now_q, list(names)):
+                books[r["manager"]] = int(r["total"] or 0)
+
+    out = {}
+    for r in held:
+        label = _notable(r["manager"])
+        if not label:
+            continue
+        e = out.setdefault(label, {"manager": label, "shares": 0, "value_usd": 0,
+                                   "book_usd": 0})
+        e["shares"] += int(r["sh"] or 0)
+        e["value_usd"] += int(r["val"] or 0)
+        e["book_usd"] += books.get(r["manager"], 0)
+
+    rows = []
+    for e in out.values():
+        rows.append({
+            "manager": e["manager"],
+            "shares": e["shares"],
+            "value_usd": e["value_usd"],
+            "pct_of_company": round(e["shares"] / shares_outstanding * 100, 3) if shares_outstanding else None,
+            "pct_of_their_book": round(e["value_usd"] / e["book_usd"] * 100, 2) if e["book_usd"] else None,
+            # No quarter-over-quarter action: see the note above flow_for.
+        })
+    rows.sort(key=lambda x: -(x["value_usd"] or 0))
+
+    return {"available": True, "quarter": now_q, 
+            "n_notable": len(rows), "holders": rows[:12]}
