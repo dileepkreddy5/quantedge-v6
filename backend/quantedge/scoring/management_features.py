@@ -30,8 +30,16 @@ def compute_management_features(merged, fin_features, insider=None, market_cap=N
     f["fcf_generation"]=_sd(fcf,rev)
     f["reinvestment_rate"]=_sd(capex,ocf)
     # buyback yield + dividend yield
+    # A company that runs no buyback and pays no dividend is not missing data —
+    # it is doing none of the thing being measured, which is the fact worth
+    # scoring. Guarding on a truthy value left Tesla with four blank signals
+    # here and two on Ownership, and shrank the denominator so the composite
+    # was computed over fewer signals rather than reflecting the absence.
+    # `capex` is the sentinel: if it resolved, the EDGAR fetch worked for this
+    # company and an empty buyback series is a real zero.
+    _edgar_ok = capex is not None
     if market_cap:
-        f["buyback_yield"]=_sd(bb,market_cap)
+        f["buyback_yield"]=_sd(bb if bb is not None else (0.0 if _edgar_ok else None), market_cap)
         f["dividend_yield"]=_sd(div,market_cap)
         f["total_payout_yield"]=_sd((bb or 0)+(div or 0),market_cap)
     f["payout_ratio"]=_sd((div or 0)+(bb or 0),fcf) if fcf and fcf>0 else None
@@ -57,11 +65,15 @@ def compute_management_features(merged, fin_features, insider=None, market_cap=N
             f["incremental_roic"]=(oi_new-oi_old)*0.79/(a_new-a_old)
     # dividend consistency (paid every quarter)
     divs=series("dividends_paid",8)
-    if divs: f["dividend_consistency"]=sum(1 for d in divs if d and d>0)/len(divs)
-    # dividend growth
+    if divs:
+        f["dividend_consistency"]=sum(1 for d in divs if d and d>0)/len(divs)
+    elif _edgar_ok:
+        f["dividend_consistency"]=0.0   # pays no dividend — a fact, not a gap
     if len(divs)>=8:
         old=sum(divs[:4]); new=sum(divs[4:])
         f["dividend_growth"]=(new/old-1) if old>0 else None
+    elif _edgar_ok and not divs:
+        f["dividend_growth"]=0.0
 
     # ===== INSIDER ACTIVITY =====
     if insider.get("available"):
@@ -114,8 +126,8 @@ def compute_management_features(merged, fin_features, insider=None, market_cap=N
     sbc=ttm("sbc")
     if sbc is not None and rev and rev>0: f["sbc_intensity"]=sbc/rev
     # buyback vs issuance (net)
-    if bb is not None and sbc is not None:
-        f["net_buyback_vs_sbc"]=_sd((bb or 0)-(sbc or 0),market_cap) if market_cap else None
+    if sbc is not None and market_cap and (bb is not None or _edgar_ok):
+        f["net_buyback_vs_sbc"]=_sd((bb or 0)-(sbc or 0),market_cap)
 
     # ===== EXECUTION QUALITY =====
     # cash conversion (OCF/NI - management turning earnings to cash)

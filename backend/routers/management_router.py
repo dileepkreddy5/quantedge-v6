@@ -87,6 +87,66 @@ async def compute_management_intelligence(ticker: str, api_key: str) -> Dict[str
                 ["roic_level","fcf_generation","total_payout_yield","insider_buy_value_ratio",
                  "insider_net_value_norm","margin_trend","share_count_change","cash_conversion","dividend_growth","insider_cluster_buying"]}}
 
+@router.get("/quarters/{ticker}")
+async def get_quarters(ticker: str, http_request: Request,
+                       current_user: Optional[CognitoUser]=Depends(get_optional_user)):
+    """Twelve quarters of reported financials with year-on-year comparison.
+
+    The merge already holds 39 fields per quarter across three years and the
+    scoring layer reduces all of it to a handful of scalars. The series itself
+    is the more useful artefact: four quarters of decelerating revenue growth
+    with holding margins is visible in a table and invisible in a 0-100 score.
+    """
+    ticker = ticker.upper().strip()
+    api_key = getattr(settings, "POLYGON_API_KEY", "") or ""
+    if not api_key:
+        raise HTTPException(503, "data source unavailable")
+    pq = await fetch_quarterly_financials(ticker, api_key, limit=12)
+    if not pq:
+        return {"data": {"available": False, "reason": "no financial data"}}
+    ed = await fetch_edgar_supplement(ticker, years_back=4)
+    mg = merge_quarters(pq, ed)
+    if not mg:
+        return {"data": {"available": False, "reason": "no merged quarters"}}
+
+    def _pct(now, then):
+        if now is None or then in (None, 0):
+            return None
+        try:
+            return round((now / then - 1) * 100, 1)
+        except Exception:
+            return None
+
+    def _margin(num, den):
+        if num is None or den in (None, 0):
+            return None
+        return round(num / den * 100, 1)
+
+    rows = []
+    for i, q in enumerate(mg):
+        yoy = mg[i - 4] if i >= 4 else None
+        rev, ni, oi = q.get("revenue"), q.get("net_income"), q.get("operating_income")
+        rows.append({
+            "period_end": str(q.get("period_end")) if q.get("period_end") else None,
+            "fiscal": f"{q.get('fiscal_year')} {q.get('fiscal_period')}".strip(),
+            "revenue": rev, "revenue_yoy_pct": _pct(rev, (yoy or {}).get("revenue")),
+            "gross_profit": q.get("gross_profit"),
+            "gross_margin_pct": _margin(q.get("gross_profit"), rev),
+            "operating_income": oi, "operating_margin_pct": _margin(oi, rev),
+            "net_income": ni, "net_margin_pct": _margin(ni, rev),
+            "net_income_yoy_pct": _pct(ni, (yoy or {}).get("net_income")),
+            "eps_diluted": q.get("eps_diluted"),
+            "eps_yoy_pct": _pct(q.get("eps_diluted"), (yoy or {}).get("eps_diluted")),
+            "free_cash_flow": q.get("free_cash_flow"),
+            "operating_cash_flow": q.get("operating_cash_flow"),
+            "capex": q.get("capex"),
+            "rd": q.get("rd"), "sbc": q.get("sbc"),
+            "diluted_shares": q.get("diluted_shares"),
+        })
+    return {"data": {"available": True, "ticker": ticker,
+                     "n_quarters": len(rows), "quarters": rows}}
+
+
 @router.get("/management/{ticker}")
 async def get_management(ticker: str, http_request: Request,
                          current_user: Optional[CognitoUser]=Depends(get_optional_user)):

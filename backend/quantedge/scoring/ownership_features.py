@@ -64,7 +64,9 @@ def compute_ownership_features(merged, shares_out=None, market_cap=None, insider
     if insider.get("available") and insider.get("buy_value_ratio") is not None:
         f["ownership_conviction"]=insider["buy_value_ratio"]
     bb=cur("buybacks")
-    if bb and market_cap: f["buyback_intensity"]=bb/market_cap
+    # No buyback is a real zero, not missing data — see management_features.
+    if market_cap and (bb is not None or cur("capex") is not None):
+        f["buyback_intensity"]=(bb or 0.0)/market_cap
 
     # concentration_direction and holder_concentration_risk were straight copies
     # of ownership_concentration_trend and top_holder_pct, both already scored.
