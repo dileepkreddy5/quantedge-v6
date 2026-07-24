@@ -15,7 +15,7 @@ const BetaBar=({label,val,desc}:{label:string;val:number|null;desc:string})=>{
   const col=Math.abs(v)<0.15?'var(--border-2)':Math.abs(v)<0.4?'var(--caramel)':'var(--gold)';
   return (
     <div title={desc} style={{display:'flex',alignItems:'center',gap:10,padding:'5px 0'}}>
-      <span style={{fontSize:11,color:'#cdbfae',width:120}}>{label}</span>
+      <span style={{fontFamily:'var(--font-body)',fontSize:11.5,color:'var(--latte)',width:130}}>{label}</span>
       <div style={{flex:1,height:18,position:'relative',background:'var(--surface-3)',borderRadius:2}}>
         <div style={{position:'absolute',left:'50%',top:0,bottom:0,width:1,background:'#3a3a3a'}}/>
         <div style={{position:'absolute',top:3,bottom:3,borderRadius:3,background:col,
@@ -34,7 +34,7 @@ export default function MacroPanel({ ticker }:{ ticker:string }){
       .catch(e=>setErr(e?.message||'Request failed')).finally(()=>setLoading(false));
   },[ticker]);
   if(!ticker)return <div style={{fontFamily:'var(--font-body)',color:'var(--cocoa-dust)',padding:24}}>Enter a ticker for Macro Sensitivity.</div>;
-  if(loading)return <div style={{color:'#daa520',padding:24}}>Analyzing macro exposures — rates, dollar, inflation, cycle, factors…</div>;
+  if(loading)return <div style={{fontFamily:'var(--font-body)',color:'var(--gold)',padding:24}}>Analyzing macro exposures — rates, dollar, inflation, cycle, factors…</div>;
   if(err)return <div style={{color:'#c0705a',padding:24}}>Macro: {err}</div>;
   if(!d)return null;
   const km=d.key_metrics||{};
@@ -47,7 +47,7 @@ export default function MacroPanel({ ticker }:{ ticker:string }){
     ['Value tilt',km.value_tilt,'Value-factor loading'],
     ['Momentum tilt',km.momentum_tilt,'Momentum-factor loading']] as [string,number|null,string][];
   return (
-    <div style={{padding:'8px 4px',color:'#e8ddd0'}}>
+    <div style={{padding:'8px 4px',color:'var(--latte)'}}>
       <div style={{display:'flex',alignItems:'center',gap:24,marginBottom:14,flexWrap:'wrap'}}>
         <div style={{display:'flex',alignItems:'baseline',gap:10}}>
           <span style={{fontSize:46,fontWeight:700,color:heat(d.score),lineHeight:1}}>{d.score?.toFixed(0)??'—'}</span>
