@@ -4,8 +4,8 @@ interface Sig { id:string; label:string; weight:number; status:string; evidence:
 interface Cat { id:string; label:string; weight:number; score:number|null; n_signals:number; n_scored:number; signals:Sig[]; }
 interface MData { ticker:string; available:boolean; score:number|null; macro_rating:string; coverage:{scored:number;total:number};
   tree:{categories:Cat[]}; key_metrics:Record<string,number|null>; reason?:string; }
-const heat=(s:number|null)=>s==null?'#2a2a2a':s>=75?'#0f6e56':s>=58?'#1d9e75':s>=42?'#8a7519':s>=25?'#a35a1d':'#7a2320';
-const rc=(r:string)=>r==='Insulated'?'#0f9d6e':r==='Resilient'?'#1d9e75':r==='Balanced'?'#c9a227':r==='Exposed'?'#c0705a':'#7a2320';
+const heat=(s:number|null)=>s==null?'var(--border-2)':s>=70?'var(--gold)':s>=50?'var(--caramel)':s>=30?'#c9762f':'var(--bear)';
+const rc=(r:string)=>r==='Insulated'?'var(--gold)':r==='Resilient'?'var(--gold)':r==='Balanced'?'var(--caramel)':r==='Exposed'?'#c9762f':'var(--bear)';
 const fmt=(v:number|null):string=>v==null?'—':(v>=0?'+':'')+v.toFixed(2);
 const BetaBar=({label,val,desc}:{label:string;val:number|null;desc:string})=>{
   const v=val??0; const mag=Math.min(1,Math.abs(v)); const pos=v>=0;
@@ -68,26 +68,28 @@ export default function MacroPanel({ ticker }:{ ticker:string }){
         <button onClick={()=>{const v=!allOpen;setAllOpen(v);const m:Record<string,boolean>={};d.tree.categories.forEach(c=>m[c.id]=v);setExpanded(m);}}
           style={{background:'#181818',border:'1px solid #2a2a2a',color:'#9d8b7a',borderRadius:8,padding:'5px 12px',fontSize:11,cursor:'pointer'}}>{allOpen?'Collapse all':'Expand all'}</button>
       </div>
-      <div style={{display:'flex',flexDirection:'column',gap:8}}>
-        {d.tree.categories.map(cat=>{const open=expanded[cat.id];return (
-          <div key={cat.id} style={{background:'#141414',border:'1px solid #2a2a2a',borderRadius:10,overflow:'hidden'}}>
-            <div onClick={()=>setExpanded(p=>({...p,[cat.id]:!p[cat.id]}))}
-              style={{display:'flex',alignItems:'center',gap:12,padding:'10px 14px',cursor:'pointer',borderLeft:`4px solid ${heat(cat.score)}`}}>
-              <span style={{fontSize:11,color:'#7a7266',width:12}}>{open?'▾':'▸'}</span>
-              <span style={{fontSize:13,fontWeight:600,color:'#e8ddd0',flex:1}}>{cat.label}</span>
-              <span style={{fontSize:10,color:'#7a7266'}}>wt {cat.weight.toFixed(2)} · {cat.n_scored}/{cat.n_signals}</span>
-              <span style={{fontSize:18,fontWeight:700,color:heat(cat.score),width:36,textAlign:'right'}}>{cat.score?.toFixed(0)??'—'}</span>
+      {/* Eight regimes are peers rather than a ranked list — you compare them, so
+          they sit as cards in a grid instead of stacked full-width rows with the
+          label at one edge and the number at the other. Each card carries its own
+          signals at their natural width and the tab fits on one screen. */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:10,alignItems:'start'}}>
+        {d.tree.categories.map(cat=>(
+          <div key={cat.id} style={{background:'var(--surface-2)',border:'1px solid var(--border-1)',
+            borderTop:`2px solid ${heat(cat.score)}`,borderRadius:4,padding:'12px 14px'}}>
+            <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',gap:8}}>
+              <span style={{fontFamily:'var(--font-body)',fontSize:12.5,fontWeight:600,color:'var(--latte)'}}>{cat.label}</span>
+              <span style={{fontFamily:'var(--font-mono)',fontSize:22,fontWeight:700,color:heat(cat.score),lineHeight:1}}>{cat.score?.toFixed(0)??'—'}</span>
             </div>
-            {open && (<div style={{padding:'4px 14px 12px 30px'}}>
-              {cat.signals.map(s=>{const pending=s.status==='needs_source'||s.score==null;return (
-                <div key={s.id} title={s.evidence} style={{display:'flex',alignItems:'center',gap:10,padding:'5px 0',borderBottom:'1px solid #1e1e1e',opacity:pending?0.5:1}}>
-                  <span style={{fontSize:12,color:'#cdbfae',flex:1}}>{s.label}</span>
-                  <span style={{fontSize:12,color:'#9d8b7a',width:60,textAlign:'right'}}>{pending?'—':fmt(s.raw_value)}</span>
-                  <div style={{width:80,height:6,background:'#242424',borderRadius:3,overflow:'hidden'}}>{!pending && <div style={{height:'100%',width:`${s.score}%`,background:heat(s.score)}}/>}</div>
-                  <span style={{fontSize:11,fontWeight:600,color:pending?'#555':heat(s.score),width:26,textAlign:'right'}}>{pending?'—':s.score!.toFixed(0)}</span>
-                </div>);})}
-            </div>)}
-          </div>);})}
+            <div style={{fontFamily:'var(--font-mono)',fontSize:9,color:'var(--cocoa)',marginBottom:10}}>
+              weight {cat.weight.toFixed(2)} · {cat.n_scored} of {cat.n_signals} measured
+            </div>
+            {cat.signals.map(s=>{const pending=s.status==='needs_source'||s.score==null;return (
+              <div key={s.id} title={s.evidence} style={{display:'flex',alignItems:'baseline',gap:8,padding:'4px 0',borderTop:'1px solid var(--border-1)',opacity:pending?0.45:1}}>
+                <span style={{fontFamily:'var(--font-body)',fontSize:11.5,color:'var(--latte)',flex:1}}>{s.label}</span>
+                <span style={{fontFamily:'var(--font-mono)',fontSize:11.5,color:'var(--cocoa-dust)'}}>{pending?'—':fmt(s.raw_value)}</span>
+                <span style={{fontFamily:'var(--font-mono)',fontSize:11,fontWeight:600,width:24,textAlign:'right',color:pending?'var(--cocoa)':heat(s.score)}}>{pending?'—':s.score!.toFixed(0)}</span>
+              </div>);})}
+          </div>))}
       </div>
     </div>
   );

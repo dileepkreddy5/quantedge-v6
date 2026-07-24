@@ -89,7 +89,12 @@ def compute_macro_features(stock_closes, proxies):
     # ===== DEFENSIVENESS =====
     # low market beta + low credit sensitivity = defensive
     if f.get("market_beta") is not None:
-        f["defensiveness"]=1.0-min(1.0,f["market_beta"])  # low beta = defensive
+        # 1.0 - min(1.0, beta) clamps to zero for anything above market beta, so
+        # a stock at 1.2 and one at 3.0 both scored zero and the signal stopped
+        # discriminating exactly where it matters. Defensiveness is how far below
+        # market sensitivity a stock sits, allowed to run negative when it is
+        # more sensitive than the market rather than pinned at the floor.
+        f["defensiveness"]=1.0-f["market_beta"]
     # macro resilience: low absolute sensitivity across factors = insulated
     sens=[abs(f.get(k)) for k in ["rate_beta","dollar_beta","credit_beta"] if f.get(k) is not None]
     if sens: f["macro_resilience"]=1.0-min(1.0,st.mean(sens))
