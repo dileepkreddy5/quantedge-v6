@@ -201,6 +201,10 @@ async def compute_valuation_intelligence(ticker: str, api_key: str, pool=None) -
                  "mult_pe","mult_ev_ebitda","buy_zone","sell_zone","epv_per_share","graham_number",
                  "residual_income_value","ddm_value","nav_per_share","dcf_scenarios_above_price",
                  "pe_vs_history","pe_historical_avg"]},
+            # Why the DCF did not run, when it did not. Nineteen blank rows with
+            # no explanation reads as a broken tab rather than a model that does
+            # not apply to this company.
+            "dcf_unavailable":val_features.get("dcf_unavailable"),
             "sensitivity":val_features.get("dcf_sensitivity"),
             "assumptions":{k:val_features.get(k) for k in
                 ["assumption_revenue_cagr","assumption_wacc","assumption_terminal_growth",

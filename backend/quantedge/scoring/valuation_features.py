@@ -46,6 +46,21 @@ def compute_valuation_features(merged, fin_features, price, market_cap, wacc_dic
     rev_growth = fin_features.get("revenue_cagr_5y") or fin_features.get("revenue_growth") or 0.05
     wacc = wacc_dict.get("mid", 0.09)
 
+    # A DCF cannot be built on a negative cash flow, and several large companies
+    # genuinely have one: Coca-Cola's trailing year contains a $6bn one-off legal
+    # payment, Exxon swings negative through a capex cycle, and banks have no
+    # meaningful free cash flow at all. Skipping is correct — but nineteen blank
+    # rows with no explanation reads as a broken tab rather than a model that
+    # does not apply, so record why.
+    if fcf_ttm is None:
+        f["dcf_unavailable"] = ("free cash flow could not be computed — the filings are "
+                                "missing operating cash flow or capital expenditure")
+    elif fcf_ttm <= 0:
+        f["dcf_unavailable"] = (f"trailing free cash flow is negative "
+                                f"(${fcf_ttm/1e9:.1f}B), so a discounted cash flow model "
+                                f"cannot be built on it; the multiples and asset-based "
+                                f"measures below still apply")
+
     if fcf_ttm and fcf_ttm>0:
         base_g = max(0.02, min(0.20, rev_growth))
         # Bull/base/bear vary growth + WACC, but bull doesn't stack all-optimistic

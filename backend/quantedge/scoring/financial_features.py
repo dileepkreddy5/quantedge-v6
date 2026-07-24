@@ -10,9 +10,18 @@ from quantedge.scoring.deep_features import (_f, _safe_div, _cov_stability, _slo
     beneish_m_score, owner_earnings, normalized_roic)
 
 def _ttm(m, k, i=None):
-    end = len(m) if i is None else i+1
-    vals=[m[j][k] for j in range(max(0,end-4),end) if m[j].get(k) is not None]
-    return sum(vals) if len(vals)==4 else None
+    """Trailing four quarters of a flow, tolerant of a stub quarter.
+
+    This took the last four POSITIONS, dropped nulls, then required exactly four
+    — so a single missing quarter returned None. Coca-Cola's most recent filing
+    is a stub, which took operating cash flow with it, and free cash flow, and
+    the fcf_margin the DCF is built from: 23 of 40 valuation signals blank for a
+    company that generates about ten billion a year in cash. Walk back instead
+    and take the four most recent quarters that actually have data.
+    """
+    end = len(m) if i is None else i + 1
+    vals = [m[j][k] for j in range(0, end) if m[j].get(k) is not None]
+    return sum(vals[-4:]) if len(vals) >= 4 else None
 
 def _ttm_series(m, k):
     out=[]
@@ -39,7 +48,16 @@ def compute_financial_features(merged, market_cap=None, wacc=None):
         return None
     capex=_ttm(m,"capex") or _latest_ttm4("capex"); da=_ttm(m,"depreciation_amortization"); rd=_ttm(m,"rd")
     sbc=_ttm(m,"sbc"); div=_ttm(m,"dividends_paid"); bb=_ttm(m,"buybacks")
-    fcf=(ocf-abs(capex)) if (ocf is not None and capex is not None) else None
+    # ocf and capex are summed independently, and they do not always have the
+    # same quarters: Coca-Cola reports capex for twelve quarters and operating
+    # cash flow for eleven, so the capex TTM covered a period the OCF TTM did
+    # not and the difference came out at -1.1bn where the real figure is about
+    # +4bn. That negative then failed the DCF's fcf > 0 guard and took 23
+    # valuation signals with it. Difference per quarter first, then sum.
+    _fcf_q = [(r.get("operating_cash_flow") - abs(r.get("capex")))
+              for r in m
+              if r.get("operating_cash_flow") is not None and r.get("capex") is not None]
+    fcf = sum(_fcf_q[-4:]) if len(_fcf_q) >= 4 else None
     f["gross_margin"]=_safe_div(gp,rev); f["operating_margin"]=_safe_div(oi,rev)
     f["net_margin"]=_safe_div(ni,rev)
     f["ebitda"]=(oi+da) if (oi is not None and da is not None) else None
