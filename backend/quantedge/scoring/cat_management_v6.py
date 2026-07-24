@@ -11,14 +11,13 @@ CATEGORIES = {
    _s("roic_level","ROIC level","roic_level",0.22,0.08,0.20,evidence="return on invested capital"),
    _s("div_consistency","Dividend consistency","dividend_consistency",0.12,0.5,1.0,evidence="quarters paying dividend"),
    _s("div_growth","Dividend growth","dividend_growth",0.13,0.0,0.1,evidence="dividend growth YoY")]),
- "insider_activity":("Insider Activity", 0.90,[
-   _s("buy_sell_ratio","Buy/sell txn ratio","insider_buy_sell_ratio",0.20,0.15,0.5,evidence="share of insider txns that are buys"),
-   _s("buy_value_ratio","Buy value ratio","insider_buy_value_ratio",0.20,0.15,0.5,evidence="buy $ vs total insider $"),
-   _s("net_value","Net insider value","insider_net_value_norm",0.15,-0.005,0.002,evidence="net buy value / mcap"),
-   _s("cluster","Cluster buying","insider_cluster_buying",0.15,0,1,evidence="3+ insiders buying"),
-   _s("officer_net","Officer net activity","insider_officer_net",0.12,-2,2,evidence="officer buys minus sells"),
-   _s("any_buying","Any insider buying","insider_any_buying",0.10,0,1,evidence="at least one open-market buy"),
-   _s("sell_pressure","Insider sell pressure","insider_sell_pressure",0.08,0.02,0.002,hib=False,evidence="sell value / mcap; lower better")]),
+ # Insider Activity removed. Form 4 data needs the SEC submissions index plus
+ # up to sixty individual filings per company, and the endpoint throttles within
+ # an hour of light use — the category worked for one ticker and was empty for
+ # the next, so the composite moved for reasons unrelated to the company. The
+ # fetcher in insider_fetch.py is left intact and tested; serving this properly
+ # means a nightly job writing to Postgres, the shape relationships.py already
+ # uses, rather than fetching at request time.
  "effectiveness":("Management Effectiveness", 0.95,[
    _s("margin_trend","Margin trend","margin_trend",0.28,-0.01,0.03,evidence="operating margin expansion"),
    _s("at_trend","Asset turnover trend","asset_turnover_trend",0.18,-0.02,0.05,evidence="asset efficiency improving"),

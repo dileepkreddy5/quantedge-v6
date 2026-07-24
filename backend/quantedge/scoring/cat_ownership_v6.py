@@ -9,11 +9,13 @@ CATEGORIES = {
    _s("conc_trend","Concentration trend","ownership_concentration_trend",0.30,0.0,0.02,evidence="float shrinking = concentrating"),
    _s("dilution_gap","Options overhang","dilution_gap",0.20,0.05,0.0,hib=False,evidence="diluted vs basic shares"),
    _s("shares_out","Shares outstanding","shares_outstanding_b",0.20,50,1,hib=False,evidence="lower share count = tighter")]),
- "insider_own":("Insider Ownership",0.60,[
-   _s("insider_net","Insider net activity","insider_net_activity",0.30,-2,2,evidence="officer+director net buys"),
-   _s("insider_buy","Insider buy ratio","insider_buy_ratio",0.25,0.15,0.5,evidence="buy conviction"),
-   _s("insider_cluster","Cluster buying","insider_cluster",0.20,0,1,evidence="3+ insiders buying"),
-   _s("insider_conv","Insider net conviction","insider_net_conviction",0.25,-0.005,0.002,evidence="net buy value / mcap")]),
+ # Insider Activity removed. Form 4 data needs the SEC submissions index plus
+ # up to sixty individual filings per company, and the endpoint throttles within
+ # an hour of light use — the category worked for one ticker and was empty for
+ # the next, so the composite moved for reasons unrelated to the company. The
+ # fetcher in insider_fetch.py is left intact and tested; serving this properly
+ # means a nightly job writing to Postgres, the shape relationships.py already
+ # uses, rather than fetching at request time.
  "institutional":("Disclosed 5%+ Holders",0.50,[
    _s("holder_count","Major holder count","major_holder_count",0.30,1,5,evidence="13G filers >5%"),
    _s("inst_conc","Top-3 disclosed stake","institutional_concentration",0.25,5,25,evidence="combined stake of the three largest 13D/G filers"),
@@ -24,7 +26,6 @@ CATEGORIES = {
    _s("dilution_press","Dilution pressure","dilution_pressure",0.35,0.06,0.01,hib=False,evidence="SBC / revenue"),
    ]),
  "smart_money":("Smart Money Signals",0.55,[
-   _s("smart_buy","Smart money buying","smart_money_buying",0.30,0,1,evidence="insider open-market buys"),
    _s("officer_conv","Officer conviction","officer_conviction",0.30,0,1,evidence="net officer buying"),
    _s("buyback_int","Buyback intensity","buyback_intensity",0.20,0.005,0.03,evidence="buybacks / mcap")]),
  "float_liquidity":("Float & Liquidity",0.40,[
@@ -32,9 +33,8 @@ CATEGORIES = {
    _s("turnover","Turnover ratio","turnover_ratio",0.35,0.002,0.01,evidence="daily volume / shares"),
    _s("mcap_liq","Market cap ($B)","market_cap_b",0.30,10,200,evidence="size/liquidity")]),
  "conviction":("Ownership Conviction",0.40,[
-   _s("own_conv","Ownership conviction","ownership_conviction",0.45,0.15,0.5,evidence="insider buy conviction"),
    _s("buyback_int2","Buyback conviction","buyback_intensity",0.30,0.005,0.03,evidence="management buying back"),
-   _s("unique_buyers","Unique insider buyers","insider_unique_buyers",0.25,1,4,evidence="breadth of insider buying")]),
+   ]),
  "concentration":("Concentration Risk",0.35,[
    _s("top_pct","Top holder stake","top_holder_pct",0.50,20,7,hib=False,evidence="largest holder %")]),
 }
