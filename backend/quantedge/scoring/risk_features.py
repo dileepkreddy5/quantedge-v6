@@ -90,19 +90,41 @@ def compute_risk_features(merged, price_closes=None, market_cap=None, beta=None)
     nis=[_f(x.get("net_income")) for x in merged[-8:]]; nis=[x for x in nis if x is not None]
     if len(nis)>=4 and st.mean(nis)!=0:
         f["earnings_volatility"]=abs(st.pstdev(nis)/st.mean(nis))
-    rev_y=_f(qy.get("revenue")); rec_y=_f(qy.get("receivables")); rec=cur("receivables")
-    if rec and rev_ttm and rec_y and rev_y and rev_y>0:
-        dsri=(rec/rev_ttm)/(rec_y/rev_y) if rev_ttm else None
-        f["beneish_dsri"]=round(dsri,3) if dsri else None
-    gp=cur("gross_profit"); gp_y=_f(qy.get("gross_profit"))
-    if gp and rev_ttm and gp_y and rev_y:
-        gmi=(gp_y/rev_y)/(gp/rev_ttm) if gp else None
-        f["beneish_gmi"]=round(gmi,3) if gmi else None
-    if rev_ttm and rev_y and ocf_ttm is not None:
-        ocf_y=_f(qy.get("operating_cash_flow"))
-        if ocf_y is not None:
-            rev_g=(rev_ttm/rev_y-1) if rev_y else 0
-            f["revenue_ocf_divergence"]=rev_g-((ocf_ttm/ocf_y-1) if ocf_y and ocf_y>0 else 0)
+    # DSRI compares receivables-to-sales now against a year ago, so both sides
+    # must use the same span. This divided current receivables by TTM revenue and
+    # year-ago receivables by a SINGLE quarter's revenue, building a factor of
+    # about four into every reading — Coca-Cola came out at 0.181 where the index
+    # centres on 1.0, and since the scale treats anything under 1.0 as pristine,
+    # the error read as perfect accounting quality.
+    rec = cur("receivables")
+    rev_ttm_y = None
+    _rv = [_f(x.get("revenue")) for x in merged[-8:-4]]
+    _rv = [v for v in _rv if v is not None]
+    if len(_rv) == 4:
+        rev_ttm_y = sum(_rv)
+    rec_y = _f(qy.get("receivables"))
+    if rec and rev_ttm and rec_y and rev_ttm_y and rev_ttm_y > 0:
+        dsri = (rec / rev_ttm) / (rec_y / rev_ttm_y)
+        f["beneish_dsri"] = round(dsri, 3) if dsri else None
+    # GMI has the same span mismatch DSRI had: gross profit over a single
+    # year-ago quarter against gross profit over TTM. Both sides now use TTM.
+    gp = cur("gross_profit")
+    _gp = [_f(x.get("gross_profit")) for x in merged[-8:-4]]
+    _gp = [v for v in _gp if v is not None]
+    gp_ttm_y = sum(_gp) if len(_gp) == 4 else None
+    if gp and rev_ttm and gp_ttm_y and rev_ttm_y:
+        gmi = (gp_ttm_y / rev_ttm_y) / (gp / rev_ttm)
+        f["beneish_gmi"] = round(gmi, 3) if gmi else None
+    # Same span mismatch a third time: TTM revenue against a single year-ago
+    # quarter reports roughly 300% growth for a flat business, and the same for
+    # operating cash flow, so the divergence between them was noise.
+    _ocf = [_f(x.get("operating_cash_flow")) for x in merged[-8:-4]]
+    _ocf = [v for v in _ocf if v is not None]
+    ocf_ttm_y = sum(_ocf) if len(_ocf) == 4 else None
+    if rev_ttm and rev_ttm_y and ocf_ttm is not None and ocf_ttm_y:
+        rev_g = rev_ttm / rev_ttm_y - 1
+        ocf_g = (ocf_ttm / ocf_ttm_y - 1) if ocf_ttm_y > 0 else 0
+        f["revenue_ocf_divergence"] = rev_g - ocf_g
 
     if price_closes and len(price_closes)>=120:
         rets=[(price_closes[i]/price_closes[i-1]-1) for i in range(1,len(price_closes))]
