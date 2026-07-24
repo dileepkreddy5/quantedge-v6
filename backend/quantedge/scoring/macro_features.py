@@ -66,7 +66,14 @@ def compute_macro_features(stock_closes, proxies):
     hyg=pr("HYG")
     if hyg:
         b,c=_beta_corr(sr,hyg)
-        f["credit_beta"]=b  # high = risk-on sensitive
+        # Beta against HYG measures the volatility ratio, not credit sensitivity:
+        # HYG runs about 6% annualised against 25% for a typical stock, so even a
+        # correlation of 0.5 produces a beta above 2. JPMorgan came out at 2.04,
+        # which the scale read as extreme credit risk. Correlation is scale-free
+        # and answers the question the signal is named for — and it is what the
+        # value and momentum factors two blocks down already use.
+        f["credit_beta"]=c
+        f["credit_beta_raw"]=b
         f["risk_on_correlation"]=c
 
     # ===== FACTOR EXPOSURE (VLUE, MTUM) =====

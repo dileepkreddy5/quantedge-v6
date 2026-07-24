@@ -30,7 +30,12 @@ CATEGORIES = {
  "float_liquidity":("Float & Liquidity",0.40,[
    _s("float_liq","Float liquidity","float_liquidity",0.35,0.3,0.8,evidence="volume vs shares"),
    _s("turnover","Turnover ratio","turnover_ratio",0.35,0.002,0.01,evidence="daily volume / shares"),
-   _s("mcap_liq","Market cap ($B)","market_cap_b",0.30,10,200,evidence="size/liquidity")]),
+   # Market cap as a liquidity signal has a real ceiling: above roughly $50B,
+   # size stops constraining anyone's ability to trade, and scoring a $5T company
+   # as more investable than a $200B one is false precision. Float and turnover
+   # in this same category carry the nuance; this scores whether the threshold is
+   # met at all.
+   _s("mcap_liq","Market cap ($B)","market_cap_b",0.30,2,50,evidence="above roughly $50B, size no longer constrains liquidity")]),
  # "Ownership Conviction" held only buyback_int2, a second entry on
  # buyback_intensity already scored under Smart Money Signals.
  "concentration":("Concentration Risk",0.35,[

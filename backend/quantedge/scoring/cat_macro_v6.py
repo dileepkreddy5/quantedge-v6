@@ -22,7 +22,7 @@ CATEGORIES = {
    _s("smallcap_beta","Small-cap beta (IWM)","smallcap_beta",0.30,1.3,0.7,hib=False,evidence="cyclical/risk-appetite exposure"),
    _s("cyclical_corr","Cyclical correlation","cyclical_correlation",0.35,0.8,0.4,hib=False,evidence="economic-cycle sensitivity")]),
  "risk_regime":("Risk Regime",0.40,[
-   _s("credit_beta","Credit beta (HYG)","credit_beta",0.40,1.0,0.4,hib=False,evidence="risk-on/off sensitivity"),
+   _s("credit_beta","Credit correlation (HYG)","credit_beta",0.40,0.7,0.25,hib=False,evidence="how closely this tracks high-yield credit — high means it falls when risk appetite does"),
    _s("risk_on_corr","Risk-on correlation","risk_on_correlation",0.30,0.7,0.3,hib=False,evidence="credit-spread sensitivity"),
    _s("beta_stability","Beta stability","beta_stability",0.30,0.5,0.85,evidence="consistent market exposure")]),
  "commodity":("Commodity Exposure",0.30,[

@@ -9,7 +9,7 @@ def _s(id,label,field,weight,good,great,hib=True,status="live",evidence=""):
 CATEGORIES = {
  "sector_class": ("Sector Classification & Scale", 0.20, [
    _s("size_tier","Size tier","size_tier",0.30,1,3,evidence="large(3)/mid(2)/small(1) cap"),
-   _s("mcap_b","Market cap ($B)","market_cap_b",0.25,5,100,evidence="absolute scale"),
+   _s("mcap_b","Market cap ($B)","market_cap_b",0.25,2,50,evidence="absolute scale — flattens above $50B, where size stops differentiating"),
    _s("peer_count","Sector peer count","sector_peer_count",0.20,20,100,evidence="sector breadth in coverage"),
    _s("employees","Employee scale","employee_scale",0.25,5000,100000,evidence="workforce size"),
  ]),
