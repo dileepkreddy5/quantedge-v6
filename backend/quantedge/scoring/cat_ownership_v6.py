@@ -14,11 +14,11 @@ CATEGORIES = {
    _s("insider_buy","Insider buy ratio","insider_buy_ratio",0.25,0.15,0.5,evidence="buy conviction"),
    _s("insider_cluster","Cluster buying","insider_cluster",0.20,0,1,evidence="3+ insiders buying"),
    _s("insider_conv","Insider net conviction","insider_net_conviction",0.25,-0.005,0.002,evidence="net buy value / mcap")]),
- "institutional":("Institutional Holders",0.50,[
+ "institutional":("Disclosed 5%+ Holders",0.50,[
    _s("holder_count","Major holder count","major_holder_count",0.30,1,5,evidence="13G filers >5%"),
-   _s("inst_conc","Institutional concentration","institutional_concentration",0.25,5,25,evidence="top-3 holder stake"),
-   _s("avg_stake","Avg holder stake","avg_holder_stake",0.20,3,10,evidence="average institutional position"),
-   _s("inst_interest","Institutional interest","institutional_interest",0.25,0.2,0.8,evidence="breadth of major holders")]),
+   _s("inst_conc","Top-3 disclosed stake","institutional_concentration",0.25,5,25,evidence="combined stake of the three largest 13D/G filers"),
+   _s("avg_stake","Avg disclosed stake","avg_holder_stake",0.20,3,10,evidence="average position among 5%+ filers"),
+   _s("inst_interest","5%+ filer count","institutional_interest",0.25,0.2,0.8,evidence="how many holders have crossed the 5% disclosure threshold — not total institutional ownership, which needs 13F data")]),
  "share_stability":("Share Stability",0.55,[
    _s("share_stab","Share count stability","share_count_stability",0.35,0.5,0.9,evidence="consistent share count"),
    _s("dilution_press","Dilution pressure","dilution_pressure",0.35,0.06,0.01,hib=False,evidence="SBC / revenue"),

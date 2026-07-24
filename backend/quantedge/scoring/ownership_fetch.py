@@ -19,6 +19,16 @@ def _parse_13g(t):
     return {"holder":name,"percent":pct,"shares":amt}
 
 async def fetch_ownership(cik, days_back=730, max_filings=30):
+    """Holders who have filed a Schedule 13D/G against this company.
+
+    This is NOT institutional ownership. 13D/G are threshold disclosures filed
+    only when a holder crosses 5%, so the result is the handful of names above
+    that line — two or three for a megacap. Genuine institutional ownership
+    lives in 13F-HR filings, which are filed BY each manager rather than by the
+    company, and so do not appear in this company's submissions at all;
+    computing it means ingesting the SEC's quarterly 13F bulk dataset and
+    matching on CUSIP. Everything here is labelled as 5%+ disclosed holders.
+    """
     cik=str(cik).zfill(10)
     out={"available":False}
     try:
@@ -43,7 +53,12 @@ async def fetch_ownership(cik, days_back=730, max_filings=30):
                             p=_parse_13g(r.text); p["date"]=dates[i]; return p
                     except Exception: return None
                 return None
-            results=[r for r in await asyncio.gather(*[fetch_one(i) for i in idxs]) if r and r.get("holder")]
+            # A filing whose tags do not match yields a name with no numbers.
+            # Filtering only on the name let those through as zero-share holders —
+            # Apple showed "The Vanguard Group, 0 shares, 0%" alongside the real
+            # Vanguard entry. A holder without a position is not a holder.
+            results=[r for r in await asyncio.gather(*[fetch_one(i) for i in idxs])
+                     if r and r.get("holder") and (r.get("shares") or 0) > 0]
             if not results: return out
             # dedupe by holder, keep latest
             latest={}
