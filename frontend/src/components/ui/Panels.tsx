@@ -175,11 +175,15 @@ export function MLModelsPanel({ data }: { data: any }) {
   // manufactures agreement out of an absence of information, so they collapse to one.
   // A model whose trees never split returns one constant for every input. Its
   // sign is an artifact of that constant, not a view, so it must not cast a vote.
+  // The per-ticker ensemble reports its own out-of-sample rank-IC. When that is
+  // negative the model ordered its holdout backwards, so its 21-day sign is
+  // evidence against itself, not for itself — it abstains rather than votes.
+  const perTickerInverted = preds.rank_ic_estimate != null && Number(preds.rank_ic_estimate) < 0;
   const lstmDead = lstm.available === false || lstm.pred_21d == null;
   const lgbmDead = lgbm.model_split === false
     || (lgbm.ic_train === 0 && lgbm.rank_score === 0);
   const xgbDead = xgb.model_split === false;
-  const _mlVals = [lstmDead ? null : lstm.pred_21d, xgbDead ? null : xgb.pred_21d, lgbmDead ? null : lgbm.pred_21d]
+  const _mlVals = perTickerInverted ? [] : [lstmDead ? null : lstm.pred_21d, xgbDead ? null : xgb.pred_21d, lgbmDead ? null : lgbm.pred_21d]
     .filter(v => v != null).map(Number);
   const _mlSpread = _mlVals.length > 1 ? Math.max(..._mlVals) - Math.min(..._mlVals) : 0;
   const mlCollapsed = _mlVals.length > 1 && _mlSpread < 0.05;
@@ -255,7 +259,16 @@ export function MLModelsPanel({ data }: { data: any }) {
       value: sentVal != null ? `${Number(sentVal).toFixed(2)} score` : null,
       dir: sentVal != null ? Math.sign(Number(sentVal)) : null,
       what: 'A language model trained on financial text, scoring whether recent news reads bullish or bearish.',
-      why: 'News moves prices before it shows up in fundamentals.' },
+      why: 'News moves prices before it shows up in fundamentals.',
+      note: (() => {
+        const nA = data.sentiment?.n_articles_fetched, nT = data.sentiment?.n_articles_ticker_tagged;
+        if (nA == null || nT == null) return null;
+        // Below the fallback threshold the scorer uses every article it fetched,
+        // most of which the provider tagged only loosely to this ticker.
+        return nT < 5
+          ? `${nT} of ${nA} articles name this ticker \u2014 scored on the full feed, so this reads closer to sector mood than company news`
+          : `${nT} of ${nA} articles name this ticker`;
+      })() },
     { name: 'Cross-Sectional Panel', kind: 'Multi-horizon ensemble',
       value: panelPred != null ? `${Number(panelPred).toFixed(2)}% (1mo)` : null,
       dir: panelDir,
@@ -394,6 +407,7 @@ export function MLModelsPanel({ data }: { data: any }) {
               {' '}This is <b style={{color:'var(--latte)'}}>agreement across models</b>, not predictive accuracy — and separate from the QuantEdge conviction score in the header, which weighs 16 intelligence modules.
               <div style={{ marginTop:6, fontSize:11, color:'var(--cocoa)' }}>
                 Nine models run; {nTotal} vote. GARCH forecasts volatility rather than direction, and Monte Carlo takes its drift from the ML ensemble, so neither casts an independent vote{mlCollapsed ? '; the three return models collapsed to one' : ''}.
+                {perTickerInverted ? ` The per-ticker return models are withheld from this vote: their out-of-sample rank-IC is ${Number(preds.rank_ic_estimate).toFixed(3)}, meaning they ranked their own holdout inversely.` : ''}
               </div>
             </div>
           </div>
