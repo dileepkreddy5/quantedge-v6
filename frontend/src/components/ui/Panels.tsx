@@ -307,8 +307,10 @@ export function MLModelsPanel({ data }: { data: any }) {
               const reliableFlag = h.reliable === true;
               const strong = reliableFlag && icNum != null && icNum >= 0.05;
               const badgeCol = strong ? 'var(--bull)' : reliableFlag ? 'var(--caramel)' : 'var(--cocoa)';
+              const hacStable = h.hac_stable !== false;
               const badgeTxt = strong ? 'VALIDATED'
                 : reliableFlag ? 'MODERATE'
+                : !hacStable ? 'NOT MEASURABLE \u2014 TOO FEW WINDOWS'
                 : (tStat != null && Math.abs(tStat) > 0) ? `NOT SIGNIFICANT (t=${tStat.toFixed(2)})`
                 : 'UNMEASURABLE';
               return (
@@ -319,13 +321,14 @@ export function MLModelsPanel({ data }: { data: any }) {
                       it at the same weight as a measured one invites the reader to trust a
                       number the data cannot support, so it is struck through and greyed. */}
                   <div style={{ fontFamily:'var(--font-mono)', fontSize: reliableFlag ? 20 : 18,
-                    fontWeight:800, color: reliableFlag ? col : 'var(--cocoa-dust)', lineHeight:1,
+                    fontWeight:800, color: col, opacity: reliableFlag ? 1 : 0.72, lineHeight:1,
                     textDecoration:'none' }}>
                     {pv > 0 ? '+' : ''}{pv.toFixed(1)}%
                   </div>
                   <div style={{ fontFamily:'var(--font-mono)', fontSize:9, color:'var(--cocoa)', marginTop:6 }}>
                     IC {icNum != null ? (icNum >= 0 ? '+' : '') + icNum.toFixed(3) : 'n/a'}
-                    {tStat != null ? ` \u00b7 t ${tStat >= 0 ? '+' : ''}${tStat.toFixed(2)}` : ''}
+                    {tStat != null && hacStable ? ` \u00b7 t ${tStat >= 0 ? '+' : ''}${tStat.toFixed(2)}` : ''}
+                    {!hacStable ? ' \u00b7 t n/a' : ''}
                   </div>
                   {h.confidence_note && (
                     <div title={h.confidence_note} style={{ fontFamily:'var(--font-body)', fontSize:8,
