@@ -31,6 +31,14 @@ import redis.asyncio as aioredis
 import asyncpg
 from loguru import logger
 
+# httpx logs every request at INFO including the full URL, and Polygon takes the
+# API key as a query parameter — so the key was written in clear text on every
+# outbound call, into container logs and any file they were redirected to.
+# Requests are already logged where they matter with the key stripped.
+import logging as _stdlib_logging
+for _noisy in ("httpx", "httpcore", "urllib3"):
+    _stdlib_logging.getLogger(_noisy).setLevel(_stdlib_logging.WARNING)
+
 from core.config import settings
 from auth.cognito_auth import get_current_user, CognitoUser
 from routers import analysis, auth_router, watchlist, portfolio

@@ -793,7 +793,7 @@ class QuantEdgeAnalyzerV6:
             # FinBERT sentiment (real transformer inference)
             if include_sentiment and not isinstance(news_data, Exception):
                 try:
-                    sentiment_result = self._compute_sentiment(news_data)
+                    sentiment_result = self._compute_sentiment(news_data, ticker)
                     result["sentiment"] = sentiment_result
                 except Exception as e:
                     logger.warning(f"Sentiment error: {e}")
@@ -1361,6 +1361,7 @@ class QuantEdgeAnalyzerV6:
                 )
                 xgb_pred_21d = float(xgb_model.predict(today_vec)[0]) * 100
                 xgb_ic = float(xgb_fit.get("ic_train", 0))
+                xgb_split = xgb_fit.get("model_split")
                 xgb_signal = float(np.clip(xgb_pred_21d * 5, -100, 100))
 
                 # SHAP values: shap.TreeExplainer gives exact Shapley values,
@@ -1410,6 +1411,7 @@ class QuantEdgeAnalyzerV6:
                 )
                 lgb_pred_21d = float(lgb_model.predict(today_vec)[0]) * 100
                 lgb_ic = float(lgb_fit.get("ic_train", 0))
+                lgb_split = lgb_fit.get("model_split")
                 # Rank score: what percentile of the training universe does
                 # today's prediction place at? 100 = top decile.
                 train_preds = lgb_model.predict(X_train)
@@ -1725,12 +1727,16 @@ class QuantEdgeAnalyzerV6:
                     "pred_21d": round(xgb_pred_21d, 4),
                     "pred_252d": scale(xgb_pred_21d, 252),
                     "ic_train": round(xgb_ic, 4),
+                    # False means no tree ever split: the model returns one
+                    # constant for every input and must not be counted as a view.
+                    "model_split": locals().get("xgb_split"),
                 },
                 "lightgbm": {
                     "rank_score": lgb_rank_score,
                     "pred_21d": round(lgb_pred_21d, 4),
                     "pred_252d": scale(lgb_pred_21d, 252),
                     "ic_train": round(lgb_ic, 4),
+                    "model_split": locals().get("lgb_split"),
                 },
                 "ensemble": {
                     "pred_5d":            scale(ens_21d, 5),
@@ -1798,7 +1804,7 @@ class QuantEdgeAnalyzerV6:
             "rank_ic_estimate": 0.03,
         }
 
-    def _compute_sentiment(self, news_data: Dict) -> Dict:
+    def _compute_sentiment(self, news_data: Dict, ticker: str = "") -> Dict:
         """
         Real NLP sentiment via FinBERT (ProsusAI/finbert).
 
@@ -1823,10 +1829,10 @@ class QuantEdgeAnalyzerV6:
             # attributed to THIS ticker, or whose text names it. Fall back to the
             # unfiltered set when filtering leaves too little to score, and
             # report which happened rather than implying company-specific coverage.
-            _tkr = ticker.upper()
+            _tkr = (ticker or "").upper()
             _name_terms = [_tkr]
             _relevant = []
-            for item in news_items:
+            for item in (news_items if _tkr else []):
                 if not isinstance(item, dict):
                     continue
                 _txt = f"{item.get('title','')} {item.get('description','')}".upper()
