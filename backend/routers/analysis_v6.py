@@ -1790,6 +1790,25 @@ class QuantEdgeAnalyzerV6:
             ]
             reddit_posts = news_data.get("reddit", [])
 
+            # Polygon tags articles loosely: a piece about Meta, Amazon or silver
+            # comes back under MSFT's ticker query. Polygon's own per-article
+            # insights carry a per-ticker entry, so prefer articles it actually
+            # attributed to THIS ticker, or whose text names it. Fall back to the
+            # unfiltered set when filtering leaves too little to score, and
+            # report which happened rather than implying company-specific coverage.
+            _tkr = ticker.upper()
+            _name_terms = [_tkr]
+            _relevant = []
+            for item in news_items:
+                if not isinstance(item, dict):
+                    continue
+                _txt = f"{item.get('title','')} {item.get('description','')}".upper()
+                if item.get("polygon_sentiment") is not None or any(t in _txt for t in _name_terms):
+                    _relevant.append(item)
+            _n_tagged = len(_relevant)
+            if _n_tagged >= 5:
+                headlines = [i.get("title", "") for i in _relevant if i.get("title")]
+
             # FinBERT inference on news headlines (batched for speed)
             # self.finbert.analyze_text() runs the transformer forward pass
             news_scores = []
@@ -1824,7 +1843,19 @@ class QuantEdgeAnalyzerV6:
             reddit_score = float(reddit_result.get("composite_score", 0.0))
             reddit_label = reddit_result.get("label", "NEUTRAL")
 
-            composite = 0.6 * news_score + 0.4 * reddit_score
+            # Reddit was removed in v6 — get_news_and_reddit returns a hardcoded
+            # empty list — so reddit_score was always 0.0 and the fixed
+            # 0.6*news + 0.4*reddit blend multiplied EVERY ticker's sentiment by
+            # 0.6 in perpetuity (MSFT 0.2599 -> 0.1559, AAPL 0.1033 -> 0.0620).
+            # An absent source is not a neutral opinion: weight live sources only.
+            _parts = []
+            if news_scores:
+                _parts.append((0.6, news_score))
+            if reddit_posts:
+                _parts.append((0.4, reddit_score))
+            _wsum = sum(w for w, _ in _parts)
+            composite = (sum(w * v for w, v in _parts) / _wsum) if _wsum > 0 else 0.0
+            _sources = [n for n, ok in (("news", bool(news_scores)), ("reddit", bool(reddit_posts))) if ok]
             composite_label = "BULLISH" if composite > 0.15 else "BEARISH" if composite < -0.15 else "NEUTRAL"
 
             return {
@@ -1843,6 +1874,9 @@ class QuantEdgeAnalyzerV6:
                 },
                 "composite": round(composite, 4),
                 "label": composite_label,
+                "composite_sources": _sources,
+                "n_articles_fetched": len(headlines),
+                "n_articles_ticker_tagged": _n_tagged,
                 "headlines": headlines[:5],
                 "model": "FinBERT (ProsusAI/finbert)",
             }
