@@ -121,18 +121,25 @@ class XGBoostPredictor:
         top10 = sorted(fi_dict.items(), key=lambda x: x[1], reverse=True)[:10]
 
         train_pred = self.model.predict(X_scaled)
-        # np.corrcoef returns NaN if either series has zero variance.
-        # Guard: if NaN/inf, treat as "no information" (IC=0) instead of
-        # letting NaN propagate through the pipeline and end up as null in UI.
+        # Spearman, to match LightGBMPredictor — these were Pearson here and
+        # rank there while both reported under the key 'ic_train', so the two
+        # numbers were never comparable even though the UI shows them together.
+        # Note this is IN-SAMPLE: it measures fit, not skill, and must never be
+        # presented as predictive accuracy.
+        from scipy.stats import spearmanr as _sp
         try:
-            ic = np.corrcoef(y_train, train_pred)[0, 1]
+            ic, _ = _sp(y_train, train_pred)
             if not np.isfinite(ic):
                 ic = 0.0
         except Exception:
             ic = 0.0
+        _split_ok = bool(getattr(self.model, "get_booster", None)
+                         and any(v > 0 for v in importance))
 
         return {
             "ic_train": float(ic),
+            "ic_train_metric": "in-sample Spearman",
+            "model_split": _split_ok,
             "feature_importance": fi_dict,
             "top10_features": top10,
             "n_estimators_used": self.model.best_iteration if hasattr(self.model, "best_iteration") else self.params["n_estimators"],
@@ -239,11 +246,21 @@ class LightGBMPredictor:
             "n_estimators": 1500,
             "min_child_samples": 30,    # Min samples per leaf
             "subsample": 0.8,
-            "subsample_freq": 1,        # Enable GOSS
+            "subsample_freq": 1,        # bagging every iteration (NOT GOSS —
+                                        # GOSS needs boosting_type='goss')
             "colsample_bytree": 0.7,
             "reg_alpha": 0.05,
             "reg_lambda": 1.0,
-            "min_split_gain": 0.01,
+            # min_split_gain is LightGBM's gamma: an ABSOLUTE minimum loss
+            # reduction, measured in units of the objective. Forward-return
+            # variance scales with horizon — a 21-day log-return on one ticker
+            # has variance around 0.0065, so a 0.01 threshold exceeded every
+            # achievable squared-error gain and no split could ever clear it.
+            # The trees stopped at the root, giving a constant prediction and a
+            # rank IC of exactly 0.0 while still reporting as a live model.
+            # This is the same failure already documented for XGBoost's gamma
+            # above; the fix was never carried across. Keep at 0.0.
+            "min_split_gain": 0.0,
             "random_state": 42,
             "verbosity": -1,
             "extra_trees": True,        # Randomizes splits like extra-trees
@@ -283,9 +300,22 @@ class LightGBMPredictor:
         ic, _ = spearmanr(y_train, train_pred)
         if not np.isfinite(ic):
             ic = 0.0
+        # A model whose trees never split predicts one constant for every input.
+        # It still loads, still returns a number, and still gets blended — the
+        # only visible symptom is IC exactly 0.0. Report it explicitly so callers
+        # can drop it instead of averaging a constant into the ensemble.
+        _gains = self.model.feature_importance(importance_type="gain")
+        _split_ok = bool(np.sum(_gains) > 0)
+        if not _split_ok:
+            import logging as _lg
+            _lg.getLogger("lightgbm_predictor").warning(
+                f"LightGBM h={self.target_horizon}: no tree split (total gain 0) — "
+                f"prediction is constant, model carries no information.")
 
         return {
             "ic_train": float(ic),
+            "ic_train_metric": "in-sample Spearman",
+            "model_split": _split_ok,
             "feature_importance": dict(zip(
                 feature_names,
                 self.model.feature_importance(importance_type="gain").tolist()
@@ -384,15 +414,21 @@ class WalkForwardValidator:
             if len(X_train) < 100 or len(X_test) < 10:
                 continue
 
-            # Fit on train, predict on test
-            model.fit(X_train, y_train, feature_names)
+            # Pass the test fold as the eval set: XGBoostPredictor carries
+            # early_stopping_rounds in its params, and XGBoost raises when that
+            # is set with no eval_set — this path errored for every XGBoost fold.
+            model.fit(X_train, y_train, feature_names, X_val=X_test, y_val=y_test)
             preds = model.predict(X_test)
 
             ic, _ = spearmanr(preds, y_test)
             if not np.isfinite(ic):
                 ic = 0.0
             rmse = np.sqrt(mean_squared_error(y_test, preds))
-            hit_rate = np.mean(np.sign(preds) == np.sign(y_test))
+            # np.sign(0) is 0, so a flat prediction matched only exactly-zero
+            # returns and scored as a miss everywhere else; compare direction on
+            # non-zero realized returns only.
+            _nz = np.sign(y_test) != 0
+            hit_rate = float(np.mean(np.sign(preds[_nz]) == np.sign(y_test[_nz]))) if _nz.any() else 0.0
 
             results["ic_per_fold"].append(ic)
             results["rmse_per_fold"].append(rmse)
@@ -428,6 +464,10 @@ class EnsembleModel:
     def __init__(self):
         self.xgb = XGBoostPredictor()
         self.lgbm = LightGBMPredictor()
+        # NOTE: predictions below come from the fixed regime weight tables in
+        # combine_predictions, not from a fitted meta-learner. The RidgeCV is
+        # kept only as the seam for a future stacked fit; nothing trains it
+        # today, so the class docstring's "meta-learner" claim does not yet hold.
         self.meta_learner = RidgeCV(alphas=[0.01, 0.1, 1.0, 10.0])
         self.weights = {"lstm": 0.40, "xgb": 0.35, "lgbm": 0.25}
 

@@ -476,6 +476,26 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning(f"Rebound scan not scheduled: {e}")
 
+        # Nightly full-universe panel rebuild + multi-horizon retrain.
+        # 02:15 America/Denver — after the 02:00/02:30 ET scans have finished and
+        # clear of the 08:00 UTC pg_dumpall. Runs as subprocesses and promotes
+        # only a validated model set (see PanelRetrainJob).
+        try:
+            from zoneinfo import ZoneInfo
+            from services.panel_retrain_job import PanelRetrainJob
+            _retrain = PanelRetrainJob(tickers=707, years=5)
+            scheduler.add_job(
+                _retrain.run,
+                trigger=CronTrigger(hour=2, minute=15, timezone=ZoneInfo("America/Denver")),
+                id="panel_nightly_retrain",
+                name="Nightly panel rebuild + multi-horizon retrain",
+                replace_existing=True, max_instances=1, coalesce=True,
+                misfire_grace_time=3600,
+            )
+            logger.info("✅ Panel retrain scheduled (02:15 America/Denver nightly)")
+        except Exception as e:
+            logger.warning(f"Panel retrain not scheduled: {e}")
+
         scheduler.start()
         app.state.scheduler = scheduler
         logger.info("✅ APScheduler started — OutcomeFillerJob at 18:00 ET daily")
