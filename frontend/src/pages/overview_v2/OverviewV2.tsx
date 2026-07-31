@@ -463,6 +463,64 @@ export default function OverviewV2({
 
       </div>
 
+      {/* ── THE TWO SIGNALS ─────────────────────────────── */}
+      {/* Two independent scores are computed. Showing only one and labelling
+          neither hid the fact that they can disagree — and the disagreement
+          is itself the signal, not an error to be reconciled away. */}
+      <div>
+        <SectionHeader label="THE TWO SIGNALS · QUALITY VS MOMENTUM" />
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(260px, 1fr))', gap:10 }}>
+          {(() => {
+            const cs = conv?.conviction_score;
+            const cv = conv?.verdict;
+            const cCol = cs == null ? COLORS.textDim
+              : cs >= 58 ? COLORS.green : cs >= 42 ? COLORS.amber : COLORS.red;
+            const os = data.overall_score;
+            const ov = data.overall_signal;
+            const oCol = os == null ? COLORS.textDim
+              : os >= 58 ? COLORS.green : os >= 42 ? COLORS.amber : COLORS.red;
+            const cells = [
+              { k: 'CONVICTION · CURRENT STATE', v: cs != null ? cs.toFixed(0) : '—',
+                sig: cv ? String(cv).replace(/_/g,' ') : '—', col: cCol,
+                sub: conv?.coverage
+                  ? `${conv.coverage.modules_live}/${conv.coverage.modules_total} intelligence modules live, ${(conv.coverage.pct*100).toFixed(0)}% of weight. Fundamentals, business quality, valuation, ownership — what the company is now.`
+                  : 'Weighted across the intelligence modules.' },
+              { k: 'COMPOSITE · FORWARD SIGNAL', v: os != null ? String(os) : '—',
+                sig: ov ? String(ov).replace(/_/g,' ') : '—', col: oCol,
+                sub: 'ML ensemble 40%, regime 25%, volatility 15%, sentiment 10%, Kalman trend 10%. Technical and model-driven — where the price may go next.' },
+            ];
+            return cells.map(c => (
+              <div key={c.k} style={{ background: COLORS.panelAlt, border:`1px solid ${COLORS.borderLt}`,
+                borderRadius:4, padding:'14px 16px' }}>
+                <div style={{ fontFamily: fontMono, fontSize:9, letterSpacing:2, color: COLORS.textFaint }}>{c.k}</div>
+                <div style={{ display:'flex', alignItems:'baseline', gap:10, marginTop:6 }}>
+                  <span style={{ fontFamily: fontMono, fontSize:28, fontWeight:700, color:c.col, lineHeight:1 }}>{c.v}</span>
+                  <span style={{ fontFamily: fontMono, fontSize:13, fontWeight:700, color:c.col }}>{c.sig}</span>
+                </div>
+                <div style={{ fontFamily: fontSans, fontSize:11, color: COLORS.textDim, lineHeight:1.5, marginTop:8 }}>{c.sub}</div>
+              </div>
+            ));
+          })()}
+        </div>
+        {(() => {
+          const cs = conv?.conviction_score, os = data.overall_score;
+          if (cs == null || os == null) return null;
+          const gap = Math.abs(cs - os);
+          const bull = cs > os ? 'quality' : 'momentum';
+          const bear = cs > os ? 'momentum' : 'quality';
+          const msg = gap < 10
+            ? `The two agree within ${gap.toFixed(0)} points — fundamentals and forward signal are pointing the same way.`
+            : `They disagree by ${gap.toFixed(0)} points: ${bull} reads stronger than ${bear}. That split is information, not an error — a sound business can sit in a poor technical regime, and a weak one can rally. Neither score is the answer on its own.`;
+          return (
+            <div style={{ marginTop:10, padding:'10px 14px', background: COLORS.panelAlt,
+              borderLeft:`2px solid ${gap < 10 ? COLORS.amber : COLORS.cyan}`,
+              fontFamily: fontSans, fontSize:11.5, color: COLORS.text, lineHeight:1.6 }}>
+              {msg}
+            </div>
+          );
+        })()}
+      </div>
+
       {/* ── THESIS PARAGRAPHS ───────────────────────────────── */}
       <div>
         <SectionHeader label="ANALYSIS NARRATIVE" />
@@ -525,7 +583,7 @@ export default function OverviewV2({
         const cCol = conv.verdict?.includes('BUY') ? COLORS.green : conv.verdict?.includes('SELL') ? COLORS.red : COLORS.amber;
         return (
           <div>
-            <SectionHeader label={`CONVICTION DECOMPOSITION — WHY ${cScore.toFixed(0)}`} />
+            <SectionHeader label={`CONVICTION DECOMPOSITION — WHY ${cScore.toFixed(0)} (CURRENT-STATE SCORE ONLY)`} />
             <div style={{ display:'flex', alignItems:'baseline', gap:12, marginBottom:10, flexWrap:'wrap' }}>
               <span style={{ fontFamily:"'Fira Code',monospace", fontSize:32, fontWeight:800, color:cCol, lineHeight:1 }}>{cScore.toFixed(0)}</span>
               <span style={{ fontFamily:"'Fira Code',monospace", fontSize:14, fontWeight:700, color:cCol }}>{(conv.verdict||'').replace('_',' ')}</span>
