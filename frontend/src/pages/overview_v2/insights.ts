@@ -116,7 +116,9 @@ export function interpretBeta(beta: number): Insight {
 // ── Regime ───────────────────────────────────────────────────
 export function interpretRegime(regime: string, confidence?: number): Insight {
   const r = (regime || '').toUpperCase();
-  const conf = confidence != null ? ` (${(confidence * 100).toFixed(0)}% confidence)` : '';
+  const conf = confidence == null ? ''
+    : confidence >= 0.999 ? ' (>99.9% posterior — effectively degenerate; the HMM sees no competing state)'
+    : ` (${(confidence * 100).toFixed(0)}% confidence)`;
 
   if (r.includes('BULL_LOW_VOL') || r.includes('BULL_QUIET')) return {
     label: r.replace(/_/g, ' '),
@@ -334,7 +336,11 @@ export function buildThesis(data: any, ticker: string, conv?: any): ThesisParagr
   const maxDD = data.max_drawdown ?? -0.2;
   const mlPreds = data.ml_predictions?.ensemble ?? {};
   const mc = data.monte_carlo ?? {};
-  const positionPct = data.portfolio_construction?.recommended_position_pct ?? null;
+  const pcT = data.portfolio_construction;
+  const positionPct: number | null =
+    typeof pcT?.recommended_position_size === 'number' ? pcT.recommended_position_size
+    : typeof pcT?.recommended_position_pct === 'number' ? pcT.recommended_position_pct
+    : null;
 
   const compInsight = interpretCompositeScore(score, signal);
   const regimeInsight = interpretRegime(regime, regimeConf);
@@ -360,15 +366,32 @@ export function buildThesis(data: any, ticker: string, conv?: any): ThesisParagr
   const ddInsight = interpretMaxDrawdown(maxDD);
   const sharpeInsight = interpretSharpe(sharpe);
   const posSize = positionPct != null
-    ? ` The volatility-targeted sizer recommends ${(positionPct * 100).toFixed(0)}% of capital allocation given realized volatility.`
+    ? ` The volatility-targeted sizer recommends ${(positionPct * 100).toFixed(1)}% of capital against ${pcT?.realized_vol != null ? (pcT.realized_vol * 100).toFixed(1) + '% realized volatility' : 'realized volatility'}${pcT?.governor_active === true ? ', with the drawdown governor active' : ''}.`
     : '';
   const shortRisk = `${volInsight.headline} ${ddInsight.headline} ${sharpeInsight.headline}${posSize}`;
 
   const mlInsight = interpretMLConsensus(mlPreds);
-  const mcStr = (mc.bull_case_price && mc.base_case_price && mc.bear_case_price)
-    ? ` Monte Carlo simulation places the base case at $${mc.base_case_price.toFixed(2)}, with bull/bear bounds of $${mc.bull_case_price.toFixed(2)} and $${mc.bear_case_price.toFixed(2)}.`
-    : '';
-  const shortForward = `${mlInsight.headline}${mcStr} Per the multi-horizon panel model, the 2-week horizon shows measured out-of-sample skill (rank-IC ~0.16); longer horizons are directional and require more history to validate. See the ML Models tab for per-horizon reliability.`;
+  const sc = data.scenarios ?? {};
+  const mcStr = (sc.base?.return_pct != null && sc.bull?.return_pct != null && sc.bear?.return_pct != null)
+    ? ` Monte Carlo places the base case at ${pct(sc.base.return_pct)}, with bull and bear bounds of ${pct(sc.bull.return_pct)} and ${pct(sc.bear.return_pct)}${sc.tail?.return_pct != null ? ` and a tail case of ${pct(sc.tail.return_pct)}` : ''}.`
+    : (mc.p50 != null && mc.p5 != null && mc.p95 != null
+        ? ` Monte Carlo median outcome ${pct(mc.p50 * 100)}, 5th–95th percentile band ${pct(mc.p5 * 100)} to ${pct(mc.p95 * 100)}.`
+        : '');
+  // Skill language must come from the measured panel stats, not a fixed sentence.
+  // Bar: |t| >= 2 on the OOS rank-IC AND >= 20 independent (non-overlapping) windows.
+  const pp = data.panel_prediction;
+  let skillStr = '';
+  if (pp?.available === true && pp.horizons) {
+    const hs = Object.values(pp.horizons) as any[];
+    const credible = hs.filter(h => Math.abs(h.ic_t_stat ?? 0) >= 2 && (h.n_independent_val_dates ?? 0) >= 20);
+    if (credible.length) {
+      skillStr = ` Across ${hs.length} panel horizons, ${credible.map(h => `${h.label} (rank-IC ${num(h.oos_rank_ic, 3)}, t=${num(h.ic_t_stat, 2)}, ${h.n_independent_val_dates} independent windows)`).join(' and ')} clear${credible.length > 1 ? '' : 's'} a t≥2 out-of-sample bar; the remaining horizons do not and are directional only.`;
+    } else if (hs.length) {
+      const best = hs.reduce((a, b) => Math.abs(b.ic_t_stat ?? 0) > Math.abs(a.ic_t_stat ?? 0) ? b : a);
+      skillStr = ` No panel horizon clears a t≥2 out-of-sample significance bar — the strongest is ${best.label} at rank-IC ${num(best.oos_rank_ic, 3)} (t=${num(best.ic_t_stat, 2)}, ${best.n_independent_val_dates} independent windows). Treat every horizon as directional, not validated skill.`;
+    }
+  }
+  const shortForward = `${mlInsight.headline}${mcStr}${skillStr} See the ML Models tab for per-horizon detail.`;
 
   return {
     thesis: shortThesis,
