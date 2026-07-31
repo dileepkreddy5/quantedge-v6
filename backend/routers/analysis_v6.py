@@ -1623,6 +1623,30 @@ class QuantEdgeAnalyzerV6:
             total_w = sum(w for _, w in weighted)
             ens_21d = sum(p * w for p, w in weighted) / total_w
 
+            def _forecast_quantiles(labels, center_pct: float) -> Dict:
+                """Empirical residual shape re-centred on the model's forecast.
+
+                labels are realized 21-day returns (fractions). We take their
+                distribution ABOUT ITS OWN MEDIAN — the residual shape, which
+                carries the skew and tail thickness worth showing — then place it
+                around the ensemble's predicted return. The width comes from
+                history; only the location comes from the model."""
+                try:
+                    arr = np.asarray(labels, dtype=float)
+                    arr = arr[np.isfinite(arr)]
+                    if arr.size < 20:
+                        return {}
+                    med = float(np.median(arr))
+                    out = {}
+                    for q in (10, 25, 50, 75, 90):
+                        resid = float(np.percentile(arr, q)) - med
+                        out[f"q{q}_1m"] = round(center_pct + resid * 100.0, 4)
+                    out["center_source"] = "ensemble 21d forecast"
+                    out["width_source"] = f"empirical residual spread, n={arr.size}"
+                    return out
+                except Exception:
+                    return {}
+
             def scale(base: float, h: int) -> float:
                 """Linear time-scaling of EXPECTED RETURNS: E[r(h)] = E[r(21d)] * h/21.
                 The previous sqrt(h/21) rule is a VOLATILITY scaling law, not a
@@ -1734,13 +1758,16 @@ class QuantEdgeAnalyzerV6:
                 "rank_ic_source": rank_ic_source,
                 "ic_estimate": round((xgb_ic + lgb_ic) / max(n_models, 1), 4),
                 "ic_source": "in-sample train IC (Pearson)",
-                "quantile": {
-                    "q10_1m": round(float(np.percentile(y, 10)) * 100, 4),
-                    "q25_1m": round(float(np.percentile(y, 25)) * 100, 4),
-                    "q50_1m": round(float(np.percentile(y, 50)) * 100, 4),
-                    "q75_1m": round(float(np.percentile(y, 75)) * 100, 4),
-                    "q90_1m": round(float(np.percentile(y, 90)) * 100, 4),
-                },
+                # These were percentiles of y — the TRAINING LABELS — so the
+                # panel headed 'the realistic range of one-month outcomes' showed
+                # the historical spread of past 21-day returns and moved barely at
+                # all between tickers (AAPL +1.77% vs MSFT +1.79% at the median),
+                # with a median unrelated to the model's own forecast. A forecast
+                # distribution has to be centred on the forecast: shift the
+                # empirical residual distribution so its median sits on the
+                # ensemble's 21-day prediction, keeping the historical SHAPE
+                # (skew and fat tails) which is the part that was well estimated.
+                "quantile": _forecast_quantiles(y, ens_21d),
             }
 
         # Run in thread pool — does not block the async event loop

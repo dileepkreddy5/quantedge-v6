@@ -426,6 +426,24 @@ class GJRGARCHModel:
                 "beta": beta,
                 "nu_student_t": nu,
                 "persistence": float(persistence),
+                # Two degenerate fits still satisfy persistence < 1 and so pass
+                # the guard above while carrying no usable structure:
+                #   alpha ~ 0  — the ARCH term vanished, so shocks do not feed
+                #     volatility at all and the model is pure decay. MSFT fitted
+                #     alpha = 3.06e-18.
+                #   persistence -> 1 — the long-run variance divides by
+                #     (1 - persistence), so at 0.9956 omega is multiplied by 227
+                #     and long_run_annual_vol is dominated by that near-singular
+                #     denominator rather than by the data.
+                # Both produce finite numbers that look like a normal fit, so
+                # say which one occurred instead of leaving it to be read as one.
+                "degenerate": bool(float(alpha) < 1e-8 or float(persistence) > 0.99),
+                "degenerate_reason": (
+                    "ARCH term is numerically zero - volatility shocks have no effect in the fit"
+                    if float(alpha) < 1e-8 else
+                    "persistence above 0.99 - long-run variance is dominated by a near-singular denominator"
+                    if float(persistence) > 0.99 else None
+                ),
                 "current_daily_vol": float(daily_vol),
                 "current_annual_vol": float(np.sqrt(current_var * 252)),
                 "long_run_annual_vol": (float(long_run_vol) if long_run_vol is not None else None),

@@ -237,7 +237,10 @@ export function MLModelsPanel({ data }: { data: any }) {
       what: 'Classifies which market state we are in — calm bull, volatile bear, and so on.',
       why: 'The same signal means different things depending on the regime.' },
     { name: 'GJR-GARCH', kind: 'Volatility model',
-      value: data.garch?.current_annual_vol != null ? `${(Number(data.garch.current_annual_vol)*100).toFixed(1)}% vol` : null,
+      value: data.garch?.current_annual_vol != null
+        ? `${(Number(data.garch.current_annual_vol)*100).toFixed(1)}% vol${data.garch?.degenerate ? ' (degenerate fit)' : ''}`
+        : null,
+      note: data.garch?.degenerate ? data.garch?.degenerate_reason : null,
       dir: garchDir,
       what: 'Forecasts volatility, accounting for the fact that crashes raise risk more than rallies.',
       why: 'Sets position sizing and tells you how much noise to expect around any forecast. Does not vote: volatility is not a direction.',
@@ -478,9 +481,9 @@ export function MLModelsPanel({ data }: { data: any }) {
         <SectionTitle>RETURN DISTRIBUTION — 1 MONTH</SectionTitle>
         <div style={{ fontFamily:'var(--font-body)', fontSize:11, color:'var(--cocoa-dust)', lineHeight:1.5, marginBottom:14 }}>
           The realistic range of one-month outcomes, not a single guess. The <b style={{color:'var(--latte)'}}>width</b> of this
-          band is well estimated — it comes from realized volatility. The <b style={{color:'var(--latte)'}}>centre</b> is
-          produced by the quantile model independently of the ensemble point forecast, so the two can disagree; read
-          the spread with more confidence than the midpoint.
+          band is well estimated — it is the empirical spread of this ticker's realized 21-day
+          returns. The <b style={{color:'var(--latte)'}}>centre</b> sits on the ensemble's own forecast, so read the
+          width with more confidence than the midpoint: the shape is measured, the location is predicted.
         </div>
         {Object.keys(quantile).length > 0 ? (() => {
           const qs = [
