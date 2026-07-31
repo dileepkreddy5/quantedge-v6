@@ -94,7 +94,7 @@ router = APIRouter()
 
 class AnalyzeRequest(BaseModel):
     ticker: str
-    include_options: bool = True
+    include_options: bool = False   # options snapshot requires a paid Polygon plan (403); see _compute_options
     include_sentiment: bool = True
     mc_paths: int = 20_000
     include_portfolio: bool = False
@@ -196,7 +196,7 @@ class QuantEdgeAnalyzerV6:
             price_data, fundamentals, options_chain, news_data = await asyncio.gather(
                 self.market_feed.get_price_history(ticker),
                 self.fund_feed.get_fundamentals(ticker),
-                self.options_feed.get_chain(ticker) if include_options else _noop(),
+                self.options_feed.get_chain(ticker) if include_options else _noop(),  # disabled by default
                 self.sentiment_feed.get_news_and_reddit(ticker) if include_sentiment else _noop(),
                 return_exceptions=True
             )
@@ -1101,7 +1101,9 @@ class QuantEdgeAnalyzerV6:
                         ss_res = float(np.sum(resid**2))
                         ss_tot = float(np.sum((y - y.mean())**2))
                         r2 = (1 - ss_res / ss_tot) if ss_tot > 0 else 0.0
-                        result["capm_alpha"] = round(alpha_daily * 252, 6)
+                        # returns are simple (close.pct_change), so the daily
+                        # intercept compounds; alpha_daily*252 understates it.
+                        result["capm_alpha"] = round((1.0 + alpha_daily) ** 252 - 1.0, 6)
                         result["capm_beta"] = round(mkt_beta, 4)
                         result["capm_r_squared"] = round(r2, 4)
                         result["capm_idio_risk"] = round(float(np.std(resid) * np.sqrt(252)), 6)
@@ -1921,8 +1923,16 @@ class QuantEdgeAnalyzerV6:
 
         kalman = result.get("kalman", {})
         kalman_sig = kalman.get("signal_interpretation", "MEAN_REVERTING")
-        kalman_scores = {"STRONG_TREND": 75, "WEAK_TREND": 60, "MEAN_REVERTING": 40}
-        score_components.append(("kalman", kalman_scores.get(kalman_sig, 50), 0.10))
+        _slope = kalman.get("trend_slope")
+        # signal_interpretation encodes trend STRENGTH ('STRONG_TREND'), not
+        # direction — a strong downtrend previously scored 75, the most bullish
+        # value available. Strength sets the magnitude, trend_slope the sign.
+        _strength = {"STRONG_TREND": 25.0, "WEAK_TREND": 10.0, "MEAN_REVERTING": 0.0}.get(kalman_sig, 0.0)
+        if _slope is None or not np.isfinite(float(_slope)):
+            kalman_score = 50.0
+        else:
+            kalman_score = float(np.clip(50.0 + np.sign(float(_slope)) * _strength, 0, 100))
+        score_components.append(("kalman", kalman_score, 0.10))
 
         total_score = float(np.clip(sum(s * w for _, s, w in score_components), 0, 100))
 
@@ -1941,8 +1951,7 @@ class QuantEdgeAnalyzerV6:
         if result.get("garch"): score += 15
         if result.get("regime"): score += 15
         if result.get("ml_predictions", {}).get("ensemble"): score += 15
-        if result.get("options"): score += 10
-        if result.get("sentiment"): score += 10
+        if result.get("sentiment"): score += 20
         return min(score, 100)
 
 

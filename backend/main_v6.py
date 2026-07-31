@@ -499,7 +499,7 @@ async def lifespan(app: FastAPI):
                         logger.info(f"Cache warmer: pre-warming {ticker}...")
                         data = await app.state.analyzer.run_full_analysis(
                             ticker=ticker,
-                            include_options=True,
+                            include_options=False,   # options snapshot 403s on the current Polygon plan
                             include_sentiment=True,
                             mc_paths=10_000,
                         )

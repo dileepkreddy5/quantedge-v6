@@ -292,10 +292,20 @@ class OptionsDataFeed:
                 if col not in df.columns:
                     df[col] = np.nan
 
-            # Keep only rows with positive DTE
+            # Keep only rows with positive DTE. days_to_expiry is NaN when the
+            # snapshot endpoint was refused, and NaN > 0 is False — that silently
+            # dropped every row while still logging success.
+            _before = len(df)
             df = df[df["days_to_expiry"] > 0].copy()
 
-            logger.info(f"✅ Options: {ticker} — {len(df)} strikes")
+            if len(df) == 0:
+                logger.warning(
+                    f"Options {ticker}: {_before} contracts fetched but 0 usable strikes "
+                    f"(no expiry/greeks — the snapshot endpoint requires a paid options plan). "
+                    f"Returning empty chain."
+                )
+            else:
+                logger.info(f"Options: {ticker} — {len(df)} strikes")
             return df
 
         except Exception as exc:

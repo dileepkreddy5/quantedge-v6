@@ -100,7 +100,7 @@ export default function Dashboard() {
       setElapsed(0);
       setActiveTab('overview');
       api.post('/api/v6/analyze', {
-        req: { ticker: sym, include_options: true, include_sentiment: true, mc_paths: 100000 }
+        req: { ticker: sym, include_options: false, include_sentiment: true, mc_paths: 100000 }
       }).then(res => {
         setData(res.data.data);
         toast.success(`Analysis complete: ${sym}`, { icon: '✅' });
@@ -157,7 +157,7 @@ export default function Dashboard() {
       const res = await api.post('/api/v6/analyze', {
         req: {
           ticker: symbol,
-          include_options: true,
+          include_options: false,   // Polygon plan returns 403 on the options snapshot
           include_sentiment: true,
           mc_paths: 100000,
         }
