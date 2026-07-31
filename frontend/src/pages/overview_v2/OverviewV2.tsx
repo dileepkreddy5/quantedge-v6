@@ -235,9 +235,14 @@ function HonestyPanel({ data }: { data: any }) {
   const isGenuine: boolean = gov.is_genuine_alpha === true;
 
   const pbo = gov.pbo;
-  const pboValue: number | null = pbo && typeof pbo.pbo === 'number' ? pbo.pbo : null;
-  const pboInterp: string = pbo?.interpretation ?? '';
-  const pboIsOverfit: boolean = pbo?.is_overfit === true;
+  // logit_std == 0 means every CSCV split produced an identical rank ordering:
+  // the test is degenerate, not a clean 0% overfit probability.
+  const pboDegenerate: boolean = !!pbo && (pbo.logit_std === 0 || !(pbo.n_combinations > 1));
+  const pboValue: number | null = (!pboDegenerate && pbo && typeof pbo.pbo === 'number') ? pbo.pbo : null;
+  const pboInterp: string = pboDegenerate
+    ? 'Not measurable — all CSCV splits produced an identical ranking (zero variance), so the test carries no information for this series.'
+    : (pbo?.interpretation ?? '');
+  const pboIsOverfit: boolean = !pboDegenerate && pbo?.is_overfit === true;
 
   const COLORS = {
     bg:        '#1a0f0a',
@@ -290,9 +295,12 @@ function HonestyPanel({ data }: { data: any }) {
             {dsrPct}
           </div>
           <div style={{ fontSize: 11, color: COLORS.text, marginTop: 4, lineHeight: 1.5 }}>
-            {dsr == null ? 'Not available.' : isGenuine
-              ? 'Passes threshold for genuine alpha after selection-bias correction.'
-              : `Below 95% genuine-alpha threshold. Raw Sharpe ${sharpeRaw?.toFixed(2) ?? '—'} may be inflated by multiple-testing bias.`}
+            {dsr == null ? 'Not available.'
+              : gov.dsr_caveat === 'buy_and_hold_series_no_strategy_selection'
+                ? `Computed on the buy-and-hold return series (Sharpe ${sharpeRaw?.toFixed(2) ?? '—'} over ${gov.n_obs ?? '?'} sessions). No strategy selection was performed, so this is a distributional correction for skew/kurtosis — not a multiple-testing result.`
+              : isGenuine
+                ? 'Passes threshold for genuine alpha after selection-bias correction.'
+                : `Below 95% genuine-alpha threshold. Raw Sharpe ${sharpeRaw?.toFixed(2) ?? '—'} may be inflated by multiple-testing bias.`}
           </div>
           <div style={{ fontSize: 10, color: COLORS.textDim, marginTop: 6 }}>
             Bailey & López de Prado (2014). Corrects Sharpe for N strategies tested.
@@ -311,12 +319,13 @@ function HonestyPanel({ data }: { data: any }) {
             {pboValue == null ? (pboInterp || 'Not available.') : pboInterp}
           </div>
           <div style={{ fontSize: 10, color: COLORS.textDim, marginTop: 6 }}>
-            Bailey et al. (2014). CSCV across {pbo?.n_strategies ?? 0} variants × {pbo?.n_slices ?? 0} slices.
+            Bailey et al. (2014). CSCV across {pbo?.n_strategies ?? 0} variants × {pbo?.n_slices ?? 0} slices
+            {pbo?.n_combinations != null ? `, ${pbo.n_combinations} combinations` : ''}.
           </div>
         </div>
       </div>
 
-      {(pboIsOverfit || (dsr != null && !isGenuine)) && (
+      {(pboIsOverfit || (dsr != null && !isGenuine && gov.dsr_caveat !== 'buy_and_hold_series_no_strategy_selection')) && (
         <div style={{
           marginTop: 12,
           padding: '8px 12px',
@@ -367,7 +376,14 @@ export default function OverviewV2({
 
   // Build key metric insights
   const sharpeInsight = interpretSharpe(data.sharpe_ratio ?? 0);
-  const betaInsight   = interpretBeta(data.beta ?? 1);
+  const betaVal: number | null = typeof data.beta === 'number' ? data.beta
+    : typeof data.capm_beta === 'number' ? data.capm_beta : null;
+  const betaInsight: Insight = betaVal != null ? interpretBeta(betaVal) : {
+    label: 'N/A',
+    headline: 'Beta not computed — requires 60 overlapping sessions with SPY.',
+    explanation: 'Beta measures sensitivity to market moves. Not available for this ticker.',
+    sentiment: 'neutral',
+  };
   const regimeInsight = interpretRegime(data.current_regime ?? '', data.regime?.confidence);
   const volInsight    = interpretVol(data.annual_vol ?? 0.2);
   const ddInsight     = interpretMaxDrawdown(data.max_drawdown ?? -0.2);
@@ -375,10 +391,16 @@ export default function OverviewV2({
   const mlInsight     = interpretMLConsensus(data.ml_predictions?.ensemble);
 
   // Position sizing (from portfolio_construction)
-  const positionPct = data.portfolio_construction?.recommended_position_pct ?? null;
+  const pc = data.portfolio_construction;
+  const positionPct: number | null =
+    typeof pc?.recommended_position_size === 'number' ? pc.recommended_position_size
+    : typeof pc?.recommended_position_pct === 'number' ? pc.recommended_position_pct
+    : null;
   const positionInsight: Insight = positionPct != null ? {
     label: positionPct >= 0.4 ? 'FULL SIZE' : positionPct >= 0.2 ? 'MODERATE' : 'REDUCED',
-    headline: `Vol-targeted sizer recommends ${(positionPct * 100).toFixed(0)}% of capital allocation.`,
+    headline: `Vol-targeted sizer recommends ${(positionPct * 100).toFixed(1)}% of capital.`
+      + (pc?.target_vol != null ? ` Targets ${(pc.target_vol * 100).toFixed(0)}% portfolio vol against ${(pc.realized_vol * 100).toFixed(1)}% realized.` : '')
+      + (pc?.governor_active === true ? ' Drawdown governor active — leverage reduced.' : ''),
     explanation: 'Position size derived from realized volatility. Higher vol assets are sized smaller to target a consistent portfolio-level volatility.',
     sentiment: 'neutral',
   } : {
@@ -451,14 +473,14 @@ export default function OverviewV2({
 
       {/* ── KEY METRICS GRID ────────────────────────────────── */}
       <div>
-        <SectionHeader label="KEY METRICS" />
+        <SectionHeader label={`KEY METRICS · SHARPE, DRAWDOWN & VOL OVER ${data.risk_metrics?.n_obs ?? data.data_quality?.n_price_days ?? '—'} SESSIONS · ANNUALISED`} />
         <div style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
           gap: 10,
         }}>
           <MetricTile insight={sharpeInsight} valueOverride={(data.sharpe_ratio ?? 0).toFixed(2)} />
-          <MetricTile insight={betaInsight}   valueOverride={(data.beta ?? 1).toFixed(2)} />
+          <MetricTile insight={betaInsight}   valueOverride={betaVal != null ? betaVal.toFixed(2) : '—'} />
           <MetricTile insight={regimeInsight} />
           <MetricTile insight={volInsight}    valueOverride={((data.annual_vol ?? 0) * 100).toFixed(1) + '%'} />
           <MetricTile insight={ddInsight}     valueOverride={((data.max_drawdown ?? 0) * 100).toFixed(1) + '%'} />
