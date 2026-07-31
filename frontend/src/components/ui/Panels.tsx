@@ -171,7 +171,12 @@ export function MLModelsPanel({ data }: { data: any }) {
   // not consensus — it is all three regressing to the same conditional mean because
   // none of them found signal in ~80 training samples. Counting that as three votes
   // manufactures agreement out of an absence of information, so they collapse to one.
-  const _mlVals = [lstm.pred_21d, xgb.pred_21d, lgbm.pred_21d]
+  // A model whose trees never split returns one constant for every input. Its
+  // sign is an artifact of that constant, not a view, so it must not cast a vote.
+  const lgbmDead = lgbm.model_split === false
+    || (lgbm.ic_train === 0 && lgbm.rank_score === 0);
+  const xgbDead = xgb.model_split === false;
+  const _mlVals = [lstm.pred_21d, xgbDead ? null : xgb.pred_21d, lgbmDead ? null : lgbm.pred_21d]
     .filter(v => v != null).map(Number);
   const _mlSpread = _mlVals.length > 1 ? Math.max(..._mlVals) - Math.min(..._mlVals) : 0;
   const mlCollapsed = _mlVals.length > 1 && _mlSpread < 0.05;
@@ -187,8 +192,8 @@ export function MLModelsPanel({ data }: { data: any }) {
       ? [{ name: 'ML ensemble', v: mlMean != null ? Math.sign(mlMean) : null }]
       : [
           { name: 'LSTM',     v: lstm.pred_21d != null ? Math.sign(Number(lstm.pred_21d)) : null },
-          { name: 'XGBoost',  v: xgb.pred_21d != null ? Math.sign(Number(xgb.pred_21d)) : null },
-          { name: 'LightGBM', v: lgbm.pred_21d != null ? Math.sign(Number(lgbm.pred_21d)) : null },
+          { name: 'XGBoost',  v: (!xgbDead && xgb.pred_21d != null) ? Math.sign(Number(xgb.pred_21d)) : null },
+          { name: 'LightGBM', v: (!lgbmDead && lgbm.pred_21d != null) ? Math.sign(Number(lgbm.pred_21d)) : null },
         ]),
     { name: 'Kalman',    v: kalmanDir },
     { name: 'Regime',    v: regimeDir },
@@ -211,8 +216,9 @@ export function MLModelsPanel({ data }: { data: any }) {
       what: 'Builds thousands of decision trees over 135 ranked features to find which combinations preceded gains.',
       why: 'Handles non-linear interactions between factors that a single rule cannot.' },
     { name: 'LightGBM', kind: 'Gradient-boosted trees',
-      value: lgbm.pred_21d != null ? `${(Number(lgbm.pred_21d)).toFixed(2)}% (21d)` : null,
-      dir: lgbm.pred_21d != null ? Math.sign(Number(lgbm.pred_21d)) : null,
+      value: lgbmDead ? 'no split \u2014 no signal'
+        : (lgbm.pred_21d != null ? `${(Number(lgbm.pred_21d)).toFixed(2)}% (21d)` : null),
+      dir: (!lgbmDead && lgbm.pred_21d != null) ? Math.sign(Number(lgbm.pred_21d)) : null,
       what: 'A second tree model using a different growth strategy, run alongside XGBoost.',
       why: 'Different split strategy on the same features — agreement is a consistency check, not independent confirmation.' },
     { name: 'Kalman Filter', kind: 'State-space trend',
@@ -229,12 +235,14 @@ export function MLModelsPanel({ data }: { data: any }) {
       value: data.garch?.current_annual_vol != null ? `${(Number(data.garch.current_annual_vol)*100).toFixed(1)}% vol` : null,
       dir: garchDir,
       what: 'Forecasts volatility, accounting for the fact that crashes raise risk more than rallies.',
-      why: 'Sets position sizing and tells you how much noise to expect around any forecast.' },
+      why: 'Sets position sizing and tells you how much noise to expect around any forecast. Does not vote: volatility is not a direction.',
+      novote: true },
     { name: 'Monte Carlo', kind: 'Path simulation',
       value: mcMed != null ? `median ${(Number(mcMed)*100).toFixed(1)}%` : null,
       dir: mcDir,
       what: 'Simulates thousands of possible future price paths using current drift and volatility.',
-      why: 'Gives a range of outcomes instead of one number — the honest way to express uncertainty.' },
+      why: 'Gives a range of outcomes instead of one number. Does not vote: its drift comes from the ML ensemble, so it would double-count that signal.',
+      novote: true },
     { name: 'FinBERT Sentiment', kind: 'Language model',
       value: sentVal != null ? `${Number(sentVal).toFixed(2)} score` : null,
       dir: sentVal != null ? Math.sign(Number(sentVal)) : null,
@@ -243,8 +251,8 @@ export function MLModelsPanel({ data }: { data: any }) {
     { name: 'Cross-Sectional Panel', kind: 'Multi-horizon ensemble',
       value: panelPred != null ? `${Number(panelPred).toFixed(2)}% (1mo)` : null,
       dir: panelDir,
-      what: 'Ranks this stock against the whole US universe on 135 ranked features including point-in-time fundamentals.',
-      why: 'The only model here with measured out-of-sample skill — see the reliability badges above.' },
+      what: `Ranks this stock against ${panel?.n_tickers_trained ? panel.n_tickers_trained + ' liquid US names' : 'a liquid US universe'} on 135 ranked features including point-in-time fundamentals.`,
+      why: 'The only model measured cross-sectionally out-of-sample \u2014 see the per-horizon reliability above for whether that measurement clears significance.' },
   ];
 
   const signs = modelDirs.map(m => m.v);
@@ -270,9 +278,10 @@ export function MLModelsPanel({ data }: { data: any }) {
           <SectionTitle>MULTI-HORIZON ML FORECAST — CROSS-SECTIONAL PANEL MODEL</SectionTitle>
           <div style={{ fontFamily:'var(--font-body)', fontSize:11, color:'var(--cocoa)', marginBottom:12, lineHeight:1.5 }}>
             Gradient-boosted ensemble (XGBoost + LightGBM) trained cross-sectionally on the US universe with point-in-time
-            fundamentals. Struck-through horizons failed validation — with five years of history there are too few
-            independent windows at those lengths to measure whether the model has any skill, so those figures are shown
-            only for completeness and should not be read as forecasts.
+            fundamentals. Skill is measured as held-out cross-sectional rank-IC with a Newey-West
+            t-stat correcting for overlapping forward windows. Greyed horizons did not clear a t-stat of 2: the available
+            price history is five years, so the longest horizons have too few non-overlapping windows for the
+            correction itself to be stable. Those figures are the model's output, not a measured forecast.
           </div>
           <div style={{ display:'grid', gridTemplateColumns:'repeat(6, 1fr)', gap:8 }}>
             {['5d','10d','21d','63d','126d','252d'].map((hk) => {
@@ -285,10 +294,18 @@ export function MLModelsPanel({ data }: { data: any }) {
               // Reliability comes from the TRAINER's independent-window test, not IC size.
               // A high IC on 1 non-overlapping window is an artifact, not skill.
               const indep = h.n_independent_val_dates ?? h.indep_dates ?? null;
-              const reliableFlag = h.reliable === true || (indep != null && indep >= 5);
+              // The trainer decides reliability from a Newey-West t-stat on the
+              // held-out half. This previously ORed in 'indep >= 5', which
+              // re-validated horizons the trainer had already failed \u2014 1mo showed
+              // VALIDATED at t=1.71 on 5 windows. Trust the trainer's flag only.
+              const tStat = h.ic_t_stat != null ? Number(h.ic_t_stat) : null;
+              const reliableFlag = h.reliable === true;
               const strong = reliableFlag && icNum != null && icNum >= 0.05;
-              const badgeCol = strong ? 'var(--bull)' : (reliableFlag && icNum != null && icNum > 0.02) ? 'var(--caramel)' : 'var(--cocoa)';
-              const badgeTxt = strong ? 'VALIDATED' : (reliableFlag && icNum != null && icNum > 0.02) ? 'MODERATE' : (reliableFlag ? 'NO EDGE' : 'UNVALIDATED');
+              const badgeCol = strong ? 'var(--bull)' : reliableFlag ? 'var(--caramel)' : 'var(--cocoa)';
+              const badgeTxt = strong ? 'VALIDATED'
+                : reliableFlag ? 'MODERATE'
+                : (tStat != null && Math.abs(tStat) > 0) ? `NOT SIGNIFICANT (t=${tStat.toFixed(2)})`
+                : 'UNMEASURABLE';
               return (
                 <div key={hk} style={{ border:'1px solid var(--border-2)', borderRadius:8, padding:'10px 8px',
                   background:'var(--surface-1)', textAlign:'center', opacity: reliableFlag ? 1 : 0.45 }}>
@@ -303,7 +320,15 @@ export function MLModelsPanel({ data }: { data: any }) {
                   </div>
                   <div style={{ fontFamily:'var(--font-mono)', fontSize:9, color:'var(--cocoa)', marginTop:6 }}>
                     IC {icNum != null ? (icNum >= 0 ? '+' : '') + icNum.toFixed(3) : 'n/a'}
+                    {tStat != null ? ` \u00b7 t ${tStat >= 0 ? '+' : ''}${tStat.toFixed(2)}` : ''}
                   </div>
+                  {h.confidence_note && (
+                    <div title={h.confidence_note} style={{ fontFamily:'var(--font-body)', fontSize:8,
+                      color:'var(--cocoa)', marginTop:3, lineHeight:1.3, maxHeight:26, overflow:'hidden' }}>
+                      {h.n_scoring_dates != null ? `${h.n_scoring_dates} scoring dates` : ''}
+                      {h.hac_stable === false ? ' \u00b7 overlap too long to measure' : ''}
+                    </div>
+                  )}
                   <div style={{ marginTop:6, fontFamily:'var(--font-mono)', fontSize:8, letterSpacing:0.5,
                     padding:'2px 5px', borderRadius:4, border:'1px solid ' + badgeCol + '40', color:badgeCol, background:badgeCol + '12', display:'inline-block' }}>
                     {badgeTxt}
@@ -382,8 +407,10 @@ export function MLModelsPanel({ data }: { data: any }) {
         </div>
         <div style={{ display:'flex', flexDirection:'column', gap:1 }}>
           {modelRoster.map((m:any, i:number) => {
-            const dcol = m.dir > 0 ? 'var(--bull)' : m.dir < 0 ? 'var(--bear)' : 'var(--cocoa)';
-            const arrow = m.dir > 0 ? '\u25b2' : m.dir < 0 ? '\u25bc' : '\u2014';
+            // Models excluded from the vote get no arrow: an arrow in a column of
+            // direction votes reads as a vote.
+            const dcol = m.novote ? 'var(--cocoa)' : m.dir > 0 ? 'var(--bull)' : m.dir < 0 ? 'var(--bear)' : 'var(--cocoa)';
+            const arrow = m.novote ? '\u00b7' : m.dir > 0 ? '\u25b2' : m.dir < 0 ? '\u25bc' : '\u2014';
             return (
               <div key={i} style={{ display:'grid', gridTemplateColumns:'190px 130px 30px 1fr', gap:12,
                 alignItems:'start', padding:'9px 8px', background: i % 2 ? 'transparent' : 'rgba(255,255,255,0.015)', borderRadius:4 }}>
@@ -418,7 +445,7 @@ export function MLModelsPanel({ data }: { data: any }) {
         <div style={{ display:'flex', gap:20, marginTop:12, fontFamily:'var(--font-mono)', fontSize:9, color:'var(--cocoa)' }}>
           <span>CONFIDENCE: {((ensemble.confidence || 0)*100).toFixed(1)}%</span>
           <span>MODEL DISAGREEMENT: {fmtN(ensemble.model_disagreement)}%</span>
-          <span>IC ESTIMATE: {fmtN(preds.rank_ic_estimate,3)}</span>
+          <span>IC ESTIMATE: {fmtN(preds.rank_ic_estimate,3)}{preds.rank_ic_source ? ` (${preds.rank_ic_source})` : ''}</span>
         </div>
       </Card>
 
@@ -427,8 +454,9 @@ export function MLModelsPanel({ data }: { data: any }) {
         <SectionTitle>RETURN DISTRIBUTION — 1 MONTH</SectionTitle>
         <div style={{ fontFamily:'var(--font-body)', fontSize:11, color:'var(--cocoa-dust)', lineHeight:1.5, marginBottom:14 }}>
           The realistic range of one-month outcomes, not a single guess. The <b style={{color:'var(--latte)'}}>width</b> of this
-          band is well estimated — it comes from realized volatility. The <b style={{color:'var(--latte)'}}>centre</b> inherits the
-          weaker per-ticker drift estimate, so read the spread with more confidence than the midpoint.
+          band is well estimated — it comes from realized volatility. The <b style={{color:'var(--latte)'}}>centre</b> is
+          produced by the quantile model independently of the ensemble point forecast, so the two can disagree; read
+          the spread with more confidence than the midpoint.
         </div>
         {Object.keys(quantile).length > 0 ? (() => {
           const qs = [
