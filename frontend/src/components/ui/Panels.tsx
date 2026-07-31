@@ -77,13 +77,15 @@ export function SignalPanel({ data }: { data: any }) {
   const score = data.overall_score || 50;
   const signalColor = signal.includes('BUY') ? 'var(--bull)' : signal.includes('SELL') ? 'var(--bear)' : 'var(--neutral)';
 
+  // Options GEX was listed here but the options chain is disabled (the Polygon
+  // plan 403s on the snapshot endpoint), so the row could only ever render a
+  // dash coloured as if it were bearish. Removed rather than shown as absent.
   const signals = [
     { label: 'ML Ensemble', value: data.predicted_return_1y != null ? (data.predicted_return_1y > 0 ? 'BULLISH' : 'BEARISH') : 'NEUTRAL', color: (data.predicted_return_1y || 0) > 0 ? 'var(--bull)' : 'var(--bear)' },
     { label: 'HMM Regime', value: (data.current_regime || 'UNKNOWN').replace(/_/g, ' '), color: (data.current_regime || '').includes('BULL') ? 'var(--bull)' : 'var(--bear)' },
     { label: 'GARCH Vol', value: data.garch?.vol_regime || '—', color: 'var(--neutral)' },
     { label: 'Kalman Trend', value: data.kalman?.signal_interpretation?.replace(/_/g, ' ') || '—', color: 'var(--caramel)' },
     { label: 'NLP Sentiment', value: data.sentiment?.label || '—', color: (data.sentiment?.composite || 0) > 0 ? 'var(--bull)' : 'var(--bear)' },
-    { label: 'Options GEX', value: data.options?.gex?.gex_regime || '—', color: data.options?.gex?.gex_regime === 'POSITIVE' ? 'var(--bull)' : 'var(--bear)' },
     { label: 'Hurst Exponent', value: (data.hurst_exponent || 0.5) > 0.55 ? 'TRENDING' : 'MEAN-REV', color: (data.hurst_exponent || 0.5) > 0.55 ? 'var(--bull)' : 'var(--caramel)' },
   ];
 
@@ -261,12 +263,15 @@ export function MLModelsPanel({ data }: { data: any }) {
   const nTotal = modelDirs.length || 1;
   const majority = nBull >= nBear ? nBull : nBear;
   const agreement = majority / nTotal;                    // 0.5 (split) .. 1.0 (unanimous)
+  // A majority among few voters is weaker evidence than the same majority among
+  // many. Without this, dropping a dead model from the vote RAISED conviction.
+  const voterScale = Math.min(1, nTotal / 8);
   const direction = nBull > nBear ? 'BULLISH' : nBull < nBear ? 'BEARISH' : 'MIXED';
   // Agreement maps to conviction, but capped at 85. Equity signals are correlated —
   // even unanimous agreement among them does not justify a claim of certainty, and a
   // 100/100 score would imply exactly that. The cap keeps the scale honest.
   const CONVICTION_CAP = 85;
-  const conviction = Math.round(Math.max(0, (agreement - 0.5) * 2) * CONVICTION_CAP);
+  const conviction = Math.round(Math.max(0, (agreement - 0.5) * 2) * CONVICTION_CAP * voterScale);
   const convLabel = conviction >= 65 ? 'Strong agreement' : conviction >= 35 ? 'Moderate agreement' : conviction > 0 ? 'Weak agreement' : 'No agreement';
   const convColor = direction === 'MIXED' ? 'var(--cocoa)' : direction === 'BULLISH' ? 'var(--bull)' : 'var(--bear)';
 
@@ -308,14 +313,14 @@ export function MLModelsPanel({ data }: { data: any }) {
                 : 'UNMEASURABLE';
               return (
                 <div key={hk} style={{ border:'1px solid var(--border-2)', borderRadius:8, padding:'10px 8px',
-                  background:'var(--surface-1)', textAlign:'center', opacity: reliableFlag ? 1 : 0.45 }}>
+                  background:'var(--surface-1)', textAlign:'center', opacity: reliableFlag ? 1 : 0.82 }}>
                   <div style={{ fontFamily:'var(--font-body)', fontSize:10, color:'var(--cocoa)', letterSpacing:1, marginBottom:6 }}>{h.label}</div>
                   {/* An unvalidated horizon rests on a single independent window. Rendering
                       it at the same weight as a measured one invites the reader to trust a
                       number the data cannot support, so it is struck through and greyed. */}
-                  <div style={{ fontFamily:'var(--font-mono)', fontSize: reliableFlag ? 20 : 15,
-                    fontWeight:800, color: reliableFlag ? col : 'var(--cocoa)', lineHeight:1,
-                    textDecoration: reliableFlag ? 'none' : 'line-through' }}>
+                  <div style={{ fontFamily:'var(--font-mono)', fontSize: reliableFlag ? 20 : 18,
+                    fontWeight:800, color: reliableFlag ? col : 'var(--cocoa-dust)', lineHeight:1,
+                    textDecoration:'none' }}>
                     {pv > 0 ? '+' : ''}{pv.toFixed(1)}%
                   </div>
                   <div style={{ fontFamily:'var(--font-mono)', fontSize:9, color:'var(--cocoa)', marginTop:6 }}>

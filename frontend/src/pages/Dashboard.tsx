@@ -9,7 +9,6 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuthStore, api } from '../auth/authStore';
 import toast from 'react-hot-toast';
 import {
-  SignalPanel,
   WallStreetPanel,
   PortfolioPanel,
   PerformancePanel,
@@ -615,92 +614,8 @@ function StockSnapshot({ data }: { data: any }) {
   );
 }
 
-// ── Overview Tab ──────────────────────────────────────────────
-function OverviewTab({ data, ticker, onAnalyze }: { data: any; ticker: string; onAnalyze: (t: string) => void }) {
-  return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 12 }}>
-      {/* Price chart - spans 8 cols */}
-      <div style={{ gridColumn: 'span 8' }}>
-        <PriceChart ticker={ticker} data={data} />
-      </div>
-      {/* Signal panel - spans 4 cols */}
-      <div style={{ gridColumn: 'span 4' }}>
-        <SignalPanel data={data} />
-      </div>
-      {/* ML Predictions - spans 6 */}
-      <div style={{ gridColumn: 'span 6' }}>
-        <MLSummary data={data} />
-      </div>
-      {/* Scenarios - spans 6 */}
-      <div style={{ gridColumn: 'span 6' }}>
-        <ScenarioPanel data={data} compact />
-      </div>
-      {/* GARCH vol - spans 4 */}
-      <div style={{ gridColumn: 'span 4' }}>
-        <GarchSummary data={data} />
-      </div>
-      {/* Regime - spans 4 */}
-      <div style={{ gridColumn: 'span 4' }}>
-        <RegimeSummary data={data} />
-      </div>
-      {/* Sentiment - spans 4 */}
-      <div style={{ gridColumn: 'span 4' }}>
-        <SentimentSummary data={data} />
-      </div>
-    </div>
-  );
-}
 
-// ── Mini panels for overview ──────────────────────────────────
-function MLSummary({ data }: { data: any }) {
-  const preds = data.ml_predictions?.ensemble || {};
-  const horizons = [
-    { label: '1W', key: 'pred_5d' },
-    { label: '2W', key: 'pred_10d' },
-    { label: '1M', key: 'pred_21d' },
-    { label: '3M', key: 'pred_63d' },
-    { label: '1Y', key: 'pred_252d' },
-  ];
-  return (
-    <Panel title="ML ENSEMBLE PREDICTIONS" icon="🧠">
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        {horizons.map(h => {
-          const val = preds[h.key] ?? null;
-          const color = val === null ? '#8a7560' : val > 0 ? '#22c55e' : '#ef4444';
-          return (
-            <div key={h.key} style={{ flex: 1, minWidth: 64, background: '#1a0f0a', borderRadius: 6, padding: '10px 8px', textAlign: 'center', border: `1px solid ${color}30` }}>
-              <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: '#9d8b7a', letterSpacing: 2, marginBottom: 4 }}>{h.label}</div>
-              <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 14, fontWeight: 700, color }}>
-                {val !== null ? `${val > 0 ? '+' : ''}${val?.toFixed(1)}%` : '—'}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 12, fontFamily: "'Fira Code',monospace", fontSize: 9, color: '#8a7560' }}>
-        <span>CONFIDENCE: {pct1(preds.confidence)}</span>
-        <span>DISAGREEMENT: {preds.model_disagreement?.toFixed(1) ?? '—'}%</span>
-      </div>
-    </Panel>
-  );
-}
 
-function GarchSummary({ data }: { data: any }) {
-  const g = data.garch || {};
-  const rows = [
-    { label: 'Annual Vol', value: pct(g.current_annual_vol) },
-    { label: 'VaR 95% (1d)', value: pct(g.var_95_daily) },
-    { label: 'CVaR 95% (1d)', value: pct(g.cvar_95_daily) },
-    { label: 'Persistence α+β', value: num3(g.persistence) },
-    { label: 'Leverage Effect', value: g.leverage_effect ? 'YES' : 'NO' },
-    { label: 'Vol Regime', value: g.vol_regime || '—' },
-  ];
-  return (
-    <Panel title="GJR-GARCH VOLATILITY" icon="📊">
-      {rows.map(r => <DataRow key={r.label} label={r.label} value={r.value} />)}
-    </Panel>
-  );
-}
 
 function RegimeSummary({ data }: { data: any }) {
   const regime = data.regime || {};
