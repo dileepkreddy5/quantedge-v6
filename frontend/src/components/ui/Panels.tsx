@@ -175,10 +175,11 @@ export function MLModelsPanel({ data }: { data: any }) {
   // manufactures agreement out of an absence of information, so they collapse to one.
   // A model whose trees never split returns one constant for every input. Its
   // sign is an artifact of that constant, not a view, so it must not cast a vote.
+  const lstmDead = lstm.available === false || lstm.pred_21d == null;
   const lgbmDead = lgbm.model_split === false
     || (lgbm.ic_train === 0 && lgbm.rank_score === 0);
   const xgbDead = xgb.model_split === false;
-  const _mlVals = [lstm.pred_21d, xgbDead ? null : xgb.pred_21d, lgbmDead ? null : lgbm.pred_21d]
+  const _mlVals = [lstmDead ? null : lstm.pred_21d, xgbDead ? null : xgb.pred_21d, lgbmDead ? null : lgbm.pred_21d]
     .filter(v => v != null).map(Number);
   const _mlSpread = _mlVals.length > 1 ? Math.max(..._mlVals) - Math.min(..._mlVals) : 0;
   const mlCollapsed = _mlVals.length > 1 && _mlSpread < 0.05;
@@ -193,7 +194,7 @@ export function MLModelsPanel({ data }: { data: any }) {
     ...(mlCollapsed
       ? [{ name: 'ML ensemble', v: mlMean != null ? Math.sign(mlMean) : null }]
       : [
-          { name: 'LSTM',     v: lstm.pred_21d != null ? Math.sign(Number(lstm.pred_21d)) : null },
+          { name: 'LSTM',     v: (!lstmDead && lstm.pred_21d != null) ? Math.sign(Number(lstm.pred_21d)) : null },
           { name: 'XGBoost',  v: (!xgbDead && xgb.pred_21d != null) ? Math.sign(Number(xgb.pred_21d)) : null },
           { name: 'LightGBM', v: (!lgbmDead && lgbm.pred_21d != null) ? Math.sign(Number(lgbm.pred_21d)) : null },
         ]),
@@ -208,8 +209,10 @@ export function MLModelsPanel({ data }: { data: any }) {
   // Written for a general investor, not a quant.
   const modelRoster = [
     { name: 'Bidirectional LSTM', kind: 'Neural network',
-      value: lstm.pred_21d != null ? `${(Number(lstm.pred_21d)).toFixed(2)}% (21d)` : null,
-      dir: lstm.pred_21d != null ? Math.sign(Number(lstm.pred_21d)) : null,
+      value: lstmDead ? (lstm.reason ? 'not run' : 'unavailable')
+        : (lstm.pred_21d != null ? `${(Number(lstm.pred_21d)).toFixed(2)}% (21d)` : null),
+      dir: (!lstmDead && lstm.pred_21d != null) ? Math.sign(Number(lstm.pred_21d)) : null,
+      note: lstmDead ? lstm.reason : null,
       what: 'Reads the price history like a sequence, learning patterns that repeat across time.',
       why: 'Captures momentum and reversal shapes that simple indicators miss.' },
     { name: 'XGBoost', kind: 'Gradient-boosted trees',
@@ -428,6 +431,7 @@ export function MLModelsPanel({ data }: { data: any }) {
                 </div>
                 <div style={{ fontFamily:'var(--font-mono)', fontSize:11, color: m.value ? 'var(--latte)' : 'var(--cocoa)', paddingTop:1 }}>
                   {m.value || 'unavailable'}
+                  {m.note ? <div style={{ fontSize:9, color:'var(--cocoa)', lineHeight:1.3, marginTop:2 }}>{m.note}</div> : null}
                 </div>
                 <div style={{ fontFamily:'var(--font-mono)', fontSize:12, color:dcol, textAlign:'center', paddingTop:1 }}>{arrow}</div>
                 <div>
@@ -453,7 +457,19 @@ export function MLModelsPanel({ data }: { data: any }) {
         <div style={{ display:'flex', gap:20, marginTop:12, fontFamily:'var(--font-mono)', fontSize:9, color:'var(--cocoa)' }}>
           <span>CONFIDENCE: {((ensemble.confidence || 0)*100).toFixed(1)}%</span>
           <span>MODEL DISAGREEMENT: {fmtN(ensemble.model_disagreement)}%</span>
-          <span>IC ESTIMATE: {fmtN(preds.rank_ic_estimate,3)}{preds.rank_ic_source ? ` (${preds.rank_ic_source})` : ''}</span>
+          {(() => {
+            // A NEGATIVE out-of-sample IC means the ensemble ranked this ticker's
+            // outcomes inversely on its holdout — it is not a small positive, and
+            // printing it as a neutral diagnostic hid the sign entirely.
+            const ric = preds.rank_ic_estimate;
+            const neg = ric != null && Number(ric) < 0;
+            return (
+              <span style={{ color: neg ? 'var(--bear)' : 'var(--cocoa)' }}>
+                OOS RANK-IC: {fmtN(ric,3)}{preds.rank_ic_source ? ` (${preds.rank_ic_source})` : ''}
+                {neg ? ' \u2014 INVERTED ON HOLDOUT' : ''}
+              </span>
+            );
+          })()}
         </div>
       </Card>
 

@@ -1475,8 +1475,19 @@ class QuantEdgeAnalyzerV6:
             # Reference: Gal & Ghahramani (2016), "Dropout as Bayesian Approximation"
             lstm_preds: Dict = {}
             lstm_uncertainty = 100.0
+            lstm_skip_reason: Optional[str] = None
             SEQ_LEN = 60
             try:
+                # Both guards below previously fell through in silence: no
+                # exception, no log, and the caller substituted the XGB/LGBM
+                # ensemble under the LSTM's name. A 60-day sequence with a 21-day
+                # label needs ~121 rows; the per-ticker pipeline yields ~80, so
+                # this path has never produced an LSTM prediction.
+                if len(X) < SEQ_LEN + horizon + 10:
+                    lstm_skip_reason = (
+                        f"needs {SEQ_LEN + horizon + 10} samples for {SEQ_LEN}-day "
+                        f"sequences at a {horizon}-day horizon, this ticker has {len(X)}")
+                    logger.info(f"LSTM skipped: {lstm_skip_reason}")
                 if len(X) >= SEQ_LEN + horizon + 10:
                     seqs, seq_labels = [], []
                     for i in range(len(X) - SEQ_LEN - horizon):
@@ -1484,6 +1495,10 @@ class QuantEdgeAnalyzerV6:
                         lbl_idx = i + SEQ_LEN
                         seq_labels.append(float(y[lbl_idx]) if lbl_idx < len(y) else 0.0)
 
+                    if len(seqs) < 40:
+                        lstm_skip_reason = (
+                            f"only {len(seqs)} training sequences after windowing, needs 40")
+                        logger.info(f"LSTM skipped: {lstm_skip_reason}")
                     if len(seqs) >= 40:
                         seqs_np = np.array(seqs, dtype=np.float32)
                         labels_np = np.array(seq_labels, dtype=np.float32)
@@ -1528,6 +1543,7 @@ class QuantEdgeAnalyzerV6:
                         }
                         lstm_uncertainty = lstm_preds["uncertainty"]
             except Exception as e:
+                lstm_skip_reason = f"{type(e).__name__}: {e}"
                 logger.warning(f"LSTM training/inference failed: {e}")
 
             # ── 7b. META-LABELING (5/10/63/252 LSTM primaries) ──────
@@ -1671,10 +1687,14 @@ class QuantEdgeAnalyzerV6:
                 rank_ic_source = f"error: {type(_e).__name__}"
 
             return {
+                # When the LSTM does not run, say so. Returning the ensemble's
+                # own number here made the tab display one model's output under
+                # another model's name and let it cast a second, non-independent
+                # vote on the same signal.
                 "lstm": lstm_preds if lstm_preds else {
-                    "pred_21d": scale(ens_21d, 21),
+                    "available": False,
+                    "reason": lstm_skip_reason or "not run",
                     "regime": regime,
-                    "uncertainty": lstm_uncertainty,
                 },
                 "xgboost": {
                     "signal_strength": round(xgb_signal, 2),
