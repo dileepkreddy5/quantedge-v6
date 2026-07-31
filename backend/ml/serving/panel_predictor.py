@@ -149,8 +149,21 @@ class PanelPredictor:
             hz_report = self.report.get("horizons", {})
             for h, (xm, lm) in sorted(self.horizons.items()):
                 xp = float(xm.predict(X)[0]); lp = float(lm.predict(X)[0])
-                ens = 0.5 * xp + 0.5 * lp
                 rep_h = hz_report.get(str(h), {})
+                # The trainer blends by validation IC and gives a model that
+                # scored negative no weight at all — at 2wk a 50/50 average of
+                # XGB (-0.129) and LGB (+0.164) produced -0.098, worse than
+                # either component. Serving a fixed 50/50 meant the number on
+                # screen came from a different ensemble than the IC beside it.
+                _ic = (rep_h.get("oos_rank_ic") or {})
+                _wx = max(float(_ic.get("xgboost") or 0.0), 0.0)
+                _wl = max(float(_ic.get("lightgbm") or 0.0), 0.0)
+                if _wx + _wl > 0:
+                    ens = (_wx * xp + _wl * lp) / (_wx + _wl)
+                    _blend = f"IC-weighted {_wx/(_wx+_wl):.0%}/{_wl/(_wx+_wl):.0%}"
+                else:
+                    ens = 0.5 * xp + 0.5 * lp
+                    _blend = "50/50 (neither model scored positive IC)"
                 horizon_preds[f"{h}d"] = {
                     "label": H_LABELS.get(h, f"{h}d"),
                     "pred_pct": round(ens * 100, 3),
@@ -165,6 +178,7 @@ class PanelPredictor:
                     "confidence_note": rep_h.get("confidence_note"),
                     "n_train": rep_h.get("n_train"),
                     "n_val": rep_h.get("n_val"),
+                    "blend": _blend,
                 }
             # SHAP drivers from the 21d model (primary)
             drivers = []
@@ -186,7 +200,8 @@ class PanelPredictor:
                 "oos_rank_ic": primary.get("oos_rank_ic"),
                 "trained_at": self.report.get("trained_at"),
                 "n_tickers_trained": self.report.get("n_tickers"),
-                "methodology": "Multi-horizon cross-sectional gradient-boosted ensemble on a rolling universe panel with point-in-time fundamentals. Separate validated model per horizon (1wk-1yr).",
+                "methodology": "Multi-horizon cross-sectional gradient-boosted ensemble on a rolling universe panel with point-in-time fundamentals. One model trained per horizon; see each horizon's own reliability figures rather than assuming all are validated.",
+                "ic_caveat": "Ensemble weights are chosen from validation-set IC, so the reported rank-IC is measured on the same data that set the weights and is optimistically biased.",
             }
         except Exception as e:
             logger.warning(f"Panel predict failed: {e}")

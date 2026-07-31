@@ -192,7 +192,10 @@ def main():
             rho, _ = spearmanr(ens_val[m], y_val[m])
             if np.isfinite(rho): date_ics.append(rho)
         hit_rate = float(np.mean([1 if x > 0 else 0 for x in date_ics])) if date_ics else 0.0
-        t_stat = float(np.mean(date_ics) / (np.std(date_ics) / np.sqrt(len(date_ics)))) if len(date_ics) > 1 and np.std(date_ics) > 0 else 0.0
+        # ddof=1: with a handful of independent windows the population std
+        # understates the standard error and inflates t.
+        _sd = float(np.std(date_ics, ddof=1)) if len(date_ics) > 1 else 0.0
+        t_stat = float(np.mean(date_ics) / (_sd / np.sqrt(len(date_ics)))) if len(date_ics) > 1 and _sd > 0 else 0.0
 
         joblib.dump(xgb, OUT_DIR / f"xgb_{h}d.joblib")
         joblib.dump(lgb, OUT_DIR / f"lgb_{h}d.joblib")
@@ -201,8 +204,12 @@ def main():
         # trust its IC. With <5 independent dates the number is statistically
         # meaningless (t-stat undefined). We mark those as low-confidence rather
         # than reporting an inflated IC — this is the honest thing to do.
-        MIN_INDEP_DATES = 5
-        reliable = ens_nd >= MIN_INDEP_DATES and abs(t_stat) > 0
+        # 'abs(t_stat) > 0' is true of any non-zero t, so this passed horizons at
+        # t=1.53 on 13 windows and t=1.71 on 5. A skill claim needs significance
+        # AND enough independent windows for the t to mean anything.
+        MIN_INDEP_DATES = 20
+        MIN_T = 2.0
+        reliable = ens_nd >= MIN_INDEP_DATES and abs(t_stat) >= MIN_T
         horizon_reports[str(h)] = {
             "horizon_label": HORIZON_LABELS[h],
             "oos_rank_ic": {"xgboost": round(xgb_ic,4), "lightgbm": round(lgb_ic,4), "ensemble": round(ens_ic,4)},
@@ -211,10 +218,14 @@ def main():
             "ic_hit_rate": round(hit_rate,3), "ic_t_stat": round(t_stat,2),
             "n_train": int(train_mask.sum()), "n_val": int(val_mask.sum()),
             "reliable": reliable,
-            "confidence_note": ("Statistically reliable" if reliable else
-                f"Low confidence: only {ens_nd} independent (non-overlapping) {h}-day windows in the validation period — needs more history to measure {HORIZON_LABELS[h]} skill reliably."),
+            "confidence_note": (
+                f"Out-of-sample rank-IC {ens_ic:+.3f}, t={t_stat:+.2f} over {ens_nd} independent windows — clears the |t|>=2 bar."
+                if reliable else
+                f"Not validated: rank-IC {ens_ic:+.3f}, t={t_stat:+.2f} over {ens_nd} independent (non-overlapping) {h}-day windows. "
+                + (f"Needs |t|>=2 (has {abs(t_stat):.2f}). " if ens_nd >= MIN_INDEP_DATES else f"Needs {MIN_INDEP_DATES}+ independent windows (has {ens_nd}). ")
+                + f"Treat the {HORIZON_LABELS[h]} figure as directional only."),
         }
-        _tag = "OK " if (ens_nd >= 5 and abs(t_stat) > 0) else "LOW"
+        _tag = "OK " if reliable else "LOW"
         logger.info(f"  [{HORIZON_LABELS[h]:>4} / {h:3}d] {_tag} rank-IC {ens_ic:+.4f} | t {t_stat:+.2f} | indep_dates {ens_nd}")
 
         # SHAP from the 21d (primary) model
