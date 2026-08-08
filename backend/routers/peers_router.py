@@ -182,6 +182,22 @@ async def get_peers(
         raise HTTPException(503, "Peer data not available yet")
 
     data = await store.get_peers(ticker)
+    if not data.get("available") and data.get("reason") == "ticker not in universe":
+        # Not in the last peer scan (a fixed ~507-name list), but the universe
+        # table carries SIC for the whole active market, so classify live from
+        # Postgres and borrow the sector bucket. No API call. Any listed ticker.
+        try:
+            pool = http_request.app.state.db
+            async with pool.acquire() as conn:
+                u = await conn.fetchrow(
+                    "SELECT name, sic, sic_code, market_cap FROM universe WHERE ticker=$1",
+                    ticker)
+            if u and (u["sic_code"] or u["sic"]):
+                data = await store.get_peers(
+                    ticker, live_sic=u["sic"], live_sic_code=u["sic_code"],
+                    live_name=u["name"], live_market_cap=u["market_cap"])
+        except Exception as e:
+            logger.warning(f"peers live-classify failed for {ticker}: {e}")
     if not data.get("available"):
         return {"data": {"available": False, "reason": data.get("reason", "no data")}, "cached": False}
 

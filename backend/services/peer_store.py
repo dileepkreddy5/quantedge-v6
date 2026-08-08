@@ -189,9 +189,19 @@ class PeerStore:
         logger.info(f"Peer stats snapshot saved: {len(rows)} tickers @ {scan_time.isoformat()}")
         return len(rows)
 
-    async def get_peers(self, ticker: str) -> Dict:
-        """Return the ticker's bucket peers from the latest snapshot + the ticker's row."""
+    async def get_peers(self, ticker: str, live_sic: str = None,
+                        live_sic_code: str = None, live_name: str = None,
+                        live_market_cap: float = None) -> Dict:
+        """Return the ticker's bucket peers from the latest snapshot + the ticker's row.
+
+        When the ticker is not in the last scan (e.g. a megacap the hardcoded
+        507-name universe omits), we still classify it live from the SIC the
+        analyze pipeline already fetched and return its real peer group. The
+        target's own factor percentiles are unavailable in that case — it was
+        never scored — so the response carries classified_live=True and the
+        router renders peers without a self-rank rather than a dead tab."""
         ticker = ticker.upper().strip()
+        classified_live = False
         async with self.pool.acquire() as conn:
             latest = await conn.fetchval("SELECT max(scan_time) FROM peer_stats")
             if not latest:
@@ -199,10 +209,39 @@ class PeerStore:
             me = await conn.fetchrow(
                 "SELECT * FROM peer_stats WHERE ticker=$1 AND scan_time=$2", ticker, latest)
             if not me:
-                return {"available": False, "reason": "ticker not in universe"}
+                # Fallback: classify from live analyze data and borrow the bucket.
+                if not (live_sic or live_sic_code):
+                    return {"available": False, "reason": "ticker not in universe"}
+                # Classify from whatever we have: description via bucket_for,
+                # else the SIC major group (first 2 digits) as a coarse bucket.
+                _bucket = bucket_for(live_sic or "") if live_sic else None
+                if (not _bucket or _bucket == "Other") and live_sic_code:
+                    _major = str(live_sic_code)[:2]
+                    _SIC_MAJOR = {"73":"Technology","35":"Technology","36":"Technology",
+                                  "38":"Technology","28":"Healthcare","80":"Healthcare",
+                                  "60":"Financials","61":"Financials","62":"Financials",
+                                  "63":"Financials","64":"Financials","67":"Financials",
+                                  "37":"Industrials","33":"Industrials","34":"Industrials",
+                                  "13":"Energy","29":"Energy","48":"Communications",
+                                  "27":"Communications","59":"Consumer","58":"Consumer",
+                                  "56":"Consumer","53":"Consumer","20":"Consumer","54":"Consumer"}
+                    _bucket = _SIC_MAJOR.get(_major)
+                if not _bucket or _bucket == "Other":
+                    return {"available": False, "reason": "ticker not in universe"}
+                me = {
+                    "ticker": ticker, "name": live_name, "sic": live_sic,
+                    "sic_code": live_sic_code, "bucket": _bucket,
+                    "market_cap": live_market_cap, "factors": {},
+                }
+                classified_live = True
             peers = await conn.fetch(
                 "SELECT * FROM peer_stats WHERE bucket=$1 AND scan_time=$2 ORDER BY ticker",
                 me["bucket"], latest)
+            peers = [dict(p) for p in peers]
+            if classified_live:
+                # The target is not in peer_stats; add its live row so downstream
+                # narrowing counts it, but it carries no factors to self-rank.
+                peers = [p for p in peers if (p.get("ticker") or "").upper() != ticker] + [me]
 
         # Nine broad buckets put carmakers alongside railroads. Narrow to the real
         # industry when there are enough companies for percentiles to mean anything.
@@ -251,10 +290,11 @@ class PeerStore:
 
         return {
             "available": True,
+            "classified_live": classified_live,
             "bucket": group_label,
             "group_kind": group_kind,
             "broad_sector": me["bucket"],
             "scan_time": latest.isoformat(),
             "me": dict(me),
-            "peers": [dict(p) for p in peers],
+            "peers": [dict(p) if not isinstance(p, dict) else p for p in peers],
         }
