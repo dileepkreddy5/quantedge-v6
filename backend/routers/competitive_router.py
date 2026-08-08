@@ -98,7 +98,21 @@ async def compute_competitive_intelligence(ticker: str, api_key: str, pool=None)
     }
     peer_bucket=None
     if pool is not None:
-        try: peer_bucket=await PeerStore(pool).get_peers(ticker)
+        try:
+            _ps=PeerStore(pool)
+            peer_bucket=await _ps.get_peers(ticker)
+            # Same fallback as peers_router: a ticker outside the last scan
+            # (the megacaps, thousands of others) has no peer_stats row, but the
+            # universe table carries its SIC for the whole active market — so
+            # classify live and borrow the bucket instead of dead-ending.
+            if not peer_bucket.get("available") and peer_bucket.get("reason")=="ticker not in universe":
+                async with pool.acquire() as conn:
+                    u=await conn.fetchrow(
+                        "SELECT name, sic, sic_code, market_cap FROM universe WHERE ticker=$1", ticker)
+                if u and (u["sic_code"] or u["sic"]):
+                    peer_bucket=await _ps.get_peers(
+                        ticker, live_sic=u["sic"], live_sic_code=u["sic_code"],
+                        live_name=u["name"], live_market_cap=u["market_cap"])
         except Exception as e: logger.debug(f"peer bucket failed: {e}")
     feats=compute_competitive_features(own, peer_bucket)
     if feats.get("available") is False:
