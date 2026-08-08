@@ -300,6 +300,7 @@ async def get_peers(
         "bucket": data["bucket"],
         "group_kind": data.get("group_kind"),
         "broad_sector": data.get("broad_sector"),
+        "classified_live": data.get("classified_live", False),
         "peer_count": len(peers),
         "scan_time": data["scan_time"],
         "factors": factor_results,
