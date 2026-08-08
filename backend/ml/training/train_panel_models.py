@@ -246,6 +246,16 @@ def main():
         else:
             ens_val = (_wx * xgb_val + _wl * lgb_val) / (_wx + _wl)
             _blend_desc = f"IC-weighted {_wx/(_wx+_wl):.0%} XGB / {_wl/(_wx+_wl):.0%} LGB (weights fit on the first half of validation)"
+        # Per-model diagnostics: do XGB and LGB actually disagree?
+        try:
+            from scipy.stats import spearmanr as _sp
+            _rho, _ = _sp(xgb_val, lgb_val)
+            _pred_corr = float(_rho) if np.isfinite(_rho) else None
+        except Exception:
+            _pred_corr = None
+        _per_model_ic = {"xgboost": round(float(xgb_ic), 4),
+                         "lightgbm": round(float(lgb_ic), 4)}
+
         # headline IC is measured only on the held-out scoring half
         ens_ic, ens_ic_std, ens_nd = cross_sectional_rank_ic(
             dates_val[_scorem], ens_val[_scorem], y_val[_scorem], horizon_days=h)
@@ -281,6 +291,8 @@ def main():
         horizon_reports[str(h)] = {
             "horizon_label": HORIZON_LABELS[h],
             "oos_rank_ic": {"xgboost": round(xgb_ic,4), "lightgbm": round(lgb_ic,4), "ensemble": round(ens_ic,4)},
+            "per_model_ic": _per_model_ic,
+            "xgb_lgb_pred_corr": _pred_corr,
             "ic_std": round(ens_ic_std,4),
             "n_independent_val_dates": ens_nd,
             "n_scoring_dates": n_dates_used,

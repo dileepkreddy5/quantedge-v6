@@ -174,6 +174,8 @@ class PanelPredictor:
                     "ic_hit_rate": rep_h.get("ic_hit_rate"),
                     "ic_t_stat": rep_h.get("ic_t_stat"),
                     "n_independent_val_dates": rep_h.get("n_independent_val_dates"),
+                    "n_scoring_dates": rep_h.get("n_scoring_dates"),
+                    "hac_stable": rep_h.get("hac_stable"),
                     "reliable": rep_h.get("reliable"),
                     "confidence_note": rep_h.get("confidence_note"),
                     "n_train": rep_h.get("n_train"),
