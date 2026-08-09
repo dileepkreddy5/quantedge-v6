@@ -209,7 +209,18 @@ class PeerStore:
             me = await conn.fetchrow(
                 "SELECT * FROM peer_stats WHERE ticker=$1 AND scan_time=$2", ticker, latest)
             if not me:
-                # Fallback: classify from live analyze data and borrow the bucket.
+                # Fallback: the ticker was not in the last scan (a fixed ~507-name
+                # list) but the universe table carries SIC for the whole active
+                # market. If the caller did not pass live data, look it up here so
+                # EVERY caller — conviction, financial, industry, market, valuation,
+                # peers — gets live classification without repeating this logic.
+                if not (live_sic or live_sic_code):
+                    u = await conn.fetchrow(
+                        "SELECT name, sic, sic_code, market_cap FROM universe WHERE ticker=$1",
+                        ticker)
+                    if u and (u["sic_code"] or u["sic"]):
+                        live_sic = u["sic"]; live_sic_code = u["sic_code"]
+                        live_name = u["name"]; live_market_cap = u["market_cap"]
                 if not (live_sic or live_sic_code):
                     return {"available": False, "reason": "ticker not in universe"}
                 # Classify from whatever we have: description via bucket_for,
