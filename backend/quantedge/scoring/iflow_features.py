@@ -32,6 +32,11 @@ def compute_iflow_features(bars, insider=None, ownership=None):
             sl=sum((xs[i]-mx)*(seg[i]-my) for i in range(n))/d if d>0 else 0
             mv=st.mean([abs(v) for v in vols[-20:] if v]) or 1
             f["adl_slope"]=sl/mv
+            # Normalised ADL trajectory (last 30 points) for the sparkline. Rebased
+            # to its own range so the shape — steady climb vs one spike — is visible.
+            series=adl[-30:]
+            lo=min(series); hi=max(series); rng=(hi-lo) or 1
+            f["adl_series"]=[round((v-lo)/rng,4) for v in series]
 
     if len(closes)>=15:
         tps=[(highs[i]+lows[i]+closes[i])/3 if None not in (highs[i],lows[i],closes[i]) else None for i in range(len(closes))]
@@ -58,6 +63,10 @@ def compute_iflow_features(bars, insider=None, ownership=None):
         recent_dv=sum(vols[i]*closes[i] for i in range(len(closes)-10,len(closes)) if vols[i] and closes[i])
         prior_dv=sum(vols[i]*closes[i] for i in range(len(closes)-20,len(closes)-10) if vols[i] and closes[i])
         if prior_dv>0: f["dollar_flow_momentum"]=recent_dv/prior_dv-1
+        dvser=[vols[i]*closes[i] for i in range(len(closes)-30,len(closes)) if vols[i] and closes[i]]
+        if len(dvser)>=10:
+            lo=min(dvser); hi=max(dvser); rng=(hi-lo) or 1
+            f["dollar_flow_series"]=[round((v-lo)/rng,4) for v in dvser]
 
     if ownership.get("available"):
         holders=ownership.get("holders",[]); now=datetime.now(timezone.utc); recent=0

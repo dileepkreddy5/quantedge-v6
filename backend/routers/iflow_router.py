@@ -80,7 +80,8 @@ async def compute_iflow_intelligence(ticker: str, api_key: str) -> Dict[str,Any]
             "coverage":{"scored":n_scored,"total":n_total},"tree":tree,
             "key_metrics":{k:feats.get(k) for k in
                 ["money_flow_index","chaikin_money_flow","adl_slope","accumulation_20d","dollar_flow_momentum",
-                 "avg_trade_size_trend","block_trade_frequency","recent_13g_filings","insider_net_flow","institutional_footprint"]}}
+                 "avg_trade_size_trend","block_trade_frequency","recent_13g_filings","insider_net_flow","institutional_footprint"]},
+            "series":{"adl":feats.get("adl_series"),"dollar_flow":feats.get("dollar_flow_series")}}
 
 @router.get("/iflow/{ticker}")
 async def get_iflow(ticker: str, http_request: Request,
