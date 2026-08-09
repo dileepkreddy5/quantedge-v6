@@ -79,7 +79,7 @@ CATEGORIES = {
    _s("quick_ratio","Quick ratio","quick_ratio",0.35,1.0,1.5,evidence="(current assets - inventory) / current liab"),
    _s("debt_to_equity","Debt to equity","debt_to_equity",0.35,1.0,0.3,hib=False,evidence="total debt / equity"),
    _s("cash_conversion_cycle","Cash conversion cycle","cash_conversion_cycle",0.30,60,0,hib=False,evidence="DSO + DIO - DPO (working capital efficiency)"),
-   _s("dpo","Days payable","dpo",0.20,30,60,evidence="supplier financing days"),
+   _s("dpo","Days payable","dpo",0.20,30,60,cap=90,cap_score=85,evidence="supplier financing days"),
  ]),
  "accounting_quality": ("Accounting Quality Intelligence", 1.00, [
    _s("beneish_m","Beneish M-score","beneish_m",0.40,-1.78,-2.5,hib=False,evidence="earnings manipulation probability"),

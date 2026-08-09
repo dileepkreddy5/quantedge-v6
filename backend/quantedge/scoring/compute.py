@@ -42,7 +42,11 @@ def absolute_band(value: float, good: float, great: float,
         return min(100.0, max(0.0, 40.0 + (value - (good - (great - good))) / (great - good) * 25.0))
     if value <= great:
         return 65.0 + (value - good) / (great - good) * 25.0
-    return min(100.0, 90.0 + (value - great) / (great - good) * 10.0)
+    # Past 'great': asymptotic approach to 100 so elite values score in the low-
+    # to-high 90s and only far-outliers near 100 — no flat saturation at 100.
+    bw = (great - good) or 1e-9
+    over = (value - great) / bw          # how many bandwidths past 'great'
+    return 90.0 + 10.0 * (1.0 - math.exp(-over / 1.6))
 
 
 def score_signal(value: Optional[float], spec: Dict[str, Any],
@@ -81,7 +85,7 @@ def score_signal(value: Optional[float], spec: Dict[str, Any],
     if floor is not None and ((hib and v < floor) or (not hib and v > floor)):
         score = min(score, spec.get("floor_score", 30.0)); clamped = "floor"
     if cap is not None and ((hib and v > cap) or (not hib and v < cap)):
-        score = max(score, spec.get("cap_score", 85.0)); clamped = "cap"
+        score = min(score, spec.get("cap_score", 85.0)); clamped = "cap"
 
     score = max(0.0, min(100.0, float(score)))
     return {"value": round(v, 6), "score": round(score, 1),
