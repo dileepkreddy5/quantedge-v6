@@ -132,7 +132,6 @@ export default function ForecastPanel({ ticker }:{ ticker:string }){
             </div>
           </div>
         ))}
-      </div>
       </div>}
       {!detail && <div style={{height:20,marginTop:12,fontSize:12,textAlign:'center',color:tip?'var(--latte)':'var(--cocoa)'}}>{tip||'\u00A0'}</div>}
 
