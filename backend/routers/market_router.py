@@ -147,8 +147,13 @@ async def compute_market_intelligence(ticker: str, api_key: str, pool=None) -> D
                     peer_list.append(pf)
         except Exception as e:
             logger.info(f"market: peers unavailable {ticker}: {e}")
-    if not me_factors:
-        return {"ticker":ticker,"available":False,"reason":"ticker not in peer universe (run the peer scan)"}
+    # Market intelligence is built from this ticker's own price/volume/short-
+    # interest series (below), not from peer factors — the peer bucket only adds
+    # relative ranking. A live-classified ticker (megacap outside the last scan)
+    # has no scored factors of its own, so require price data, not me_factors,
+    # and let the peer-relative pieces fall back to absolute where needed.
+    if me_factors is None:
+        me_factors = {}
     regime=await _regime_read(ticker, api_key)
     from quantedge.scoring.market_deep import volatility_suite, trading_risk, volume_liquidity, short_interest_signals
     closes, volumes, si_records = await _price_volume_si(ticker, api_key)
