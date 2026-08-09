@@ -39,7 +39,7 @@ def absolute_band(value: float, good: float, great: float,
     else:
         value = v
     if value <= good:
-        return max(0.0, 40.0 + (value - (good - (great - good))) / (great - good) * 25.0)
+        return min(100.0, max(0.0, 40.0 + (value - (good - (great - good))) / (great - good) * 25.0))
     if value <= great:
         return 65.0 + (value - good) / (great - good) * 25.0
     return min(100.0, 90.0 + (value - great) / (great - good) * 10.0)
@@ -83,5 +83,6 @@ def score_signal(value: Optional[float], spec: Dict[str, Any],
     if cap is not None and ((hib and v > cap) or (not hib and v < cap)):
         score = max(score, spec.get("cap_score", 85.0)); clamped = "cap"
 
-    return {"value": round(v, 6), "score": round(float(score), 1),
+    score = max(0.0, min(100.0, float(score)))
+    return {"value": round(v, 6), "score": round(score, 1),
             "method": method, "clamped": clamped}
