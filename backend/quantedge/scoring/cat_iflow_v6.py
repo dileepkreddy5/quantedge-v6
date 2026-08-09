@@ -13,8 +13,8 @@ CATEGORIES = {
    _s("block_freq","Block-trade frequency","block_trade_frequency",0.35,0.1,0.4,evidence="large-trade days"),
    ]),
  "accumulation":("Accumulation/Distribution",0.35,[
-   _s("accum20","20-day accumulation","accumulation_20d",0.45,0.5,0.6,evidence="up vs down volume"),
-   _s("dollar_flow","Dollar-flow momentum","dollar_flow_momentum",0.55,0.0,0.2,evidence="dollar-volume acceleration")]),
+   _s("accum20","20-day accumulation","accumulation_20d",0.45,0.52,0.72,evidence="up vs down volume"),
+   _s("dollar_flow","Dollar-flow momentum","dollar_flow_momentum",0.55,0.05,0.6,evidence="dollar-volume acceleration")]),
  "inst_holdings_flow":("13G Filing Flow",0.35,[
    _s("recent_13g","Recent 13G filings","recent_13g_filings",0.55,0,3,evidence="new institutional interest (180d)"),
    _s("holder_count","Institutional holders","institutional_holder_count",0.45,1,5,evidence="major-holder breadth")]),
