@@ -307,7 +307,7 @@ export default function NewsPanel({ ticker, data }:{ ticker:string; data?:any })
                 {h.url
                   ? <a href={h.url} target="_blank" rel="noopener noreferrer" style={{fontFamily:"'Outfit',sans-serif",fontSize:12,color:'var(--cocoa-dust)',textDecoration:'none'}}>{h.title}</a>
                   : <span style={{fontFamily:"'Outfit',sans-serif",fontSize:12,color:'var(--cocoa-dust)'}}>{h.title}</span>}
-                <span style={{fontFamily:"'Fira Code',monospace",fontSize:8.5,color:sentDot(h.sentiment),letterSpacing:1}}>{h.sentiment.slice(0,3).toUpperCase()}</span>
+                <span style={{fontFamily:"'Fira Code',monospace",fontSize:8.5,color:sentDot(h.sentiment),letterSpacing:1}}>{(h.sentiment||'—').slice(0,3).toUpperCase()}</span>
               </div>
             ))}
           </div>
@@ -398,7 +398,7 @@ export default function NewsPanel({ ticker, data }:{ ticker:string; data?:any })
                 style={{display:'flex',alignItems:'center',gap:12,padding:'10px 14px',cursor:'pointer',borderLeft:`4px solid ${heat(cat.score)}`}}>
                 <span style={{fontSize:11,color:'var(--cocoa)',width:12}}>{open?'▾':'▸'}</span>
                 <span style={{fontSize:13,fontWeight:600,color:'var(--latte)',flex:1}}>{cat.label}</span>
-                <span style={{fontSize:10,color:'var(--cocoa)'}}>wt {cat.weight.toFixed(2)} · {cat.n_scored}/{cat.n_signals}</span>
+                <span style={{fontSize:10,color:'var(--cocoa)'}}>wt {(cat.weight??0).toFixed(2)} · {cat.n_scored??0}/{cat.n_signals??0}</span>
                 <span style={{fontSize:18,fontWeight:700,color:heat(cat.score),width:36,textAlign:'right'}}>{cat.score?.toFixed(0)??'—'}</span>
               </div>
               {open && (
