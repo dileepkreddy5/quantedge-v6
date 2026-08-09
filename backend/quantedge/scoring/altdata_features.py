@@ -79,8 +79,13 @@ def compute_altdata_features(bars, news, insider=None, peer_momentum=None):
             except: return 999
         ages=[age_days(n) for n in news]
         last7=sum(1 for a in ages if a<=7); prior=sum(1 for a in ages if 7<a<=30)
+        # Article count in the last 7 days. The upstream feed is capped, so this
+        # tops out around the fetch limit; the catalog band accounts for that.
         f["news_volume_7d"]=float(last7)
-        f["news_velocity"]=(last7/(prior/3.0)-1) if prior>0 else (1.0 if last7>3 else 0.0)  # 7d vs weekly-avg of prior 3wk
+        # 7d article rate vs the weekly average of the prior 3 weeks. If the prior
+        # window has too few articles to form a stable baseline, this isn't
+        # measurable — report None rather than a fabricated 1.0 surge.
+        f["news_velocity"]=(last7/(prior/3.0)-1) if prior>=3 else None
         # sentiment dispersion from insights
         sents=[]
         for n in news[:40]:
@@ -93,7 +98,10 @@ def compute_altdata_features(bars, news, insider=None, peer_momentum=None):
         if sents:
             f["news_sentiment_mean"]=st.mean(sents)
             f["news_sentiment_dispersion"]=st.pstdev(sents) if len(sents)>1 else 0.0  # high = controversial
-            f["news_coverage_breadth"]=float(len(sents))
+            # Distinct articles carrying a sentiment read — not the raw count of
+            # insight entries (which is several per article and saturates instantly).
+            arts_with_sent=sum(1 for n in news[:40] if n.get("insights"))
+            f["news_coverage_breadth"]=float(arts_with_sent)
 
     # ===== INSIDER/FILING VELOCITY =====
     if insider.get("available"):

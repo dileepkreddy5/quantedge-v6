@@ -55,14 +55,25 @@ async def fetch_insider_activity(cik, days_back=365, max_filings=60):
                 try:
                     r=await c.get(url,headers=_UA)
                     if r.status_code==200: return _parse_form4(r.text)
+                    if r.status_code==429: return "RATE_LIMITED"
                 except Exception: return None
                 return None
-            sem=asyncio.Semaphore(6)
-            async def guarded(i):
-                async with sem: return await fetch_one(i)
-            results=await asyncio.gather(*[guarded(i) for i in idxs])
+            # SEC caps automated access at 10 req/sec per IP and puts the IP in a
+            # rolling 10-minute time-out on breach — bursting extends the penalty.
+            # Fetch serially, paced under the limit, and abort on the first 429 so
+            # a rate-limited run degrades honestly instead of digging the hole deeper.
+            results=[]; rate_limited=False
+            for i in idxs:
+                one=await fetch_one(i)
+                if one=="RATE_LIMITED":
+                    rate_limited=True; break
+                results.append(one)
+                await asyncio.sleep(0.15)
+            if rate_limited and not results:
+                out["reason"]="SEC rate limit — insider data temporarily unavailable"
+                return out
             for p in results:
-                if not p or not p["txns"]: continue
+                if not isinstance(p,dict) or not p.get("txns"): continue
                 n_parsed+=1
                 # only count open-market buys (P) and sells (S); skip grants/options (A/M/F/G)
                 for t in p["txns"]:

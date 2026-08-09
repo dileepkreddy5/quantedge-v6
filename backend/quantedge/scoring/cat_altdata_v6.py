@@ -13,10 +13,10 @@ CATEGORIES = {
    _s("trade_size","Avg trade size trend","avg_trade_size_trend",0.15,0.0,0.2,evidence="institutional footprint (rising size)")]),
  "news_flow":("News Flow",0.50,[
    _s("news_velocity","News velocity","news_velocity",0.30,0.0,1.0,evidence="7d vs prior-3wk article rate"),
-   _s("news_volume","News volume (7d)","news_volume_7d",0.20,3,15,evidence="recent article count"),
+   _s("news_volume","News volume (7d)","news_volume_7d",0.20,10,40,evidence="recent article count"),
    _s("sent_mean","News sentiment","news_sentiment_mean",0.25,0.0,0.4,evidence="mean article sentiment"),
    _s("sent_disp","Sentiment dispersion","news_sentiment_dispersion",0.10,0.9,0.3,hib=False,evidence="controversy (lower=consensus)"),
-   _s("coverage","Coverage breadth","news_coverage_breadth",0.15,5,30,evidence="analyst/media attention")]),
+   _s("coverage","Coverage breadth","news_coverage_breadth",0.15,8,35,evidence="distinct articles with sentiment")]),
  "price_anomalies":("Price-Action Anomalies",0.45,[
    _s("range_exp","Range expansion","range_expansion",0.25,0.0,0.3,evidence="intraday volatility regime"),
    _s("gap_freq","Gap frequency","gap_frequency",0.20,0.03,0.005,hib=False,evidence="overnight gaps (lower=stable)"),
@@ -30,7 +30,7 @@ CATEGORIES = {
    _s("insider_buy","Insider buy signal","insider_buy_signal",0.35,0.15,0.5,evidence="insider buy conviction")]),
  "liquidity_flow":("Liquidity & Flow",0.30,[
    _s("amihud","Amihud illiquidity","amihud_illiquidity",0.40,0.02,0.001,hib=False,evidence="price impact per $ volume (lower=liquid)"),
-   _s("rel_flow","Relative flow vs peers","relative_flow_vs_peers",0.30,0.0,0.05,evidence="momentum vs sector")]),
+   _s("rel_flow","Relative flow vs peers","relative_flow_vs_peers",0.30,0.0,0.05,status="needs_source",evidence="requires the peer scan (not wired to this endpoint yet)")]),
  "alt_signals_unavailable":("Options & Short Flow",0.30,[
    _s("options_flow","Options flow","options_flow",0.0,0.5,0.8,status="needs_source",evidence="options chain 403 on data tier"),
    _s("put_call","Put/call ratio","put_call_ratio",0.0,1.0,0.7,hib=False,status="needs_source",evidence="requires options data"),
