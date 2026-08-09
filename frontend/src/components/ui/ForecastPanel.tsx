@@ -104,19 +104,19 @@ export default function ForecastPanel({ ticker }:{ ticker:string }){
 
       {/* ── Signal map (Option 4: number on the standouts only) ── */}
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',margin:'22px 0 10px'}}>
-        <span style={{fontSize:10,color:'var(--gold)',letterSpacing:2}}>SIGNAL MAP · hover any cell</span>
+        <span style={{fontSize:10,color:'var(--gold)',letterSpacing:2}}>{detail?'FULL TABLE':'SIGNAL MAP · hover any cell'}</span>
         <button onClick={()=>setDetail(v=>!v)}
           style={{background:'var(--surface-2)',border:'1px solid var(--border-1)',color:'var(--cocoa-dust)',borderRadius:8,padding:'4px 12px',fontSize:11,cursor:'pointer'}}>
           {detail?'Hide table':'Show full table'}</button>
       </div>
-      <div style={{display:'flex',flexDirection:'column',gap:5}}>
+      {!detail && <div style={{display:'flex',flexDirection:'column',gap:5}}>
         {cats.map(c=>(
           <div key={c.id} style={{display:'flex',alignItems:'center',gap:10}}>
             <div style={{fontSize:11,color:'var(--cocoa)',width:118,flexShrink:0,textAlign:'right',lineHeight:1.2}}>{c.label}</div>
             <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
               {c.signals.map(s=>{
                 const pending=s.status==='needs_source'||s.score==null;
-                const show=!pending && (s.score!>=80 || s.score!<=30);
+                const show=!pending && (s.score!>=65 || s.score!<=35);
                 return (
                   <div key={s.id}
                     onMouseEnter={()=>setTip(`${s.label} · ${pending?'—':s.score!.toFixed(0)}${s.raw_value!=null?'  ('+fmtVal(s.id,s.raw_value)+')':''}`)}
@@ -133,7 +133,8 @@ export default function ForecastPanel({ ticker }:{ ticker:string }){
           </div>
         ))}
       </div>
-      <div style={{height:20,marginTop:12,fontSize:12,textAlign:'center',color:tip?'var(--latte)':'var(--cocoa)'}}>{tip||'\u00A0'}</div>
+      </div>}
+      {!detail && <div style={{height:20,marginTop:12,fontSize:12,textAlign:'center',color:tip?'var(--latte)':'var(--cocoa)'}}>{tip||'\u00A0'}</div>}
 
       {/* ── Optional full table (kept for anyone who wants raw numbers) ── */}
       {detail && (
