@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../auth/authStore';
+import MarketPositioning from './MarketPositioning';
 
 interface Sig { id:string; label:string; weight:number; status:string; evidence:string; raw_value:number|null; score:number|null; method?:string; }
 interface Cat { id:string; label:string; weight:number; score:number|null; confidence:number; n_signals:number; n_scored:number; signals:Sig[]; }
@@ -20,8 +21,8 @@ interface MktData {
   sector_breadth:Record<string,any>|null;
   reason?:string;
 }
-const heat=(s:number|null)=>s==null?'#2a2a2a':s>=75?'#0f6e56':s>=58?'#1d9e75':s>=42?'#8a7519':s>=25?'#a35a1d':'#7a2320';
-const ratingColor=(r:string)=>r.includes('Strong')||r.includes('Positive')?'#1d9e75':r.includes('Weak')||r.includes('Downtrend')?'#c0705a':'#c9a227';
+const heat=(s:number|null)=>s==null?'var(--border-1)':s>=75?'var(--bull)':s>=58?'var(--bull)':s>=42?'var(--caramel)':s>=25?'#c9762f':'var(--bear)';
+const ratingColor=(r:string)=>r.includes('Strong')||r.includes('Positive')?'var(--bull)':r.includes('Weak')||r.includes('Downtrend')?'var(--bear)':'var(--caramel)';
 const LADDER_LABELS:Record<string,string>={mom_1m:'1 Month',mom_3m:'3 Month',mom_6m:'6 Month',mom_12_1:'12-1 Month'};
 
 export default function MarketPanel({ ticker }:{ ticker:string }){
@@ -29,19 +30,19 @@ export default function MarketPanel({ ticker }:{ ticker:string }){
   const [loading,setLoading]=useState(false);
   const [err,setErr]=useState('');
   const [expanded,setExpanded]=useState<Record<string,boolean>>({});
-  const [allOpen,setAllOpen]=useState(true);
+  const [allOpen,setAllOpen]=useState(false);
   useEffect(()=>{
     if(!ticker)return;
     setLoading(true);setErr('');setD(null);
     api.get(`/api/v6/market/${ticker}`)
-      .then(r=>{const x=r.data?.data;if(!x?.available)setErr(x?.reason||'No market data');else{setD(x);const init:Record<string,boolean>={};(x.tree?.categories||[]).forEach((c:any)=>init[c.id]=true);setExpanded(init);}})
+      .then(r=>{const x=r.data?.data;if(!x?.available)setErr(x?.reason||'No market data');else{setD(x);const init:Record<string,boolean>={};(x.tree?.categories||[]).forEach((c:any)=>init[c.id]=false);setExpanded(init);}})
       .catch(e=>setErr(e?.message||'Request failed'))
       .finally(()=>setLoading(false));
   },[ticker]);
 
-  if(!ticker)return <div style={{color:'#9d8b7a',padding:24}}>Enter a ticker for Market Intelligence.</div>;
-  if(loading)return <div style={{color:'#daa520',padding:24}}>Computing Market Intelligence — peer-relative momentum, trend, regime…</div>;
-  if(err)return <div style={{color:'#c0705a',padding:24}}>Market: {err}</div>;
+  if(!ticker)return <div style={{color:'var(--cocoa-dust)',padding:24}}>Enter a ticker for Market Intelligence.</div>;
+  if(loading)return <div style={{color:'var(--gold)',padding:24}}>Computing Market Intelligence — peer-relative momentum, trend, regime…</div>;
+  if(err)return <div style={{color:'var(--bear)',padding:24}}>Market: {err}</div>;
   if(!d)return null;
 
   const ladder=d.momentum_ladder||{};
@@ -56,28 +57,30 @@ export default function MarketPanel({ ticker }:{ ticker:string }){
   const rg=d.regime||{};
 
   return (
-    <div style={{padding:'8px 4px',color:'#e8ddd0'}}>
+    <div style={{padding:'8px 4px',color:'var(--latte)'}}>
       <div style={{display:'flex',alignItems:'center',gap:24,marginBottom:20,flexWrap:'wrap'}}>
         <div style={{display:'flex',alignItems:'baseline',gap:10}}>
           <span style={{fontSize:46,fontWeight:700,color:heat(d.score),lineHeight:1}}>{d.score?.toFixed(1)??'—'}</span>
-          <span style={{fontSize:16,color:'#9d8b7a'}}>/100</span>
+          <span style={{fontSize:16,color:'var(--cocoa-dust)'}}>/100</span>
         </div>
         <div>
           <div style={{fontSize:20,fontWeight:700,color:ratingColor(d.market_rating),letterSpacing:1}}>{d.market_rating}</div>
-          <div style={{fontSize:11,color:'#9d8b7a',marginTop:2}}>
+          <div style={{fontSize:11,color:'var(--cocoa-dust)',marginTop:2}}>
             Ranked vs {d.peer_count} {d.sector_bucket} peers · coverage {d.coverage.scored}/{d.coverage.total}</div>
         </div>
+        <MarketPositioning d={d} />
+
         {rg.regime?.current && (
           <div style={{marginLeft:'auto',display:'flex',gap:10}}>
-            <div style={{background:'#181818',border:'1px solid #2a2a2a',borderRadius:8,padding:'8px 14px',textAlign:'center'}}>
-              <div style={{fontSize:10,color:'#9d8b7a'}}>MARKET REGIME</div>
-              <div style={{fontSize:14,fontWeight:600,color:rg.regime.current.includes('BULL')?'#1d9e75':'#c0705a'}}>{rg.regime.current.replace(/_/g,' ')}</div>
-              <div style={{fontSize:9,color:'#7a7266'}}>{rg.regime.confidence!=null?(rg.regime.confidence*100).toFixed(0)+'% conf':''}</div>
+            <div style={{background:'var(--surface-2)',border:'1px solid #2a2a2a',borderRadius:8,padding:'8px 14px',textAlign:'center'}}>
+              <div style={{fontSize:10,color:'var(--cocoa-dust)'}}>MARKET REGIME</div>
+              <div style={{fontSize:14,fontWeight:600,color:rg.regime.current.includes('BULL')?'var(--bull)':'var(--bear)'}}>{rg.regime.current.replace(/_/g,' ')}</div>
+              <div style={{fontSize:9,color:'var(--cocoa)'}}>{rg.regime.confidence!=null?(rg.regime.confidence*100).toFixed(0)+'% conf':''}</div>
             </div>
             {rg.garch?.vol_regime && (
-              <div style={{background:'#181818',border:'1px solid #2a2a2a',borderRadius:8,padding:'8px 14px',textAlign:'center'}}>
-                <div style={{fontSize:10,color:'#9d8b7a'}}>VOLATILITY</div>
-                <div style={{fontSize:14,fontWeight:600,color:rg.garch.vol_regime==='HIGH'?'#c0705a':rg.garch.vol_regime==='LOW'?'#1d9e75':'#c9a227'}}>{rg.garch.vol_regime}</div>
+              <div style={{background:'var(--surface-2)',border:'1px solid #2a2a2a',borderRadius:8,padding:'8px 14px',textAlign:'center'}}>
+                <div style={{fontSize:10,color:'var(--cocoa-dust)'}}>VOLATILITY</div>
+                <div style={{fontSize:14,fontWeight:600,color:rg.garch.vol_regime==='HIGH'?'var(--bear)':rg.garch.vol_regime==='LOW'?'var(--bull)':'var(--caramel)'}}>{rg.garch.vol_regime}</div>
               </div>
             )}
           </div>
@@ -86,131 +89,29 @@ export default function MarketPanel({ ticker }:{ ticker:string }){
 
       {d.reasons && d.reasons.length>0 && (
         <div style={{background:'#1a1512',border:'1px solid #3a2a1a',borderRadius:12,padding:'12px 16px',marginBottom:14}}>
-          <div style={{fontSize:12,color:'#c9a227',letterSpacing:1,marginBottom:6,fontWeight:600}}>MARKET SUMMARY</div>
+          <div style={{fontSize:12,color:'var(--caramel)',letterSpacing:1,marginBottom:6,fontWeight:600}}>MARKET SUMMARY</div>
           <div style={{display:'flex',flexWrap:'wrap',gap:'4px 16px'}}>
-            {d.reasons.map((r,i)=><span key={i} style={{fontSize:12,color:'#cdbfae'}}>▸ {r}</span>)}
+            {d.reasons.map((r,i)=><span key={i} style={{fontSize:12,color:'var(--latte)'}}>▸ {r}</span>)}
           </div>
         </div>
       )}
 
-      {/* RELATIVE STRENGTH vs benchmarks + PRICE POSITION */}
-      <div style={{display:'grid',gridTemplateColumns:'1.3fr 1fr',gap:14,marginBottom:14}}>
-        {d.relative_strength && Object.keys(d.relative_strength).length>0 && (
-          <div style={{background:'#141414',border:'1px solid #2a2a2a',borderRadius:12,padding:16}}>
-            <div style={{fontSize:12,color:'#9d8b7a',letterSpacing:1,marginBottom:12}}>RELATIVE STRENGTH — 3-month vs benchmarks</div>
-            {Object.entries(d.relative_strength).map(([k,v])=>{
-              const val=v as number; const w=Math.min(50,Math.abs(val));
-              return (
-                <div key={k} style={{display:'flex',alignItems:'center',gap:10,marginBottom:8}}>
-                  <div style={{width:44,fontSize:12,color:'#cdbfae'}}>{k}</div>
-                  <div style={{flex:1,position:'relative',height:16,background:'#242424',borderRadius:8}}>
-                    <div style={{position:'absolute',left:'50%',top:0,bottom:0,width:1,background:'#555'}}/>
-                    <div style={{position:'absolute',left:val>=0?'50%':`${50-w}%`,width:`${w}%`,top:0,bottom:0,
-                      background:val>=0?'#1d9e75':'#c0705a',borderRadius:4}}/>
-                  </div>
-                  <div style={{width:56,fontSize:12,fontWeight:600,color:val>=0?'#1d9e75':'#c0705a',textAlign:'right'}}>{val>=0?'+':''}{val.toFixed(1)}%</div>
-                </div>
-              );
-            })}
-            <div style={{fontSize:10,color:'#7a7266',marginTop:4}}>vs SPY (market), QQQ (growth), XLK (tech sector)</div>
-          </div>
-        )}
-        {d.price_position && (
-          <div style={{background:'#141414',border:'1px solid #2a2a2a',borderRadius:12,padding:16}}>
-            <div style={{fontSize:12,color:'#9d8b7a',letterSpacing:1,marginBottom:12}}>PRICE POSITION</div>
-            <div style={{display:'flex',justifyContent:'space-between',marginBottom:10,fontSize:12}}>
-              <span style={{color:'#9d8b7a'}}>From 52-week high</span>
-              <span style={{color:'#c0705a',fontWeight:600}}>{d.price_position.pct_from_52w_high?.toFixed(1)}%</span></div>
-            <div style={{display:'flex',justifyContent:'space-between',marginBottom:10,fontSize:12}}>
-              <span style={{color:'#9d8b7a'}}>From 52-week low</span>
-              <span style={{color:'#1d9e75',fontWeight:600}}>+{d.price_position.pct_from_52w_low?.toFixed(1)}%</span></div>
-            {d.price_position.range_percentile!=null && (
-              <div>
-                <div style={{fontSize:10,color:'#7a7266',marginBottom:4}}>Position in 52-week range</div>
-                <div style={{height:12,background:'#242424',borderRadius:6,overflow:'hidden'}}>
-                  <div style={{height:'100%',width:`${d.price_position.range_percentile}%`,background:'#c9a227'}}/></div>
-                <div style={{fontSize:11,color:'#cdbfae',marginTop:3}}>{d.price_position.range_percentile.toFixed(0)}th percentile of range</div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* SECTOR BREADTH */}
-      {d.sector_breadth && d.sector_breadth.breadth_score!=null && (
-        <div style={{background:'#141414',border:'1px solid #2a2a2a',borderRadius:12,padding:16,marginBottom:14}}>
-          <div style={{fontSize:12,color:'#9d8b7a',letterSpacing:1,marginBottom:12}}>
-            {d.sector_breadth.sector} SECTOR BREADTH — {d.sector_breadth.universe_size} peers</div>
-          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(150px,1fr))',gap:12}}>
-            {[['% above 50-day MA',d.sector_breadth.pct_above_ma50],
-              ['% above 200-day MA',d.sector_breadth.pct_above_ma200],
-              ['% positive momentum',d.sector_breadth.pct_positive_mom],
-              ['Breadth score',d.sector_breadth.breadth_score]].map(([k,v])=>(
-              <div key={k as string}>
-                <div style={{fontSize:10,color:'#9d8b7a',marginBottom:4}}>{k as string}</div>
-                <div style={{display:'flex',alignItems:'center',gap:8}}>
-                  <div style={{flex:1,height:8,background:'#242424',borderRadius:4,overflow:'hidden'}}>
-                    <div style={{height:'100%',width:`${v}%`,background:(v as number)>=50?'#1d9e75':'#a35a1d'}}/></div>
-                  <span style={{fontSize:13,fontWeight:600,color:(v as number)>=50?'#1d9e75':'#c0705a',width:44,textAlign:'right'}}>{(v as number).toFixed(0)}%</span>
-                </div>
-              </div>
-            ))}
-          </div>
-          <div style={{fontSize:10,color:'#7a7266',marginTop:8}}>Is the sector healthy? High breadth = broad participation, not just a few names.</div>
-        </div>
-      )}
-
-      {/* MOMENTUM LADDER — hero */}
-      <div style={{background:'#141414',border:'1px solid #2a2a2a',borderRadius:12,padding:18,marginBottom:16}}>
-        <div style={{fontSize:12,color:'#9d8b7a',letterSpacing:1,marginBottom:16}}>MOMENTUM LADDER — return & peer-percentile by timeframe</div>
-        {['mom_1m','mom_3m','mom_6m','mom_12_1'].map(k=>{
-          const raw=ladder[k]; const pct=ladderScore(k);
-          return (
-            <div key={k} style={{display:'flex',alignItems:'center',gap:14,marginBottom:12}}>
-              <div style={{width:90,fontSize:12,color:'#cdbfae'}}>{LADDER_LABELS[k]}</div>
-              <div style={{width:70,fontSize:13,fontWeight:600,color:raw!=null&&raw>=0?'#1d9e75':'#c0705a',textAlign:'right'}}>
-                {raw!=null?(raw>=0?'+':'')+raw.toFixed(1)+'%':'—'}</div>
-              <div style={{flex:1,height:16,background:'#242424',borderRadius:8,overflow:'hidden',position:'relative'}}>
-                <div style={{height:'100%',width:`${pct??0}%`,background:heat(pct),transition:'width 0.6s'}}/>
-              </div>
-              <div style={{width:80,fontSize:11,color:heat(pct),fontWeight:600}}>{pct!=null?pct.toFixed(0)+'th pctile':'—'}</div>
-            </div>
-          );
-        })}
-        <div style={{fontSize:10,color:'#7a7266',marginTop:6}}>Percentile = rank vs {d.sector_bucket} sector peers. Higher bar = outperforming sector.</div>
-      </div>
-
-      {/* KEY METRICS strip */}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(130px,1fr))',gap:10,marginBottom:16}}>
-        {[['Hurst (persistence)',d.key_metrics.hurst,(v:number)=>v.toFixed(3)],
-          ['3M Sharpe',d.key_metrics.sharpe_3m,(v:number)=>v.toFixed(2)],
-          ['MA Alignment',d.key_metrics.ma_alignment,(v:number)=>v.toFixed(1)],
-          ['% above MA50',d.key_metrics.pct_above_ma50,(v:number)=>v.toFixed(1)+'%'],
-          ['% above MA200',d.key_metrics.pct_above_ma200,(v:number)=>v.toFixed(1)+'%']].map(([k,v,fmt])=>(
-          <div key={k as string} style={{background:'#181818',border:'1px solid #2a2a2a',borderRadius:8,padding:'10px 12px'}}>
-            <div style={{fontSize:10,color:'#9d8b7a',marginBottom:3}}>{k as string}</div>
-            <div style={{fontSize:16,fontWeight:600,color:'#daa520'}}>{v!=null?(fmt as any)(v):'—'}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* 6 CATEGORY SCORES */}
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-        <span style={{fontSize:12,color:'#9d8b7a',letterSpacing:1}}>MARKET INTELLIGENCE COMPONENTS · {d.tree.categories.reduce((a,c)=>a+c.n_signals,0)} SIGNALS</span>
+        <span style={{fontSize:12,color:'var(--cocoa-dust)',letterSpacing:1}}>MARKET INTELLIGENCE COMPONENTS · {d.tree.categories.reduce((a,c)=>a+c.n_signals,0)} SIGNALS</span>
         <button onClick={()=>{const v=!allOpen;setAllOpen(v);const m:Record<string,boolean>={};d.tree.categories.forEach(c=>m[c.id]=v);setExpanded(m);}}
-          style={{background:'#181818',border:'1px solid #2a2a2a',color:'#9d8b7a',borderRadius:8,padding:'5px 12px',fontSize:11,cursor:'pointer'}}>
+          style={{background:'var(--surface-2)',border:'1px solid #2a2a2a',color:'var(--cocoa-dust)',borderRadius:8,padding:'5px 12px',fontSize:11,cursor:'pointer'}}>
           {allOpen?'Collapse all':'Expand all'}</button>
       </div>
       <div style={{display:'flex',flexDirection:'column',gap:8}}>
         {d.tree.categories.map(cat=>{
           const open=expanded[cat.id];
           return (
-            <div key={cat.id} style={{background:'#141414',border:'1px solid #2a2a2a',borderRadius:10,overflow:'hidden'}}>
+            <div key={cat.id} style={{background:'var(--surface-2)',border:'1px solid #2a2a2a',borderRadius:10,overflow:'hidden'}}>
               <div onClick={()=>setExpanded(p=>({...p,[cat.id]:!p[cat.id]}))}
                 style={{display:'flex',alignItems:'center',gap:12,padding:'10px 14px',cursor:'pointer',borderLeft:`4px solid ${heat(cat.score)}`}}>
-                <span style={{fontSize:11,color:'#7a7266',width:12}}>{open?'▾':'▸'}</span>
-                <span style={{fontSize:13,fontWeight:600,color:'#e8ddd0',flex:1}}>{cat.label}</span>
-                <span style={{fontSize:10,color:'#7a7266'}}>wt {cat.weight.toFixed(2)} · {cat.n_scored}/{cat.n_signals}</span>
+                <span style={{fontSize:11,color:'var(--cocoa)',width:12}}>{open?'▾':'▸'}</span>
+                <span style={{fontSize:13,fontWeight:600,color:'var(--latte)',flex:1}}>{cat.label}</span>
+                <span style={{fontSize:10,color:'var(--cocoa)'}}>wt {cat.weight.toFixed(2)} · {cat.n_scored}/{cat.n_signals}</span>
                 <span style={{fontSize:18,fontWeight:700,color:heat(cat.score),width:36,textAlign:'right'}}>{cat.score?.toFixed(0)??'—'}</span>
               </div>
               {open && (
@@ -221,12 +122,12 @@ export default function MarketPanel({ ticker }:{ ticker:string }){
                     const fmt=rv==null?'—':Math.abs(rv)>=1000000?(rv/1e6).toFixed(0)+'M':(Number.isInteger(rv)?rv.toString():(Math.abs(rv)<1&&Math.abs(rv)>0?rv.toFixed(3):rv.toFixed(2)));
                     return (
                       <div key={s.id} title={s.evidence} style={{display:'flex',alignItems:'center',gap:10,padding:'5px 0',borderBottom:'1px solid #1e1e1e',opacity:pending?0.5:1}}>
-                        <span style={{fontSize:12,color:'#cdbfae',flex:1}}>{s.label}</span>
-                        <span style={{fontSize:12,color:'#9d8b7a',width:72,textAlign:'right'}}>{pending?'pending':fmt}</span>
-                        <div style={{width:80,height:6,background:'#242424',borderRadius:3,overflow:'hidden'}}>
+                        <span style={{fontSize:12,color:'var(--latte)',flex:1}}>{s.label}</span>
+                        <span style={{fontSize:12,color:'var(--cocoa-dust)',width:72,textAlign:'right'}}>{pending?'pending':fmt}</span>
+                        <div style={{width:80,height:6,background:'var(--surface-3)',borderRadius:3,overflow:'hidden'}}>
                           {!pending && <div style={{height:'100%',width:`${s.score}%`,background:heat(s.score)}}/>}
                         </div>
-                        <span style={{fontSize:11,fontWeight:600,color:pending?'#555':heat(s.score),width:26,textAlign:'right'}}>{pending?'—':s.score.toFixed(0)}</span>
+                        <span style={{fontSize:11,fontWeight:600,color:pending?'var(--cocoa)':heat(s.score),width:26,textAlign:'right'}}>{pending?'—':s.score.toFixed(0)}</span>
                       </div>
                     );
                   })}

@@ -158,7 +158,6 @@ def compute_business_features(merged, fin_features, wacc=None, peer_data=None):
             cagr=_cagr(shv_clean)
             # sanity: real share-count CAGR is within +-15%/yr; else it's an artifact -> None
             f["share_count_cagr"]=cagr if (cagr is not None and -0.15<cagr<0.15) else None
-    f["dividend_growth"]=fin_features.get("dividend_growth")
     f["reinvestment_rate"]=fin_features.get("reinvestment_rate")
     f["reinvestment_quality"]=(fin_features.get("reinvestment_rate")*roic) if (fin_features.get("reinvestment_rate") is not None and roic is not None) else None
     gw=S("goodwill"); gwv=[x for x in gw if x is not None]
