@@ -32,12 +32,12 @@ export default function ValuationPanel({ ticker }:{ ticker:string }){
   const [loading,setLoading]=useState(false);
   const [err,setErr]=useState('');
   const [expanded,setExpanded]=useState<Record<string,boolean>>({});
-  const [allOpen,setAllOpen]=useState(true);
+  const [allOpen,setAllOpen]=useState(false);
   useEffect(()=>{
     if(!ticker)return;
     setLoading(true);setErr('');setD(null);
     api.get(`/api/v6/valuation/${ticker}`)
-      .then(r=>{const x=r.data?.data;if(!x?.available)setErr(x?.reason||'No valuation data');else{setD(x);const init:Record<string,boolean>={};(x.tree?.categories||[]).forEach((c:any)=>init[c.id]=true);setExpanded(init);}})
+      .then(r=>{const x=r.data?.data;if(!x?.available)setErr(x?.reason||'No valuation data');else{setD(x);const init:Record<string,boolean>={};(x.tree?.categories||[]).forEach((c:any)=>init[c.id]=false);setExpanded(init);}})
       .catch(e=>setErr(e?.message||'Request failed'))
       .finally(()=>setLoading(false));
   },[ticker]);
