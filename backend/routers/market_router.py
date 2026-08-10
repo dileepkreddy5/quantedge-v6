@@ -158,6 +158,17 @@ async def compute_market_intelligence(ticker: str, api_key: str, pool=None) -> D
     from quantedge.scoring.market_deep import volatility_suite, trading_risk, volume_liquidity, short_interest_signals
     closes, volumes, si_records = await _price_volume_si(ticker, api_key)
     spy = await _spy_closes(api_key)
+    # Megacaps outside the last peer-scan have empty me_factors, which left the
+    # momentum/trend/Sharpe/liquidity categories blank. Compute those signals
+    # fresh from this ticker's own price series and fall back to them.
+    try:
+        from quantedge.scoring.market_deep import momentum_trend_suite
+        _mt = momentum_trend_suite(closes, volumes, spy)
+        for _k, _v in _mt.items():
+            if me_factors.get(_k) is None and _v is not None:
+                me_factors[_k] = _v
+    except Exception as _e:
+        logger.info(f"market momentum suite failed {ticker}: {_e}")
     deep={}
     if len(closes)>=60:
         deep["volatility"]=volatility_suite(closes, spy)

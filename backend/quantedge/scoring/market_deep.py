@@ -61,12 +61,17 @@ def volume_liquidity(closes, volumes):
     if sum(vv)>0:
         vwap=sum(tp[i]*vv[i] for i in range(20))/sum(vv)
         out["vwap_distance"]=round((closes[-1]-vwap)/vwap,4)
-    obv=0; obvs=[]
+    import statistics as _st
+    obv=0.0; obvs=[]
     for i in range(1,len(closes)):
-        obv+= volumes[i] if closes[i]>closes[i-1] else -volumes[i] if closes[i]<closes[i-1] else 0
-        obvs.append(obv)
-    if len(obvs)>=20:
-        recent=obvs[-20:]; out["obv_slope"]=round((recent[-1]-recent[0])/(abs(recent[0])+1),4)
+        sign=1 if closes[i]>closes[i-1] else -1 if closes[i]<closes[i-1] else 0
+        obv+=volumes[i]*sign; obvs.append(obv)
+    rec=obvs[-63:]
+    if len(rec)>=20 and _st.pstdev(rec)>0:
+        xs=list(range(len(rec))); mx=sum(xs)/len(xs); my=sum(rec)/len(rec)
+        num=sum((xs[i]-mx)*(rec[i]-my) for i in range(len(rec))); den=sum((x-mx)**2 for x in xs)
+        if den>0:
+            out["obv_slope"]=round((num/den)/(abs(my)+1e-9),6)
     return out
 
 def short_interest_signals(records, avg_vol=None):
@@ -135,4 +140,104 @@ def volume_detail(closes, volumes):
         if closes[i]>closes[i-1]: pos_mf+=mf
         else: neg_mf+=mf
     out["mfi_proxy"]=round(100-100/(1+pos_mf/neg_mf),1) if neg_mf>0 else None
+    return out
+
+
+def momentum_trend_suite(closes, volumes=None, spy_closes=None):
+    """Compute the momentum/trend/risk-adjusted/liquidity signals that otherwise
+    live only in the peer_stats bucket — so megacaps not in the last scan (whose
+    me_factors are empty) still get real, price-derived values instead of blanks.
+    All real math on the price series; missing -> None."""
+    import math, statistics as st
+    out = {}
+    n = len(closes)
+    if n < 60:
+        return out
+    rets = [(closes[i]/closes[i-1]-1) for i in range(1, n)]
+
+    # --- momentum ladder (period returns) ---
+    def _ret(days):
+        if n > days: return round((closes[-1]/closes[-1-days]-1)*100, 2)
+        return None
+    out["mom_1m"]  = _ret(21)
+    out["mom_3m"]  = _ret(63)
+    out["mom_6m"]  = _ret(126)
+    # classic 12-1 momentum: 12-month return excluding the most recent month
+    if n > 273:
+        r12 = closes[-22]/closes[-273]-1
+        out["mom_12_1"] = round(r12*100, 2)
+
+    # --- moving-average structure ---
+    def _sma(k): return sum(closes[-k:])/k if n >= k else None
+    sma50, sma200 = _sma(50), _sma(200)
+    cur = closes[-1]
+    if sma50 is not None:
+        out["pct_above_ma50"] = round((cur/sma50-1)*100, 2)
+    if sma200 is not None:
+        out["pct_above_ma200"] = round((cur/sma200-1)*100, 2)
+    # MA alignment: +1 price>50, +1 50>200, +1 price>200 -> 0..1
+    if sma50 is not None and sma200 is not None:
+        al = (cur > sma50) + (sma50 > sma200) + (cur > sma200)
+        out["ma_alignment"] = round(al/3.0, 3)
+
+    # --- Hurst exponent (rescaled-range, trend persistence) ---
+    try:
+        lags = range(2, 20)
+        tau = [st.pstdev([closes[i]-closes[i-lag] for i in range(lag, n)]) for lag in lags]
+        if all(t > 0 for t in tau):
+            lx = [math.log(l) for l in lags]; ly = [math.log(t) for t in tau]
+            mx, my = sum(lx)/len(lx), sum(ly)/len(ly)
+            num = sum((lx[i]-mx)*(ly[i]-my) for i in range(len(lx)))
+            den = sum((x-mx)**2 for x in lx)
+            if den > 0:
+                out["hurst"] = round(num/den, 3)
+    except Exception:
+        pass
+
+    # --- risk-adjusted: match factor_engine scanner exactly ---
+    # sharpe_3m = 3-month return (fraction) / (3-month annualised vol)
+    if len(rets) >= 63 and n > 63:
+        mom_3m_frac = closes[-1]/closes[-64]-1
+        vol_3m = st.pstdev(rets[-63:])*math.sqrt(252)
+        if vol_3m > 0:
+            out["sharpe_3m"] = round(mom_3m_frac/vol_3m, 3)
+        # vol-adjusted return: total return over full window / full annualised vol
+        ann_vol = st.pstdev(rets)*math.sqrt(252)
+        tot = closes[-1]/closes[0]-1
+        if ann_vol > 0:
+            out["vol_adj_return"] = round(tot/ann_vol, 3)
+
+    # --- Amihud illiquidity — match scanner: (|ret|/(dollar_vol+1)).mean()*1e9 over 60d ---
+    if volumes is not None and len(volumes) == n:
+        dvol = [closes[i]*volumes[i] for i in range(n)][-60:]
+        aret = [abs(r) for r in rets][-60:]
+        m = min(len(dvol), len(aret))
+        if m > 0 and sum(dvol[-m:])/m > 0:
+            il = [aret[-m+j]/(dvol[-m+j]+1) for j in range(m)]
+            out["amihud"] = round(sum(il)/len(il)*1e9, 3)
+        else:
+            out["amihud"] = 100.0
+        # volume surge — scanner uses vol20/vol90 (not vol21)
+        if n >= 90:
+            v20 = sum(volumes[-20:])/20; v90 = sum(volumes[-90:])/90
+            out["volume_surge"] = round(v20/v90, 3) if v90 > 0 else 1.0
+        # OBV slope — match scanner exactly: cumulative OBV, last 63, polyfit slope
+        # divided by (abs(mean)+1e-9). Uses sign of daily return like the scanner.
+        obv = 0.0; obvs = []
+        for i in range(1, n):
+            sign = 1 if closes[i] > closes[i-1] else -1 if closes[i] < closes[i-1] else 0
+            obv += volumes[i]*sign
+            obvs.append(obv)
+        rec = obvs[-63:]
+        if len(rec) >= 20:
+            mean_abs = abs(sum(rec)/len(rec))
+            sd = st.pstdev(rec)
+            if sd > 0:
+                xs = list(range(len(rec))); mx = sum(xs)/len(xs); my = sum(rec)/len(rec)
+                num = sum((xs[i]-mx)*(rec[i]-my) for i in range(len(rec)))
+                den = sum((x-mx)**2 for x in xs)
+                if den > 0:
+                    slope = num/den
+                    out["obv_slope_norm"] = round(slope/(mean_abs+1e-9), 6)
+
     return out
