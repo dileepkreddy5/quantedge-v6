@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../auth/authStore';
 
-/* ── types ─────────────────────────────────────────── */
 interface Sig { id:string; label:string; weight:number; status:string; method?:string;
   evidence:string; raw_value:number|null; score:number|null; }
 interface Cat { id:string; label:string; weight:number; score:number|null;
@@ -16,7 +15,6 @@ interface Q { period_end:string|null; fiscal:string; revenue:number|null; revenu
   net_income:number|null; net_income_yoy_pct:number|null; eps_diluted:number|null; eps_yoy_pct:number|null;
   free_cash_flow:number|null; operating_cash_flow:number|null; capex:number|null; }
 
-/* ── palette / format ──────────────────────────────── */
 const heat=(s:number|null)=>s==null?'var(--border-2)':s>=70?'var(--gold)':s>=50?'var(--caramel)':s>=30?'#c9762f':'var(--bear)';
 const bn=(v:number|null)=>{ if(v==null)return '—'; const a=Math.abs(v);
   if(a>=1e12)return '$'+(v/1e12).toFixed(2)+'T'; if(a>=1e9)return '$'+(v/1e9).toFixed(1)+'B';
@@ -46,7 +44,6 @@ function fmt(id:string,v:number|null):string{
   return v.toFixed(2);
 }
 
-/* ── mini gauge ────────────────────────────────────── */
 const Gauge=({score,size=104}:{score:number|null;size?:number})=>{
   const s=score??0; const r=size*0.37, circ=2*Math.PI*r, dash=(s/100)*circ*0.75, col=heat(score);
   const c=size/2;
@@ -62,17 +59,33 @@ const Gauge=({score,size=104}:{score:number|null;size?:number})=>{
   );
 };
 
+/* estimate next report from the latest quarter-end + typical filing lag */
+function nextReportEstimate(latestPeriodEnd:string|null, filingDate:string|null):string|null{
+  if(!latestPeriodEnd)return null;
+  try{
+    const pe=new Date(latestPeriodEnd);
+    const nextEnd=new Date(pe); nextEnd.setMonth(nextEnd.getMonth()+3);
+    // typical filing lag: days between quarter-end and filing
+    let lag=30;
+    if(filingDate){ const f=new Date(filingDate); lag=Math.round((f.getTime()-pe.getTime())/864e5); if(lag<10||lag>90)lag=30; }
+    const est=new Date(nextEnd); est.setDate(est.getDate()+lag);
+    return est.toLocaleDateString('en-US',{month:'short',year:'numeric'});
+  }catch{ return null; }
+}
+
 export default function FinancialIntelligencePanel({ ticker }:{ ticker:string }){
   const [data,setData]=useState<FinData|null>(null);
   const [quarters,setQuarters]=useState<Q[]|null>(null);
+  const [filing,setFiling]=useState<string|null>(null);
   const [loading,setLoading]=useState(false); const [err,setErr]=useState('');
   const [tab,setTab]=useState<'quality'|'detail'>('quality');
   const [tip,setTip]=useState('');
+  const [hoverQ,setHoverQ]=useState<number|null>(null);
 
-  useEffect(()=>{ if(!ticker)return; setLoading(true);setErr('');setData(null);setQuarters(null);
+  useEffect(()=>{ if(!ticker)return; setLoading(true);setErr('');setData(null);setQuarters(null);setFiling(null);
     api.get(`/api/v6/financial/${ticker}`).then(r=>{const d=r.data?.data;if(!d?.available)setErr(d?.reason||'No data');else setData(d);})
       .catch(e=>setErr(e?.message||'Request failed')).finally(()=>setLoading(false));
-    api.get(`/api/v6/quarters/${ticker}`).then(r=>{const x=r.data?.data;if(x?.available)setQuarters(x.quarters);}).catch(()=>{});
+    api.get(`/api/v6/quarters/${ticker}`).then(r=>{const x=r.data?.data;if(x?.available){setQuarters(x.quarters);setFiling(x.latest_filing_date||null);}}).catch(()=>{});
   },[ticker]);
 
   if(!ticker)return <div style={{color:'var(--cocoa-dust)',padding:24}}>Enter a ticker for Financial Intelligence.</div>;
@@ -84,34 +97,32 @@ export default function FinancialIntelligencePanel({ ticker }:{ ticker:string })
   const cats=[...data.tree.categories];
   const scored=cats.filter(c=>c.score!=null).sort((a,b)=>(b.score!)-(a.score!));
 
-  /* master models */
   const piotroski=km.piotroski_f, altman=km.altman_z, beneish=km.beneish_m, spread=km.roic_wacc_spread;
   const roe=(cats.find(c=>c.id==='profitability')?.signals.find(s=>s.id==='roe')?.raw_value)??null;
   const nm=km['net_margin']??(cats.find(c=>c.id==='income_statement')?.signals.find(s=>s.id==='net_margin')?.raw_value)??null;
   const at=(cats.find(c=>c.id==='balance_sheet')?.signals.find(s=>s.id==='asset_turnover')?.raw_value)??null;
   const em=(cats.find(c=>c.id==='efficiency')?.signals.find(s=>s.id==='equity_multiplier')?.raw_value)??null;
 
-  /* reference valuation cross-refs */
   const refs=cats.flatMap(c=>c.signals).filter(s=>s.status==='reference'&&s.raw_value!=null);
 
-  /* quarters chart geometry */
   const qs=quarters?[...quarters]:[];
   const revs=qs.map(q=>q.revenue||0); const maxRev=Math.max(...revs,1);
   const allM=qs.flatMap(q=>[q.gross_margin_pct,q.operating_margin_pct,q.net_margin_pct].filter(v=>v!=null) as number[]);
   const mLo=Math.min(...allM,0), mHi=Math.max(...allM,1);
-  const CW=760, CH=200, PADL=8, PADR=8, PADB=28, PADT=10;
+  const CW=Math.max(760, qs.length*46), CH=210, PADL=8, PADR=8, PADB=28, PADT=10;
   const bx=(i:number)=>PADL+(i+0.5)*((CW-PADL-PADR)/qs.length);
   const my=(v:number)=>PADT+(1-(v-mLo)/((mHi-mLo)||1))*(CH-PADT-PADB);
   const mLine=(key:'gross_margin_pct'|'operating_margin_pct'|'net_margin_pct')=>
     qs.map((q,i)=>q[key]==null?null:`${bx(i)},${my(q[key] as number)}`).filter(Boolean).join(' ');
+  const labelEvery=qs.length>14?2:1;
 
-  /* piotroski components (from the deepest signal if present) */
-  const pioSig=cats.find(c=>c.id==='financial_health')?.signals.find(s=>s.id==='piotroski_f');
+  const latest=qs[qs.length-1];
+  const nextEst=latest?nextReportEstimate(latest.period_end,filing):null;
 
   return (
     <div style={{padding:'8px 4px',color:'var(--latte)'}}>
 
-      {/* ═══ HEADER: score + context ═══ */}
+      {/* HEADER */}
       <div style={{display:'flex',alignItems:'center',gap:22,marginBottom:16,flexWrap:'wrap'}}>
         <Gauge score={data.score}/>
         <div style={{minWidth:220}}>
@@ -123,25 +134,19 @@ export default function FinancialIntelligencePanel({ ticker }:{ ticker:string })
         </div>
       </div>
 
-      {/* ═══ MASTER MODELS — the quant-desk quality verdict ═══ */}
+      {/* MASTER MODELS */}
       <div style={{fontSize:10,color:'var(--gold)',letterSpacing:2,margin:'6px 0 10px'}}>QUALITY MODELS · academic fundamentals</div>
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(215px,1fr))',gap:10,marginBottom:16}}>
-
-        {/* Piotroski */}
         <div style={{background:'var(--surface-2)',border:'1px solid var(--border-2)',borderRadius:12,padding:'14px 16px'}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}>
             <span style={{fontSize:12,color:'var(--cocoa-dust)'}}>Piotroski F-score</span>
             <span style={{fontSize:22,fontWeight:600,color:(piotroski??0)>=7?'var(--bull)':(piotroski??0)>=4?'var(--neutral)':'var(--bear)'}}>{piotroski?.toFixed(0)??'—'}<span style={{fontSize:12,color:'var(--cocoa)'}}>/9</span></span>
           </div>
           <div style={{display:'flex',gap:3,marginTop:10}}>
-            {Array.from({length:9}).map((_,i)=>(
-              <div key={i} style={{flex:1,height:6,borderRadius:2,background:i<(piotroski??0)?'var(--bull)':'var(--surface-3)'}}/>
-            ))}
+            {Array.from({length:9}).map((_,i)=>(<div key={i} style={{flex:1,height:6,borderRadius:2,background:i<(piotroski??0)?'var(--bull)':'var(--surface-3)'}}/>))}
           </div>
           <div style={{fontSize:10,color:'var(--cocoa)',marginTop:8,lineHeight:1.4}}>{(piotroski??0)>=7?'Strong — profitable, improving, low-debt':(piotroski??0)>=4?'Moderate fundamental health':'Weak fundamentals'}</div>
         </div>
-
-        {/* Altman Z */}
         <div style={{background:'var(--surface-2)',border:'1px solid var(--border-2)',borderRadius:12,padding:'14px 16px'}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}>
             <span style={{fontSize:12,color:'var(--cocoa-dust)'}}>Altman Z-score</span>
@@ -150,13 +155,9 @@ export default function FinancialIntelligencePanel({ ticker }:{ ticker:string })
           <div style={{position:'relative',height:6,borderRadius:3,marginTop:12,background:'linear-gradient(90deg,var(--bear) 0%,var(--bear) 25%,var(--neutral) 25%,var(--neutral) 42%,var(--bull) 42%,var(--bull) 100%)'}}>
             <div style={{position:'absolute',top:-3,left:`${Math.min(100,(altman??0)/7*100)}%`,width:3,height:12,background:'var(--latte)',borderRadius:1,transform:'translateX(-1px)'}}/>
           </div>
-          <div style={{display:'flex',justifyContent:'space-between',fontSize:9,color:'var(--cocoa)',marginTop:4}}>
-            <span>distress 1.8</span><span>safe 3.0</span>
-          </div>
+          <div style={{display:'flex',justifyContent:'space-between',fontSize:9,color:'var(--cocoa)',marginTop:4}}><span>distress 1.8</span><span>safe 3.0</span></div>
           <div style={{fontSize:10,color:'var(--cocoa)',marginTop:6}}>{(altman??0)>=3?'Fortress balance sheet':(altman??0)>=1.8?'Grey zone':'Distress risk'}</div>
         </div>
-
-        {/* Beneish M */}
         <div style={{background:'var(--surface-2)',border:'1px solid var(--border-2)',borderRadius:12,padding:'14px 16px'}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}>
             <span style={{fontSize:12,color:'var(--cocoa-dust)'}}>Beneish M-score</span>
@@ -164,25 +165,20 @@ export default function FinancialIntelligencePanel({ ticker }:{ ticker:string })
           </div>
           <div style={{fontSize:11,marginTop:12,padding:'6px 10px',borderRadius:6,display:'inline-block',
             background:(beneish??0)<-1.78?'rgba(34,197,94,0.12)':'rgba(239,68,68,0.12)',
-            color:(beneish??0)<-1.78?'var(--bull)':'var(--bear)'}}>
-            {(beneish??0)<-1.78?'✓ Clean books':'⚠ Worth scrutiny'}</div>
+            color:(beneish??0)<-1.78?'var(--bull)':'var(--bear)'}}>{(beneish??0)<-1.78?'✓ Clean books':'⚠ Worth scrutiny'}</div>
           <div style={{fontSize:10,color:'var(--cocoa)',marginTop:8,lineHeight:1.4}}>Earnings-manipulation detector · threshold −1.78</div>
         </div>
-
-        {/* ROIC-WACC value creation */}
         <div style={{background:'var(--surface-2)',border:'1px solid var(--border-2)',borderRadius:12,padding:'14px 16px'}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}>
             <span style={{fontSize:12,color:'var(--cocoa-dust)'}}>ROIC − WACC</span>
             <span style={{fontSize:22,fontWeight:600,color:(spread??0)>0?'var(--bull)':'var(--bear)'}}>{spread!=null?(spread>=0?'+':'')+(spread*100).toFixed(1)+'%':'—'}</span>
           </div>
-          <div style={{fontSize:11,marginTop:12,color:(spread??0)>0?'var(--bull)':'var(--bear)'}}>
-            {(spread??0)>0?'Creating value':'Destroying value'}</div>
-          <div style={{fontSize:10,color:'var(--cocoa)',marginTop:8,lineHeight:1.4}}>
-            Return on capital {spread!=null&&spread>0?`${(spread*100).toFixed(1)} pts above`:'below'} cost of capital ({(data.wacc_used*100).toFixed(1)}%)</div>
+          <div style={{fontSize:11,marginTop:12,color:(spread??0)>0?'var(--bull)':'var(--bear)'}}>{(spread??0)>0?'Creating value':'Destroying value'}</div>
+          <div style={{fontSize:10,color:'var(--cocoa)',marginTop:8,lineHeight:1.4}}>Return on capital {spread!=null&&spread>0?`${(spread*100).toFixed(1)} pts above`:'below'} cost of capital ({(data.wacc_used*100).toFixed(1)}%)</div>
         </div>
       </div>
 
-      {/* ═══ DUPONT — ROE decomposition ═══ */}
+      {/* DUPONT */}
       {roe!=null&&nm!=null&&at!=null&&em!=null&&(
         <div style={{background:'var(--surface-2)',border:'1px solid var(--border-1)',borderRadius:12,padding:'14px 18px',marginBottom:16}}>
           <div style={{fontSize:10,color:'var(--gold)',letterSpacing:2,marginBottom:12}}>DUPONT · what drives return on equity</div>
@@ -195,24 +191,59 @@ export default function FinancialIntelligencePanel({ ticker }:{ ticker:string })
             <span style={{fontSize:18,color:'var(--cocoa)'}}>×</span>
             <div style={{textAlign:'center'}}><div style={{fontSize:18,fontWeight:500,color:'var(--latte)'}}>{em.toFixed(2)}×</div><div style={{fontSize:10,color:'var(--cocoa)'}}>leverage</div></div>
           </div>
-          <div style={{fontSize:10,color:'var(--cocoa)',marginTop:10,lineHeight:1.4}}>
-            {nm>0.2?'Return driven by exceptional margins':at>1?'Return driven by asset efficiency':'Return leans on leverage'} — the highest-quality ROE comes from margin, not debt.</div>
+          <div style={{fontSize:10,color:'var(--cocoa)',marginTop:10,lineHeight:1.4}}>{nm>0.2?'Return driven by exceptional margins':at>1?'Return driven by asset efficiency':'Return leans on leverage'} — the highest-quality ROE comes from margin, not debt.</div>
         </div>
       )}
 
-      {/* ═══ EARNINGS TRAJECTORY chart ═══ */}
+      {/* EARNINGS TRAJECTORY + earnings box */}
       {qs.length>=4&&(
         <div style={{marginBottom:16}}>
           <div style={{fontSize:10,color:'var(--gold)',letterSpacing:2,marginBottom:8}}>EARNINGS TRAJECTORY · {qs.length} quarters · revenue bars + margin lines</div>
-          <div style={{background:'var(--surface-2)',border:'1px solid var(--border-1)',borderRadius:12,padding:'12px 10px 6px',overflowX:'auto'}}>
+          <div style={{position:'relative',background:'var(--surface-2)',border:'1px solid var(--border-1)',borderRadius:12,padding:'12px 10px 6px',overflowX:'auto'}}>
+            {/* latest + next earnings inset */}
+            {latest&&(
+              <div style={{position:'absolute',top:12,right:14,zIndex:2,background:'var(--surface-3)',border:'1px solid var(--border-2)',borderRadius:10,padding:'10px 12px',maxWidth:230}}>
+                <div style={{fontSize:9,color:'var(--gold)',letterSpacing:1,marginBottom:5}}>LATEST REPORTED</div>
+                <div style={{fontSize:13,fontWeight:600,color:'var(--latte)'}}>{latest.fiscal} · {bn(latest.revenue)}</div>
+                <div style={{fontSize:11,color:'var(--cocoa-dust)',marginTop:2}}>
+                  Rev {latest.revenue_yoy_pct!=null?<span style={{color:latest.revenue_yoy_pct>=0?'var(--gold)':'var(--bear)'}}>{latest.revenue_yoy_pct>=0?'+':''}{latest.revenue_yoy_pct.toFixed(1)}% y/y</span>:'—'}
+                  {latest.eps_diluted!=null&&<> · EPS ${latest.eps_diluted.toFixed(2)}</>}
+                </div>
+                {filing&&<div style={{fontSize:10,color:'var(--cocoa)',marginTop:4}}>Filed {filing}</div>}
+                {nextEst&&<div style={{fontSize:10,color:'var(--cocoa)',marginTop:6,paddingTop:6,borderTop:'1px solid var(--border-1)'}}>Next report est. <span style={{color:'var(--cocoa-dust)'}}>~{nextEst}</span> <span style={{fontStyle:'italic'}}>(from filing cadence)</span></div>}
+              </div>
+            )}
             <svg width={CW} height={CH} style={{minWidth:CW,display:'block'}}>
               {qs.map((q,i)=>{ const bh=(q.revenue||0)/maxRev*(CH-PADT-PADB); const bw=(CW-PADL-PADR)/qs.length*0.56;
                 return <rect key={i} x={bx(i)-bw/2} y={CH-PADB-bh} width={bw} height={bh} rx={2} fill="var(--surface-4)"/>; })}
               <polyline points={mLine('gross_margin_pct')} fill="none" stroke="var(--gold)" strokeWidth="1.8"/>
               <polyline points={mLine('operating_margin_pct')} fill="none" stroke="var(--caramel)" strokeWidth="1.8"/>
               <polyline points={mLine('net_margin_pct')} fill="none" stroke="var(--bull)" strokeWidth="1.8"/>
-              {qs.map((q,i)=>(<text key={i} x={bx(i)} y={CH-10} textAnchor="middle" fontSize="8" fill="var(--cocoa)">{q.fiscal?.replace(' ','')}</text>))}
+              {qs.map((q,i)=>(i%labelEvery===0?<text key={i} x={bx(i)} y={CH-10} textAnchor="middle" fontSize="8" fill="var(--cocoa)">{q.fiscal?.replace(' ','')}</text>:null))}
+              {/* hover hit-areas + marker */}
+              {hoverQ!=null&&<line x1={bx(hoverQ)} y1={PADT} x2={bx(hoverQ)} y2={CH-PADB} stroke="var(--gold)" strokeWidth="1" strokeDasharray="3 3" opacity="0.6"/>}
+              {qs.map((q,i)=>{ const w=(CW-PADL-PADR)/qs.length;
+                return <rect key={'h'+i} x={bx(i)-w/2} y={0} width={w} height={CH} fill="transparent"
+                  onMouseEnter={()=>setHoverQ(i)} onMouseLeave={()=>setHoverQ(null)} style={{cursor:'crosshair'}}/>; })}
             </svg>
+            {/* hover tooltip */}
+            {hoverQ!=null&&qs[hoverQ]&&(()=>{ const q=qs[hoverQ]; const prev=hoverQ>0?qs[hoverQ-1]:null;
+              const qoq=(a:number|null,b:number|null)=>a!=null&&b!=null&&b!==0?((a/b-1)*100):null;
+              const rq=qoq(q.revenue,prev?.revenue);
+              return (
+                <div style={{position:'absolute',top:12,left:14,zIndex:3,background:'var(--surface-4)',border:'1px solid var(--gold)',borderRadius:10,padding:'10px 14px',minWidth:180,pointerEvents:'none'}}>
+                  <div style={{fontSize:12,fontWeight:600,color:'var(--gold)',marginBottom:6}}>{q.fiscal} · {q.period_end}</div>
+                  <div style={{display:'grid',gridTemplateColumns:'auto auto',gap:'3px 14px',fontSize:11}}>
+                    <span style={{color:'var(--cocoa)'}}>Revenue</span><span style={{color:'var(--latte)',textAlign:'right'}}>{bn(q.revenue)}{q.revenue_yoy_pct!=null&&<span style={{color:q.revenue_yoy_pct>=0?'var(--bull)':'var(--bear)',marginLeft:6}}>{q.revenue_yoy_pct>=0?'+':''}{q.revenue_yoy_pct.toFixed(1)}% y/y</span>}</span>
+                    {rq!=null&&<><span style={{color:'var(--cocoa)'}}>&nbsp;</span><span style={{color:rq>=0?'var(--cocoa-dust)':'#c9762f',textAlign:'right',fontSize:10}}>{rq>=0?'+':''}{rq.toFixed(1)}% q/q</span></>}
+                    <span style={{color:'var(--cocoa)'}}>Gross margin</span><span style={{color:'var(--gold)',textAlign:'right'}}>{q.gross_margin_pct?.toFixed(1)}%</span>
+                    <span style={{color:'var(--cocoa)'}}>Operating</span><span style={{color:'var(--caramel)',textAlign:'right'}}>{q.operating_margin_pct?.toFixed(1)}%</span>
+                    <span style={{color:'var(--cocoa)'}}>Net margin</span><span style={{color:'var(--bull)',textAlign:'right'}}>{q.net_margin_pct?.toFixed(1)}%</span>
+                    <span style={{color:'var(--cocoa)'}}>EPS</span><span style={{color:'var(--latte)',textAlign:'right'}}>{q.eps_diluted!=null?'$'+q.eps_diluted.toFixed(2):'—'}{q.eps_yoy_pct!=null&&<span style={{color:q.eps_yoy_pct>=0?'var(--bull)':'var(--bear)',marginLeft:6}}>{q.eps_yoy_pct>=0?'+':''}{q.eps_yoy_pct.toFixed(1)}%</span>}</span>
+                    <span style={{color:'var(--cocoa)'}}>FCF</span><span style={{color:'var(--latte)',textAlign:'right'}}>{bn(q.free_cash_flow)}</span>
+                  </div>
+                </div>);
+            })()}
             <div style={{display:'flex',gap:16,padding:'4px 8px 2px',fontSize:11}}>
               <span style={{color:'var(--surface-4)'}}>▮ <span style={{color:'var(--cocoa-dust)'}}>Revenue</span></span>
               <span style={{color:'var(--gold)'}}>— <span style={{color:'var(--cocoa-dust)'}}>Gross margin</span></span>
@@ -223,7 +254,7 @@ export default function FinancialIntelligencePanel({ ticker }:{ ticker:string })
         </div>
       )}
 
-      {/* ═══ VALUATION cross-refs (reference) ═══ */}
+      {/* VALUATION cross-refs */}
       {refs.length>0&&(
         <div style={{display:'flex',gap:10,flexWrap:'wrap',marginBottom:16}}>
           {refs.map(s=>(
@@ -236,7 +267,7 @@ export default function FinancialIntelligencePanel({ ticker }:{ ticker:string })
         </div>
       )}
 
-      {/* ═══ QUALITY PROFILE · 12 categories ranked ═══ */}
+      {/* QUALITY PROFILE */}
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',margin:'18px 0 10px'}}>
         <span style={{fontSize:10,color:'var(--gold)',letterSpacing:2}}>QUALITY PROFILE · 12 dimensions ranked</span>
         <button onClick={()=>setTab(t=>t==='quality'?'detail':'quality')}

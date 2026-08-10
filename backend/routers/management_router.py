@@ -168,8 +168,22 @@ async def get_quarters(ticker: str, http_request: Request,
             "diluted_shares": q.get("diluted_shares"),
             "diluted_shares_yoy_pct": _pct(q.get("diluted_shares"), (yoy or {}).get("diluted_shares")),
         })
+    # Real filing date of the most recent quarter (Polygon financials filing_date),
+    # so the UI can show when the latest numbers were actually filed and estimate
+    # the next report window from MSFT's real filing cadence — never a faked date.
+    latest_filing=None
+    try:
+        import httpx as _hx
+        async with _hx.AsyncClient(timeout=10) as _c:
+            _r=await _c.get(f"https://api.polygon.io/vX/reference/financials?ticker={ticker}&limit=1&apiKey={api_key}")
+            if _r.status_code==200:
+                _res=(_r.json() or {}).get("results") or []
+                if _res: latest_filing=_res[0].get("filing_date")
+    except Exception:
+        pass
     return {"data": {"available": True, "ticker": ticker,
-                     "n_quarters": len(rows), "quarters": rows}}
+                     "n_quarters": len(rows), "quarters": rows,
+                     "latest_filing_date": latest_filing}}
 
 
 @router.get("/management/{ticker}")
