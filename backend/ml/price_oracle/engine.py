@@ -45,24 +45,55 @@ class MarketDataFetcher:
         self.ticker = ticker.upper()
     
     def fetch(self, period: str = "2y") -> Dict[str, Any]:
-        """Fetch all data needed for prediction. Returns structured dict."""
-        import yfinance as yf
-        
-        stk = yf.Ticker(self.ticker)
-        
-        # Price history — 2 years for GARCH, HMM, momentum
-        hist = stk.history(period=period)
-        if hist.empty or len(hist) < 60:
+        """Fetch all data needed for prediction from Polygon (reliable, paid).
+        Builds an OHLCV frame with the same column names yfinance produced, so all
+        downstream feature computation is unchanged. yfinance was unreliable on
+        server IPs (Yahoo blocks it), so we source price history from Polygon."""
+        import datetime as _dt
+        try:
+            from core.config import settings
+            key = getattr(settings, "POLYGON_API_KEY", "") or ""
+        except Exception:
+            import os
+            key = os.getenv("POLYGON_API_KEY", "")
+
+        end = _dt.date.today()
+        start = end - _dt.timedelta(days=760)  # ~2yr of calendar days
+        url = (f"https://api.polygon.io/v2/aggs/ticker/{self.ticker}/range/1/day/"
+               f"{start.isoformat()}/{end.isoformat()}?adjusted=true&sort=asc&limit=800&apiKey={key}")
+        import httpx
+        try:
+            r = httpx.get(url, timeout=15)
+            bars = (r.json() or {}).get("results", []) if r.status_code == 200 else []
+        except Exception as e:
+            raise ValueError(f"Polygon fetch failed for {self.ticker}: {e}")
+        if not bars or len(bars) < 60:
             raise ValueError(f"Insufficient price history for {self.ticker}")
-        
-        hist.index = pd.to_datetime(hist.index).tz_localize(None)
-        
-        # Fundamentals (point-in-time caveat applies)
-        info = stk.info or {}
-        
-        # Options chain (nearest expiry)
-        options_data = self._fetch_options(stk)
-        
+
+        hist = pd.DataFrame({
+            "Open":   [b["o"] for b in bars],
+            "High":   [b["h"] for b in bars],
+            "Low":    [b["l"] for b in bars],
+            "Close":  [b["c"] for b in bars],
+            "Volume": [b.get("v", 0) for b in bars],
+        }, index=pd.to_datetime([b["t"] for b in bars], unit="ms"))
+        hist.index = hist.index.tz_localize(None)
+
+        # Company info from Polygon reference (name/sector); graceful if missing.
+        info = {}
+        try:
+            ru = f"https://api.polygon.io/v3/reference/tickers/{self.ticker}?apiKey={key}"
+            rr = httpx.get(ru, timeout=10)
+            if rr.status_code == 200:
+                res = (rr.json() or {}).get("results", {}) or {}
+                info = {"longName": res.get("name"), "sector": res.get("sic_description"),
+                        "marketCap": res.get("market_cap")}
+        except Exception:
+            pass
+
+        # Options: not on the $29 Polygon Stocks plan (403). Degrade gracefully.
+        options_data = {}
+
         return {
             "ohlcv":   hist,
             "info":    info,
@@ -240,15 +271,15 @@ class FeatureEngine:
         # Stochastic oscillator
         low14  = self.low.rolling(14).min()
         high14 = self.high.rolling(14).max()
-        k_pct  = float(100 * (c - low14) / (high14 - low14 + 1e-10)).iloc[-1] if len(c) >= 14 else 50
+        k_pct  = float((100 * (c - low14) / (high14 - low14 + 1e-10)).iloc[-1]) if len(c) >= 14 else 50
         
         # Bollinger Band position
         bb_mid  = c.rolling(20).mean()
         bb_std  = c.rolling(20).std()
         bb_upper = bb_mid + 2 * bb_std
         bb_lower = bb_mid - 2 * bb_std
-        bb_pct   = float((c - bb_lower) / (bb_upper - bb_lower + 1e-10)).iloc[-1]
-        bb_width = float((bb_upper - bb_lower) / bb_mid).iloc[-1] * 100
+        bb_pct   = float(((c - bb_lower) / (bb_upper - bb_lower + 1e-10)).iloc[-1])
+        bb_width = float(((bb_upper - bb_lower) / bb_mid).iloc[-1]) * 100
         
         # Mean reversion strength (half-life of AR(1))
         # Ornstein-Uhlenbeck: if β close to -1 → fast mean reversion
