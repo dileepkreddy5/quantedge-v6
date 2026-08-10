@@ -101,7 +101,7 @@ async def get_quarters(ticker: str, http_request: Request,
     api_key = getattr(settings, "POLYGON_API_KEY", "") or ""
     if not api_key:
         raise HTTPException(503, "data source unavailable")
-    pq = await fetch_quarterly_financials(ticker, api_key, limit=12)
+    pq = await fetch_quarterly_financials(ticker, api_key, limit=20)
     if not pq:
         return {"data": {"available": False, "reason": "no financial data"}}
     ed = await fetch_edgar_supplement(ticker, years_back=4)
@@ -122,14 +122,35 @@ async def get_quarters(ticker: str, http_request: Request,
             return None
         return round(num / den * 100, 1)
 
+    import datetime as _dt
+    def _pe(q):
+        try: return _dt.date.fromisoformat(str(q.get("period_end")))
+        except Exception: return None
+    def _find_prior(idx, days, tol=25):
+        """Find the quarter whose period-end is ~`days` before this one (date-based,
+        so a missing/mislabeled quarter at source can never misalign the pairing)."""
+        target=_pe(mg[idx])
+        if target is None: return None
+        want=target-_dt.timedelta(days=days)
+        best,bestgap=None,tol+1
+        for j in range(len(mg)):
+            if j==idx: continue
+            pj=_pe(mg[j])
+            if pj is None: continue
+            gap=abs((pj-want).days)
+            if gap<=tol and gap<bestgap: best,bestgap=mg[j],gap
+        return best
+
     rows = []
     for i, q in enumerate(mg):
-        yoy = mg[i - 4] if i >= 4 else None
+        yoy = _find_prior(i, 365)   # same quarter, one year earlier — by DATE
+        qoq = _find_prior(i, 91)    # immediately prior quarter — by DATE
         rev, ni, oi = q.get("revenue"), q.get("net_income"), q.get("operating_income")
         rows.append({
             "period_end": str(q.get("period_end")) if q.get("period_end") else None,
             "fiscal": f"{q.get('fiscal_year')} {q.get('fiscal_period')}".strip(),
             "revenue": rev, "revenue_yoy_pct": _pct(rev, (yoy or {}).get("revenue")),
+            "revenue_qoq_pct": _pct(rev, (qoq or {}).get("revenue")),
             "gross_profit": q.get("gross_profit"),
             "gross_margin_pct": _margin(q.get("gross_profit"), rev),
             "operating_income": oi, "operating_margin_pct": _margin(oi, rev),
@@ -137,6 +158,8 @@ async def get_quarters(ticker: str, http_request: Request,
             "net_income_yoy_pct": _pct(ni, (yoy or {}).get("net_income")),
             "eps_diluted": q.get("eps_diluted"),
             "eps_yoy_pct": _pct(q.get("eps_diluted"), (yoy or {}).get("eps_diluted")),
+            "eps_qoq_pct": _pct(q.get("eps_diluted"), (qoq or {}).get("eps_diluted")),
+            "net_income_qoq_pct": _pct(ni, (qoq or {}).get("net_income")),
             "free_cash_flow": q.get("free_cash_flow"),
             "operating_cash_flow": q.get("operating_cash_flow"),
             "capex": q.get("capex"),

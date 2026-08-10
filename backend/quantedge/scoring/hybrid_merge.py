@@ -103,7 +103,16 @@ def merge_quarters(polygon_quarters: List[Any], edgar: Dict[str, List[dict]]) ->
         else:
             row["free_cash_flow"] = None
         merged.append(row)
-    merged.sort(key=lambda r: (r.get("fiscal_year") or 0, r.get("fiscal_period") or ""))
+    # Sort by the actual period-end DATE, never by Polygon's fiscal labels — those
+    # can be wrong (MSFT's Dec-2024 quarter is mislabeled/missing at source and the
+    # remaining quarters carry shifted Q-labels). The calendar date is always right.
+    # Dedupe by period_end keeping the last occurrence, so a restated filing or a
+    # newly-reported quarter cleanly replaces any stale duplicate (old data rolls off).
+    by_date={}
+    for r in merged:
+        pe=r.get("period_end")
+        if pe: by_date[pe]=r
+    merged=[by_date[k] for k in sorted(by_date.keys())]
     # Backfill invalid share counts from the most recent valid quarter (carry-forward),
     # so per-share metrics never divide by a broken share count.
     last_valid=None
