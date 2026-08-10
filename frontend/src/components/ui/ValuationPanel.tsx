@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../auth/authStore';
+import ValuationBridge from './ValuationBridge';
 
 interface Sig { id:string; label:string; weight:number; status:string; evidence:string; raw_value:number|null; score:number|null; method?:string; }
 interface Cat { id:string; label:string; weight:number; score:number|null; confidence:number; n_signals:number; n_scored:number; signals:Sig[]; }
@@ -252,8 +253,10 @@ export default function ValuationPanel({ ticker }:{ ticker:string }){
         </div>
       )}
 
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-        <span style={{fontSize:12,color:'var(--cocoa-dust)',letterSpacing:1}}>10 VALUATION CATEGORIES · {d.tree.categories.reduce((a,c)=>a+c.n_signals,0)} SIGNALS</span>
+      <ValuationBridge d={d} />
+
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8,marginTop:6}}>
+        <span style={{fontSize:11,color:'var(--cocoa)',letterSpacing:1}}>RAW SIGNALS · all {d.tree.categories.reduce((a,c)=>a+c.n_signals,0)} across 10 categories</span>
         <button onClick={()=>{const v=!allOpen;setAllOpen(v);const m:Record<string,boolean>={};d.tree.categories.forEach(c=>m[c.id]=v);setExpanded(m);}}
           style={{background:'var(--surface-2)',border:'1px solid #2a2a2a',color:'var(--cocoa-dust)',borderRadius:8,padding:'5px 12px',fontSize:11,cursor:'pointer'}}>
           {allOpen?'Collapse all':'Expand all'}</button>
