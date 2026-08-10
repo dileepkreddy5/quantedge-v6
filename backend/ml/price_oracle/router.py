@@ -174,6 +174,20 @@ Now synthesize this into actionable narrative. Be specific. Reference the actual
 
 engine = PriceOracleEngine()  # singleton
 
+def _denumpy(o):
+    """Recursively convert numpy scalar types to native Python so Pydantic can serialize.
+    The engine now uses Polygon data; some comparisons yield numpy.bool_/float64 which
+    Pydantic cannot serialize to JSON."""
+    import numpy as _np
+    if isinstance(o, dict): return {k: _denumpy(v) for k, v in o.items()}
+    if isinstance(o, (list, tuple)): return [_denumpy(v) for v in o]
+    if isinstance(o, _np.bool_): return bool(o)
+    if isinstance(o, _np.integer): return int(o)
+    if isinstance(o, _np.floating): return float(o)
+    if isinstance(o, _np.ndarray): return _denumpy(o.tolist())
+    return o
+
+
 @router.post("/predict", response_model=PredictResponse)
 async def predict(request: PredictRequest):
     """
@@ -195,6 +209,7 @@ async def predict(request: PredictRequest):
         computed = await loop.run_in_executor(
             None, engine.compute, ticker
         )
+        computed = _denumpy(computed)
     except ValueError as e:
         raise HTTPException(404, str(e))
     except Exception as e:
