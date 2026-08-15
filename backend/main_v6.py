@@ -109,7 +109,7 @@ async def _ensure_models_trained(analyzer: QuantEdgeAnalyzerV6) -> None:
         price_feed = PolygonMarketFeed(api_key=settings.POLYGON_API_KEY, redis_client=None)
         fund_feed  = PolygonFundamentalFeed(api_key=settings.POLYGON_API_KEY, redis_client=None)
 
-        price_data   = await price_feed.get_price_history("AAPL", years=10)
+        price_data   = await price_feed.get_price_history("AAPL", years=5)
         fundamentals = await fund_feed.get_fundamentals("AAPL")
 
         trainer = ModelTrainer()

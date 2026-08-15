@@ -7,7 +7,7 @@ Replaces yFinance entirely. Uses Polygon.io Starter Plus ($29/mo).
 All methods cache in Redis and retry with exponential backoff on rate limits.
 
 Classes:
-    PolygonMarketFeed      — OHLCV price history (10 years)
+    PolygonMarketFeed      — OHLCV price history (5 years — plan limit)
     PolygonFundamentalFeed — Financial ratios and fundamentals
     PolygonOptionsFeed     — Full options chain with Greeks
     PolygonNewsFeed        — News articles for FinBERT sentiment
@@ -122,7 +122,7 @@ class PolygonMarketFeed:
     async def get_price_history(
         self,
         ticker: str,
-        years: int = 10,
+        years: int = 5,   # Polygon Stocks Starter serves 5 years of aggregates. The default was 10, so every caller requested 3650 days and silently received ~1825 — no error, just half the window the code and the UI both claimed.
     ) -> pd.DataFrame:
         """
         Fetch daily OHLCV for `ticker` going back `years` years.

@@ -72,7 +72,7 @@ class MarketDataFeed:
     async def get_price_history(
         self,
         ticker: str,
-        years: int = 10,
+        years: int = 5,   # plan limit: Polygon Starter serves 5y of aggregates
         interval: str = "1d",
     ) -> pd.DataFrame:
         """

@@ -205,7 +205,7 @@ export default function Landing() {
           <span>✓ NO LOGIN TO USE</span>
           <span>✓ 8 ML MODELS</span>
           <span>✓ 200+ SIGNALS</span>
-          <span>✓ 10Y PRICE HISTORY</span>
+          <span>✓ 5Y PRICE HISTORY</span>
           <span>✓ OPTIONS GEX</span>
           <span>✓ REAL-TIME STREAM</span>
         </div>
@@ -272,7 +272,7 @@ export default function Landing() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 2 }}>
             {[
               { n: '01', title: 'ENTER ANY TICKER', desc: 'Type any US stock symbol. No account needed. Completely free.' },
-              { n: '02', title: '45 SECONDS', desc: '8 ML models run in parallel. 200+ features computed. 10 years of price history analyzed.' },
+              { n: '02', title: '45 SECONDS', desc: '12 gradient-boosted models across 6 horizons. 152 features. 5 years of price history analyzed.' },
               { n: '03', title: 'INSTITUTIONAL REPORT', desc: 'ML forecasts, regime state, risk metrics, sentiment scores, options flow. The full picture.' },
             ].map((s, i) => (
               <div key={s.n} style={{

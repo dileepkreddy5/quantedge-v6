@@ -95,7 +95,7 @@ class QuantEdgeAnalyzer:
             return {}
 
         data_tasks = await asyncio.gather(
-            self.market_feed.get_price_history(ticker, years=10),
+            self.market_feed.get_price_history(ticker, years=5),
             self.fund_feed.get_fundamentals(ticker),
             self.options_feed.get_chain(ticker) if include_options else _empty_df(),
             self.sentiment_feed.get_news_and_reddit(ticker) if include_sentiment else _empty_dict(),

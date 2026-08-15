@@ -130,7 +130,7 @@ export default function Dashboard() {
 
     // Progress messages
     const msgs = [
-      'Fetching 10Y price history...',
+      'Fetching 5Y price history...',
       'Computing 200+ features...',
       'Running GARCH volatility model...',
       'Running HMM regime classifier...',
