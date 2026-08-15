@@ -9,6 +9,7 @@ import Landing from './pages/Landing';
 import Dashboard from './pages/Dashboard';
 import Screener from './pages/Screener';
 import AscentRadar from './pages/AscentRadar';
+import Methodology from './pages/Methodology';
 import Login from './pages/Login';
 import Research from './pages/Research';
 import Multibagger from './pages/Multibagger';
@@ -36,6 +37,7 @@ export default function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/screener"  element={<Screener />} />
         <Route path="/ascent"    element={<AscentRadar />} />
+        <Route path="/methodology" element={<Methodology />} />
         <Route path="/login"     element={<Login />} />
         <Route path="/research"  element={<Research />} />
         <Route path="/multibagger" element={<Multibagger />} />

@@ -7,6 +7,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AscentTeaser from './AscentTeaser';
+import LiveTrackers from '../components/ui/LiveTrackers';
 
 const GRAIN = `url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='3' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`;
 
@@ -96,6 +97,11 @@ export default function Landing() {
               fontFamily: "'Fira Code', monospace", fontSize: 10, letterSpacing: 2,
               padding: '7px 4px', cursor: 'pointer', fontWeight: 700,
             }}>↻ REBOUND</button>
+            <button className="qe-hide-mobile" onClick={() => navigate('/methodology')} style={{
+              background: 'none', border: 'none', color: '#9d8b7a',
+              fontFamily: "'Fira Code', monospace", fontSize: 10, letterSpacing: 2,
+              padding: '7px 4px', cursor: 'pointer', fontWeight: 700,
+            }}>§ METHODOLOGY</button>
             <button onClick={() => navigate('/login')} style={{
               background: 'none', border: '1px solid rgba(212,149,108,0.3)',
               color: '#d4c4b0', fontFamily: "'Fira Code', monospace",
@@ -214,6 +220,9 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* Live scan board — real rows from the nightly scans */}
+      <LiveTrackers />
+
       {/* Ascent Radar teaser */}
       <section style={{ position: 'relative', zIndex: 1, padding: '0 4rem' }}>
         <AscentTeaser />
@@ -227,7 +236,7 @@ export default function Landing() {
               THE ENGINE
             </div>
             <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 48, color: '#f4e8d8', letterSpacing: 2, margin: 0 }}>
-              8 INSTITUTIONAL ML MODELS
+              THE MODEL STACK
             </h2>
           </div>
 
@@ -256,35 +265,6 @@ export default function Landing() {
                   {m.name}
                 </div>
                 <div style={{ fontSize: 13, color: '#9d8b7a', lineHeight: 1.6 }}>{m.desc}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── How it works ── */}
-      <section style={{ position: 'relative', zIndex: 1, padding: '80px 4rem' }}>
-        <div style={{ maxWidth: 1400, margin: '0 auto' }}>
-          <div style={{ marginBottom: 48 }}>
-            <div style={{ fontFamily: "'Fira Code', monospace", fontSize: 9, color: '#9d8b7a', letterSpacing: 4, marginBottom: 12 }}>HOW IT WORKS</div>
-            <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 48, color: '#f4e8d8', letterSpacing: 2, margin: 0 }}>
-              THREE STEPS
-            </h2>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 2 }}>
-            {[
-              { n: '01', title: 'ENTER ANY TICKER', desc: 'Type any US stock symbol. No account needed. Completely free.' },
-              { n: '02', title: '45 SECONDS', desc: '12 gradient-boosted models across 6 horizons. 152 features. 5 years of price history analyzed.' },
-              { n: '03', title: 'INSTITUTIONAL REPORT', desc: 'ML forecasts, regime state, risk metrics, sentiment scores, options flow. The full picture.' },
-            ].map((s, i) => (
-              <div key={s.n} style={{
-                padding: '40px 32px',
-                borderLeft: i === 0 ? '4px solid #daa520' : '1px solid rgba(212,149,108,0.15)',
-              }}>
-                <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 64, color: '#2d1e18', lineHeight: 1, marginBottom: 16 }}>{s.n}</div>
-                <div style={{ fontFamily: "'Fira Code', monospace", fontSize: 12, color: '#daa520', letterSpacing: 2, marginBottom: 10 }}>{s.title}</div>
-                <div style={{ fontSize: 14, color: '#9d8b7a', lineHeight: 1.7 }}>{s.desc}</div>
               </div>
             ))}
           </div>
