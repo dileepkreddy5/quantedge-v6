@@ -10,7 +10,7 @@ This is the metric that actually means something: "on dates the model never saw,
 how well did its ranking of stocks predict their forward-return ranking?"
 
 Outputs to MODEL_DIR/panel/:
-  - xgb_model.joblib, lgb_model.joblib, scaler.joblib
+  - xgb_{h}d.joblib, lgb_{h}d.joblib per horizon (tree models; no scaler needed)
   - feature_names.json (the cross-sectional-rank features used)
   - training_report.json (OOS rank-IC by horizon, hit rate, IC decay, SHAP top drivers)
 
@@ -256,23 +256,51 @@ def main():
         _per_model_ic = {"xgboost": round(float(xgb_ic), 4),
                          "lightgbm": round(float(lgb_ic), 4)}
 
-        # headline IC is measured only on the held-out scoring half
-        ens_ic, ens_ic_std, ens_nd = cross_sectional_rank_ic(
-            dates_val[_scorem], ens_val[_scorem], y_val[_scorem], horizon_days=h)
-
-        # Skill is measured on EVERY date in the scoring half, with the standard
-        # error widened by Newey-West to absorb the overlap. Dropping overlapping
-        # dates instead left 1 observation at 63d/126d/252d and a t-stat of 0.00.
-        _sdates = np.sort(np.unique(dates_val[_scorem]))
+        # ── ONE IC series per model, all on the same scoring half ──
+        # Every published figure for this horizon derives from these three series.
+        # Previously the headline IC came from a thinned subsample while the t-stat
+        # came from the unthinned one, so the two could disagree in sign (2wk did:
+        # IC +0.059 with t -0.67). Worse, the per-model ICs were thinned over the
+        # FULL validation window, which at 252d averaged one or two Spearman
+        # coefficients and published +0.42 as a model's out-of-sample skill.
+        _xgb_ics, _ = per_date_ics(dates_val[_scorem], xgb_val[_scorem], y_val[_scorem])
+        _lgb_ics, _ = per_date_ics(dates_val[_scorem], lgb_val[_scorem], y_val[_scorem])
         date_ics, _ic_dates = per_date_ics(dates_val[_scorem], ens_val[_scorem], y_val[_scorem])
+        xgb_ic_s = float(np.mean(_xgb_ics)) if _xgb_ics else 0.0
+        lgb_ic_s = float(np.mean(_lgb_ics)) if _lgb_ics else 0.0
+        ens_ic = float(np.mean(date_ics)) if date_ics else 0.0
+        ens_ic_std = float(np.std(date_ics)) if date_ics else 0.0
         hit_rate = float(np.mean([1 if x > 0 else 0 for x in date_ics])) if date_ics else 0.0
+        n_dates_used = len(date_ics)
+
         _step_days = 5
-        if len(_sdates) > 1:
-            _gaps = [(pd.Timestamp(_sdates[i+1]) - pd.Timestamp(_sdates[i])).days for i in range(len(_sdates)-1)]
+        if len(_ic_dates) > 1:
+            _gaps = [(pd.Timestamp(_ic_dates[i+1]) - pd.Timestamp(_ic_dates[i])).days
+                     for i in range(len(_ic_dates)-1)]
             _step_days = max(1, int(np.median(_gaps)))
         _lag = int(np.ceil(h / _step_days))
         t_stat, _se, _hac_ok = hac_t_stat(date_ics, _lag)
-        n_dates_used = len(date_ics)
+
+        # Independent subsample taken BY INDEX from that same series, so it is a
+        # subset of the reported dates rather than a separate measurement. The old
+        # `horizon_days > 5` guard skipped h=5 on a 1-day panel and reported all 85
+        # dates as independent; thinning now triggers whenever the forward window
+        # exceeds the sampling step.
+        _keep_idx, _last = [], None
+        for _i, _d in enumerate(_ic_dates):
+            if _last is None or (pd.Timestamp(_d) - pd.Timestamp(_last)).days >= max(h, _step_days):
+                _keep_idx.append(_i); _last = _d
+        ens_nd = len(_keep_idx)
+        MIN_INDEP = 5
+        # Below 5 windows a mean of Spearman coefficients is not an IC. 252d had
+        # exactly one. Report null and say why rather than print 0.60.
+        ic_independent = (round(float(np.mean([date_ics[i] for i in _keep_idx])), 4)
+                          if ens_nd >= MIN_INDEP else None)
+
+        # The weights serving must reuse. Reconstructing them from the reported
+        # per-model ICs gave a different ensemble than the one measured here.
+        _wtot = _wx + _wl
+        _wxn, _wln = (0.5, 0.5) if _wtot <= 0 else (_wx / _wtot, _wl / _wtot)
 
         joblib.dump(xgb, OUT_DIR / f"xgb_{h}d.joblib")
         joblib.dump(lgb, OUT_DIR / f"lgb_{h}d.joblib")
@@ -290,8 +318,13 @@ def main():
         reliable = bool(_hac_ok and abs(t_stat) >= MIN_T and ens_ic > 0)
         horizon_reports[str(h)] = {
             "horizon_label": HORIZON_LABELS[h],
-            "oos_rank_ic": {"xgboost": round(xgb_ic,4), "lightgbm": round(lgb_ic,4), "ensemble": round(ens_ic,4)},
-            "per_model_ic": _per_model_ic,
+            "ic_all_dates": {"xgboost": round(xgb_ic_s,4), "lightgbm": round(lgb_ic_s,4), "ensemble": round(ens_ic,4)},
+            "ic_independent": ic_independent,
+            "independent_measurable": bool(ens_nd >= MIN_INDEP),
+            "blend_weights": {"xgboost": round(_wxn,4), "lightgbm": round(_wln,4)},
+            # DEPRECATED alias for consumers of the old schema; equals ic_all_dates.
+            "oos_rank_ic": {"xgboost": round(xgb_ic_s,4), "lightgbm": round(lgb_ic_s,4), "ensemble": round(ens_ic,4)},
+            "per_model_ic": {"xgboost": round(xgb_ic_s,4), "lightgbm": round(lgb_ic_s,4)},
             "xgb_lgb_pred_corr": _pred_corr,
             "ic_std": round(ens_ic_std,4),
             "n_independent_val_dates": ens_nd,
@@ -303,16 +336,19 @@ def main():
             "n_train": int(train_mask.sum()), "n_val": int(val_mask.sum()),
             "reliable": reliable,
             "confidence_note": (
-                f"Validated: held-out rank-IC {ens_ic:+.3f}, Newey-West t={t_stat:+.2f} across {n_dates_used} scoring dates (overlap lag {_lag})."
+                f"Validated: held-out rank-IC {ens_ic:+.3f}, Newey-West t={t_stat:+.2f} across all {n_dates_used} scoring dates (overlap lag {_lag}); "
+                f"{ens_nd} of those windows are non-overlapping."
                 if reliable else
-                f"Not validated: held-out rank-IC {ens_ic:+.3f}, Newey-West t={t_stat:+.2f} across {n_dates_used} scoring dates. "
+                f"Not validated: held-out rank-IC {ens_ic:+.3f}, Newey-West t={t_stat:+.2f} across all {n_dates_used} scoring dates. "
+                + (f"Only {ens_nd} non-overlapping window(s) fit in this validation period, so the independent estimate is not measurable. "
+                   if ens_nd < MIN_INDEP else f"{ens_nd} non-overlapping windows give {ic_independent:+.3f}. ")
                 + ("" if _hac_ok else f"The {h}-day window overlaps {_lag} consecutive samples and {n_dates_used} dates is too short for that correction to be stable — this horizon cannot be measured on a 5-year price history. ")
                 + (f"Needs |t|>=2 (has {abs(t_stat):.2f}). " if _hac_ok and ens_ic > 0 else "")
                 + (f"IC is negative, so the ranking was inverted on held-out data. " if ens_ic <= 0 else "")
                 + f"Treat the {HORIZON_LABELS[h]} figure as directional only."),
         }
         _tag = "OK " if reliable else "LOW"
-        logger.info(f"  [{HORIZON_LABELS[h]:>4} / {h:3}d] {_tag} held-out rank-IC {ens_ic:+.4f} | NW t {t_stat:+.2f} (lag {_lag}, {n_dates_used} dates, stable={_hac_ok}) | {_blend_desc}")
+        logger.info(f"  [{HORIZON_LABELS[h]:>4} / {h:3}d] {_tag} rank-IC {ens_ic:+.4f} on all {n_dates_used} dates | NW t {t_stat:+.2f} (lag {_lag}, stable={_hac_ok}) | indep {ens_nd}w " + (f"{ic_independent:+.4f}" if ic_independent is not None else "n/a") + f" | {_blend_desc}")
 
         # SHAP from the 21d (primary) model
         if h == 21:
@@ -347,7 +383,7 @@ def main():
         r = horizon_reports.get(str(h))
         if r:
             tag = "reliable" if r.get("reliable") else "LOW-CONF (insufficient independent windows)"
-            logger.info(f"  {r['horizon_label']:>4}: rank-IC {r['oos_rank_ic']['ensemble']:+.4f} | t {r['ic_t_stat']:+.2f} | indep_dates {r['n_independent_val_dates']} | {tag}")
+            logger.info(f"  {r['horizon_label']:>4}: rank-IC {r['ic_all_dates']['ensemble']:+.4f} (all {r['n_scoring_dates']}d) | t {r['ic_t_stat']:+.2f} | indep {r['n_independent_val_dates']}w | {tag}")
     logger.info(f"  Top drivers (21d): {', '.join(d['feature'] for d in shap_drivers_21d[:5])}")
     logger.info(f"  Models saved to: {OUT_DIR}")
     logger.info("=" * 64)

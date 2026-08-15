@@ -155,9 +155,18 @@ class PanelPredictor:
                 # XGB (-0.129) and LGB (+0.164) produced -0.098, worse than
                 # either component. Serving a fixed 50/50 meant the number on
                 # screen came from a different ensemble than the IC beside it.
-                _ic = (rep_h.get("oos_rank_ic") or {})
-                _wx = max(float(_ic.get("xgboost") or 0.0), 0.0)
-                _wl = max(float(_ic.get("lightgbm") or 0.0), 0.0)
+                # Use the weights the TRAINER actually blended with. Rebuilding
+                # them from the reported per-model ICs produced a different
+                # ensemble than the one the IC was measured on. Older reports
+                # lack blend_weights, so fall back to the previous behaviour.
+                _bw = rep_h.get("blend_weights")
+                if _bw:
+                    _wx = max(float(_bw.get("xgboost") or 0.0), 0.0)
+                    _wl = max(float(_bw.get("lightgbm") or 0.0), 0.0)
+                else:
+                    _ic = (rep_h.get("ic_all_dates") or rep_h.get("oos_rank_ic") or {})
+                    _wx = max(float(_ic.get("xgboost") or 0.0), 0.0)
+                    _wl = max(float(_ic.get("lightgbm") or 0.0), 0.0)
                 if _wx + _wl > 0:
                     ens = (_wx * xp + _wl * lp) / (_wx + _wl)
                     _blend = f"IC-weighted {_wx/(_wx+_wl):.0%}/{_wl/(_wx+_wl):.0%}"
@@ -170,7 +179,9 @@ class PanelPredictor:
                     "xgb_pct": round(xp * 100, 3),
                     "lgb_pct": round(lp * 100, 3),
                     "agreement": round(1.0 - abs(xp - lp) / (abs(ens) + 1e-6), 3) if ens != 0 else None,
-                    "oos_rank_ic": rep_h.get("oos_rank_ic", {}).get("ensemble"),
+                    "oos_rank_ic": (rep_h.get("ic_all_dates") or rep_h.get("oos_rank_ic") or {}).get("ensemble"),
+                    "ic_independent": rep_h.get("ic_independent"),
+                    "independent_measurable": rep_h.get("independent_measurable"),
                     "ic_hit_rate": rep_h.get("ic_hit_rate"),
                     "ic_t_stat": rep_h.get("ic_t_stat"),
                     "n_independent_val_dates": rep_h.get("n_independent_val_dates"),
