@@ -11,14 +11,15 @@ import AscentTeaser from './AscentTeaser';
 const GRAIN = `url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='3' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`;
 
 const MODELS = [
-  { icon: '🧠', name: 'LSTM + TFT',      desc: 'Deep learning price forecasts across 5 horizons' },
-  { icon: '🌡', name: 'HMM REGIME',      desc: '5-state market regime detection in real time' },
+  { icon: '🧠', name: 'PANEL ENSEMBLE',  desc: 'XGBoost + LightGBM across 6 horizons, 152 features, retrained nightly on 528 tickers' },
+  { icon: '🌡', name: 'HMM REGIME',      desc: 'Hidden Markov market-state classification with confidence' },
   { icon: '📊', name: 'GJR-GARCH',       desc: 'Asymmetric volatility — VaR, CVaR, tail risk' },
-  { icon: '💬', name: 'FINBERT NLP',     desc: 'SEC filings, Reddit & news sentiment signals' },
-  { icon: '⚙',  name: 'OPTIONS GEX',    desc: 'Gamma exposure, vol surface, dealer flows' },
-  { icon: '🎲', name: 'MONTE CARLO',     desc: '100K Merton jump-diffusion paths' },
+  { icon: '💬', name: 'FINBERT NLP',     desc: 'News sentiment, weighted by ticker attribution' },
+  { icon: '📈', name: 'KALMAN TREND',    desc: 'Trend vs mean-reversion extracted from noisy prices' },
+  { icon: '🎲', name: 'MONTE CARLO',     desc: '10,000 simulated paths with fat-tailed Student-t innovations' },
   { icon: '📐', name: 'TRIPLE BARRIER',  desc: 'Meta-labeling for ML signal quality' },
-  { icon: '🛡', name: 'RISK ENGINE',     desc: 'Drawdown, CVaR, Kelly, portfolio optimization' },
+  { icon: '🔮', name: 'PRICE ORACLE',    desc: 'GARCH + Monte Carlo + Kelly sizing forecast engine' },
+  { icon: '🛡', name: 'RISK ENGINE',     desc: 'Drawdown governor, CVaR, Kelly, position sizing' },
 ];
 
 const TICKERS = ['AAPL','NVDA','TSLA','SPY','QQQ','MSFT','AMZN','META','GOOGL','BRK-B'];
@@ -149,8 +150,10 @@ export default function Landing() {
           fontSize: 18, color: '#9d8b7a', maxWidth: 540,
           lineHeight: 1.7, marginBottom: 48,
         }}>
-          8 ML models. 200+ signals. GJR-GARCH volatility, HMM regime detection,
-          FinBERT sentiment, Monte Carlo risk — the same tools used by quant hedge funds.
+          507 live signals across 23 analysis tabs. 12 gradient-boosted models
+          retrained nightly. GJR-GARCH volatility, HMM regime detection,
+          FinBERT sentiment, Monte Carlo risk — with every forecast reporting its
+          own out-of-sample skill, including when that skill is nil.
           <span style={{ color: '#d4c4b0' }}> Free. No login required.</span>
         </p>
 
@@ -203,10 +206,10 @@ export default function Landing() {
           display: 'flex', gap: 24, flexWrap: 'wrap',
         }}>
           <span>✓ NO LOGIN TO USE</span>
-          <span>✓ 8 ML MODELS</span>
-          <span>✓ 200+ SIGNALS</span>
+          <span>✓ 12 PANEL MODELS</span>
+          <span>✓ 507 LIVE SIGNALS</span>
+          <span>✓ 23 ANALYSIS TABS</span>
           <span>✓ 5Y PRICE HISTORY</span>
-          <span>✓ OPTIONS GEX</span>
           <span>✓ REAL-TIME STREAM</span>
         </div>
       </section>
