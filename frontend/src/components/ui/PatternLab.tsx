@@ -14,11 +14,14 @@ const C = { s0: '#100a07', s2: '#241610', b1: '#3a2920', b2: '#4a3428',
 const mono = "'Fira Code',monospace";
 
 interface Dist { n: number; positive_pct: number; median_pct: number; mean_pct: number; p10_pct: number; p90_pct: number; }
-interface Analog { ticker: string; start: string; similarity_pct: number; trajectory: number[];
+interface Analog { ticker: string; start: string; end?: string | null; duration_sessions?: number;
+                   regime?: string; volume_slope?: number; similarity_pct: number; trajectory: number[];
                    fwd: Record<string, number | null>; }
 interface Result {
   ticker: string; as_of: string; window_days: number; episodes: number;
   distributions: Record<string, Dist>; base_rates: Record<string, Dist>;
+  excess_vs_spy?: Record<string, Dist | null>;
+  method?: Record<string, string>; episode_date_range?: [string, string];
   splits: { volume_slope: Record<string, Dist | null>; regime: Record<string, Dist | null> };
   analogs: Analog[]; query_trajectory: number[]; caveat: string;
 }
@@ -42,10 +45,10 @@ const Overlay: React.FC<{ q: number[]; analogs: Analog[] }> = ({ q, analogs }) =
   );
 };
 
-const DistRow: React.FC<{ label: string; d: Dist; base?: Dist | null }> = ({ label, d, base }) => {
+const DistRow: React.FC<{ label: string; d: Dist; base?: Dist | null; ex?: Dist | null }> = ({ label, d, base, ex }) => {
   const edge = base ? d.positive_pct - base.positive_pct : null;
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '54px 1fr auto auto auto', gap: 14,
+    <div style={{ display: 'grid', gridTemplateColumns: '54px 1fr auto auto auto auto', gap: 14,
                   alignItems: 'center', padding: '10px 12px', borderBottom: `1px solid rgba(58,41,32,0.5)` }}>
       <span style={{ fontFamily: mono, fontSize: 12, color: C.cream, fontWeight: 700 }}>{label}</span>
       <div style={{ position: 'relative', height: 16, background: 'rgba(0,0,0,0.3)', borderRadius: 3 }}>
@@ -69,6 +72,9 @@ const DistRow: React.FC<{ label: string; d: Dist; base?: Dist | null }> = ({ lab
       <span style={{ fontFamily: mono, fontSize: 10.5, color: C.dust }}>med {d.median_pct >= 0 ? '+' : ''}{d.median_pct}%</span>
       <span style={{ fontFamily: mono, fontSize: 10, color: edge == null ? C.cocoa : Math.abs(edge) < 3 ? C.cocoa : edge > 0 ? C.bull : C.bear }}>
         {edge == null ? '' : `${edge >= 0 ? '+' : ''}${edge.toFixed(1)} vs base`}
+      </span>
+      <span style={{ fontFamily: mono, fontSize: 10, color: ex == null ? C.cocoa : ex.positive_pct >= 50 ? C.bull : C.bear }}>
+        {ex == null ? '' : `${ex.positive_pct}% beat SPY · med ${ex.median_pct >= 0 ? '+' : ''}${ex.median_pct}%`}
       </span>
     </div>
   );
@@ -121,14 +127,34 @@ const PatternLab: React.FC<{ ticker: string }> = ({ ticker }) => {
                 {res.ticker} LAST {res.window_days} SESSIONS (GOLD) VS {res.analogs.length} CLOSEST EPISODES
               </div>
               <Overlay q={res.query_trajectory} analogs={res.analogs} />
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>
-                {res.analogs.slice(0, 8).map(a => (
-                  <span key={a.ticker + a.start} title={`fwd 20d: ${a.fwd['20d'] ?? '—'}%`}
-                        style={{ fontFamily: mono, fontSize: 9, padding: '4px 8px',
-                                 border: `1px solid ${C.b1}`, borderRadius: 3, color: C.latte }}>
-                    {a.ticker} '{a.start.slice(2, 7)} · {a.similarity_pct}%
-                  </span>
-                ))}
+              <div style={{ marginTop: 14, overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: mono, fontSize: 10 }}>
+                  <thead><tr>
+                    {['TICKER','FORMED','SIM','REGIME','VOL SLOPE','+5D','+20D','+60D'].map(h => (
+                      <th key={h} style={{ textAlign: 'left', padding: '5px 8px', color: C.cocoa,
+                                           letterSpacing: 1, fontSize: 8.5, fontWeight: 500,
+                                           borderBottom: `1px solid ${C.b1}` }}>{h}</th>
+                    ))}
+                  </tr></thead>
+                  <tbody>
+                    {res.analogs.slice(0, 10).map(a => (
+                      <tr key={a.ticker + a.start}>
+                        <td style={{ padding: '6px 8px', color: C.cream, fontWeight: 700 }}>{a.ticker}</td>
+                        <td style={{ padding: '6px 8px', color: C.dust }}>{a.start}{a.end ? ` → ${a.end}` : ''}</td>
+                        <td style={{ padding: '6px 8px', color: C.gold }}>{a.similarity_pct}%</td>
+                        <td style={{ padding: '6px 8px', color: C.latte, fontSize: 9 }}>{(a.regime || '—').replace(/_/g, ' ')}</td>
+                        <td style={{ padding: '6px 8px', color: (a.volume_slope ?? 0) >= 0 ? C.bull : C.bear }}>
+                          {a.volume_slope != null ? (a.volume_slope >= 0 ? '+' : '') + a.volume_slope.toFixed(2) : '—'}</td>
+                        {(['5d','20d','60d'] as const).map(h => (
+                          <td key={h} style={{ padding: '6px 8px',
+                                               color: a.fwd[h] == null ? C.cocoa : (a.fwd[h]! >= 0 ? C.bull : C.bear) }}>
+                            {a.fwd[h] == null ? '—' : `${a.fwd[h]! >= 0 ? '+' : ''}${a.fwd[h]}%`}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
 
@@ -138,7 +164,8 @@ const PatternLab: React.FC<{ ticker: string }> = ({ ticker }) => {
               </div>
               {Object.entries(res.distributions).map(([h, d]) => d && (
                 <DistRow key={h} label={`+${h}`} d={d}
-                         base={res.base_rates[h.replace('d', '')] || (res.base_rates as any)[parseInt(h)]} />
+                         base={res.base_rates[h.replace('d', '')] || (res.base_rates as any)[parseInt(h)]}
+                         ex={res.excess_vs_spy?.[h] ?? null} />
               ))}
             </div>
           </div>
@@ -175,6 +202,12 @@ const PatternLab: React.FC<{ ticker: string }> = ({ ticker }) => {
           </div>
 
           <div style={{ marginTop: 12, fontFamily: mono, fontSize: 10, color: C.cocoa, lineHeight: 1.7 }}>
+            {res.method && (
+              <div style={{ marginBottom: 6 }}>
+                METHOD: {res.method.normalization} · {res.method.stage1} → {res.method.stage2} · {res.method.dedup}.
+                {res.episode_date_range && ` Episodes span ${res.episode_date_range[0]} → ${res.episode_date_range[1]}.`}
+              </div>
+            )}
             {res.caveat}
           </div>
         </>
