@@ -23,6 +23,7 @@ import {
 import PriceChart from '../components/charts/PriceChart';
 import Screener from './Screener';
 import OverviewV2 from './overview_v2/OverviewV2';
+import PatternLab from '../components/ui/PatternLab';
 import NewsPanel from '../components/ui/NewsPanel';
 import RiskPanel from '../components/ui/RiskPanel';
 import QuartersPanel from '../components/ui/QuartersPanel';
@@ -46,6 +47,7 @@ import BusinessPanel from '../components/ui/BusinessPanel';
 const TABS = [
   { id: 'overview',     label: '⬡ OVERVIEW' },
   { id: 'ml',          label: '🧠 ML MODELS' },
+  { id: 'patterns',    label: '🧬 PATTERN LAB' },
   { id: 'forecast',    label: '🔮 FORECAST' },
   { id: 'financial',   label: '💎 FINANCIAL' },
   { id: 'valuation',   label: '⚖️ VALUATION' },
@@ -374,6 +376,7 @@ export default function Dashboard() {
             <div style={{ animation: 'fadeIn 0.3s ease' }}>
               {activeTab === 'overview'    && <OverviewV2 data={data} ticker={ticker} onAnalyze={runAnalysis} />}
               {activeTab === 'ml'          && <MLModelsPanel data={data} />}
+              {activeTab === 'patterns'    && <PatternLab ticker={ticker} />}
               {activeTab === 'volatility'  && <VolatilityPanel data={data} />}
               {activeTab === 'regime'      && <RegimePanel data={data} />}
               {activeTab === 'news'        && <NewsPanel ticker={ticker} data={data} />}
