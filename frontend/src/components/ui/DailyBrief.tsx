@@ -58,10 +58,12 @@ const CallRow: React.FC<{ c: Call; onClick: () => void }> = ({ c, onClick }) => 
 const DailyBrief: React.FC = () => {
   const navigate = useNavigate();
   const [d, setD] = useState<Brief | null>(null);
+  const [idx, setIdx] = useState<{ symbol: string; label: string; change_pct: number }[]>([]);
 
   useEffect(() => {
     (async () => {
       try { const r = await api.get('/api/v6/brief/today'); if (r.data?.available) setD(r.data); } catch {}
+      try { const m = await api.get('/api/v6/brief/indices'); if (m.data?.indices?.length) setIdx(m.data.indices); } catch {}
     })();
   }, []);
 
@@ -104,6 +106,14 @@ const DailyBrief: React.FC = () => {
               {rg.kalman_trend >= 0 ? 'RISING' : 'FALLING'} {sig(rg.kalman_trend)}
             </div>
           </div>
+          {idx.map(m => (
+            <div key={m.symbol}>
+              <div style={{ fontFamily: mono, fontSize: 8.5, letterSpacing: 1.4, color: C.cocoa, marginBottom: 5 }}>{m.label}</div>
+              <div style={{ fontFamily: mono, fontSize: 15, color: m.change_pct >= 0 ? C.bull : C.bear }}>
+                {m.change_pct >= 0 ? '+' : ''}{m.change_pct.toFixed(2)}%
+              </div>
+            </div>
+          ))}
           {d.performance?.hit_rate != null && (
             <div>
               <div style={{ fontFamily: mono, fontSize: 8.5, letterSpacing: 1.4, color: C.cocoa, marginBottom: 5 }}>MODEL HIT RATE (21D)</div>

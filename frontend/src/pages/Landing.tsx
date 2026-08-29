@@ -7,7 +7,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import SystemBar from '../components/ui/SystemBar';
-import LiveTape from '../components/ui/LiveTape';
 import DailyBrief from '../components/ui/DailyBrief';
 import PipelinePulse from '../components/ui/PipelinePulse';
 import CommandSearch from '../components/ui/CommandSearch';
@@ -160,29 +159,6 @@ export default function Landing() {
           <span style={{ color: '#d4c4b0' }}> Free. No login required.</span>
         </p>
 
-        {/* CTA row */}
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 48 }}>
-          <button onClick={() => go()} style={{
-            background: 'linear-gradient(135deg,#daa520,#b8860b)',
-            border: 'none', color: '#1a0f0a',
-            fontFamily: "'Fira Code', monospace", fontWeight: 700,
-            fontSize: 12, letterSpacing: 3, padding: '16px 36px',
-            borderRadius: 4, cursor: 'pointer',
-            boxShadow: '0 8px 30px rgba(218,165,32,0.25)',
-            transition: 'all 0.2s',
-          }}>
-            ANALYZE A STOCK →
-          </button>
-          <button onClick={() => go('SPY')} style={{
-            background: 'none', border: '1px solid rgba(212,149,108,0.3)',
-            color: '#d4c4b0', fontFamily: "'Fira Code', monospace",
-            fontSize: 11, letterSpacing: 2, padding: '16px 28px',
-            borderRadius: 4, cursor: 'pointer',
-          }}>
-            TRY SPY DEMO
-          </button>
-        </div>
-
         {/* Command search */}
         <CommandSearch />
 
@@ -219,8 +195,6 @@ export default function Landing() {
           <span>✓ REAL-TIME STREAM</span>
         </div>
       </section>
-
-      <LiveTape />
 
       {/* The machine's own morning note */}
       <DailyBrief />

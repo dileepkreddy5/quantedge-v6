@@ -12,6 +12,32 @@ from fastapi import APIRouter, Request
 router = APIRouter()
 
 
+@router.get("/brief/indices")
+async def brief_indices(request: Request):
+    """Index proxies via ETFs on the current Polygon plan: SPY (S&P 500),
+    QQQ (Nasdaq-100), XLK (tech sector). Labeled as proxies, not the
+    composites — index feeds are a different Polygon product."""
+    import httpx, os
+    key = os.getenv("POLYGON_API_KEY", "")
+    out = []
+    async with httpx.AsyncClient(timeout=10) as cx:
+        for sym, label in (("SPY", "S&P 500 (SPY)"),
+                           ("QQQ", "NASDAQ-100 (QQQ)"),
+                           ("XLK", "TECH SECTOR (XLK)")):
+            try:
+                r = await cx.get(
+                    f"https://api.polygon.io/v2/aggs/ticker/{sym}/prev",
+                    params={"apiKey": key})
+                res = (r.json().get("results") or [None])[0]
+                if res and res.get("c") and res.get("o"):
+                    chg = (res["c"] - res["o"]) / res["o"]
+                    out.append({"symbol": sym, "label": label,
+                                "close": res["c"], "change_pct": round(chg * 100, 2)})
+            except Exception:
+                continue
+    return {"indices": out, "note": "previous session, ETF proxies"}
+
+
 @router.get("/brief/today")
 async def brief_today(request: Request):
     pool = getattr(request.app.state, "db", None)
