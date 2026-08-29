@@ -18,7 +18,9 @@ _LIB = PatternLibrary("/app/models/patterns")
 
 @router.get("/patterns/analogs/{ticker}")
 async def pattern_analogs(ticker: str, request: Request,
-                          window: int = Query(60, description="20 or 60")):
+                          window: int = Query(60, description="20 or 60"),
+                          volume: str | None = Query(None), vola: str | None = Query(None),
+                          regime: str | None = Query(None), extreme: str | None = Query(None)):
     if window not in (20, 60):
         raise HTTPException(status_code=422, detail="window must be 20 or 60")
     tk = ticker.upper().strip()
@@ -30,8 +32,8 @@ async def pattern_analogs(ticker: str, request: Request,
         raise HTTPException(status_code=503, detail="database not connected")
 
     rows = await pool.fetch(
-        "SELECT d, c FROM daily_bars WHERE ticker=$1 ORDER BY d DESC LIMIT $2",
-        tk, window + 5)
+        "SELECT d, c, v FROM daily_bars WHERE ticker=$1 ORDER BY d DESC LIMIT $2",
+        tk, max(window + 5, 320))
     if len(rows) < window:
         raise HTTPException(status_code=404,
                             detail=f"{tk}: only {len(rows)} bars on record; "
@@ -40,12 +42,78 @@ async def pattern_analogs(ticker: str, request: Request,
     closes = np.array([r["c"] for r in rows], dtype=np.float64)
     q_end: date = rows[-1]["d"]
 
-    res = _LIB.query(closes, tk, window, q_end)
+    fl = {k: v for k, v in (("volume", volume), ("vola", vola),
+                            ("regime", regime), ("extreme", extreme)) if v}
+    res = _LIB.query(closes, tk, window, q_end, filters=fl or None)
     if res is None:
         raise HTTPException(status_code=503,
                             detail="pattern library not built yet")
     res["ticker"] = tk
     res["as_of"] = q_end.isoformat()
+
+    # ── Current state vector: what the pattern consists of ──
+    vols = np.array([float(r["v"] or 0) for r in rows], dtype=np.float64)
+    if len(closes) >= 260:
+        lr = np.diff(np.log(closes))
+        rv21 = float(np.std(lr[-21:]) * np.sqrt(252))
+        hist = np.array([np.std(lr[j - 20:j + 1]) for j in range(20, len(lr), 5)])
+        sma20, sma50 = closes[-20:].mean(), closes[-50:].mean()
+        sma200 = closes[-200:].mean() if len(closes) >= 200 else None
+        sl_now = float(np.polyfit(np.arange(20), np.log(closes[-20:]), 1)[0]) * 252
+        sl_prev = float(np.polyfit(np.arange(20), np.log(closes[-40:-20]), 1)[0]) * 252
+        vroll = np.array([vols[max(0, j - 20):j + 1].mean() for j in range(len(vols))])
+        pv_corr = float(np.corrcoef(np.diff(closes[-21:]), vols[-20:])[0, 1]) if vols[-20:].std() > 0 else 0.0
+        res["state_vector"] = {
+            "price": {
+                "trend": "up" if closes[-1] > sma50 else "down",
+                "slope_20d_ann_pct": round(sl_now * 100, 1),
+                "acceleration": "accelerating" if sl_now > sl_prev else "decelerating",
+                "vs_sma20_pct": round((closes[-1] / sma20 - 1) * 100, 2),
+                "vs_sma50_pct": round((closes[-1] / sma50 - 1) * 100, 2),
+                "vs_sma200_pct": (round((closes[-1] / sma200 - 1) * 100, 2) if sma200 else None),
+                "drawdown_pct": round((closes[-1] / closes.max() - 1) * 100, 2),
+                "vs_52w_high_pct": round((closes[-1] / closes[-252:].max() - 1) * 100, 2),
+                "vs_52w_low_pct": round((closes[-1] / closes[-252:].min() - 1) * 100, 2),
+            },
+            "momentum": {
+                "5d_pct": round((closes[-1] / closes[-6] - 1) * 100, 2),
+                "20d_pct": round((closes[-1] / closes[-21] - 1) * 100, 2),
+                "60d_pct": round((closes[-1] / closes[-61] - 1) * 100, 2),
+            },
+            "volatility": {
+                "realized_21d_ann_pct": round(rv21 * 100, 1),
+                "percentile": round(float((hist < np.std(lr[-21:])).mean()) * 100, 0),
+                "direction": ("rising" if np.std(lr[-21:]) > np.std(lr[-42:-21]) else "falling"),
+            },
+            "volume": {
+                "percentile": round(float((vroll[:-1] < vroll[-1]).mean()) * 100, 0),
+                "trend": "rising" if vroll[-1] > vroll[-21] else "falling",
+                "price_volume_corr_20d": round(pv_corr, 2),
+            },
+        }
+
+    # ── Forward-path fan: real forward closes for up to 60 episodes ──
+    eps = res.pop("episodes_for_paths", []) or []
+    if eps:
+        async def _path(e):
+            r2 = await pool.fetch(
+                "SELECT c FROM daily_bars WHERE ticker=$1 AND d > $2 ORDER BY d LIMIT 61",
+                e["ticker"], date.fromisoformat(e["end"]))
+            if len(r2) < 20:
+                return None
+            base = float(r2[0]["c"])
+            return [float(x["c"]) / base - 1 for x in r2]
+        import asyncio as _aio
+        paths = [p for p in await _aio.gather(*[_path(e) for e in eps]) if p]
+        if len(paths) >= 10:
+            L = min(min(len(p) for p in paths), 61)
+            M = np.array([p[:L] for p in paths])
+            res["forward_fan"] = {
+                "sessions": L, "n_paths": len(paths),
+                "median": [round(float(x) * 100, 2) for x in np.median(M, axis=0)],
+                "p25": [round(float(x) * 100, 2) for x in np.percentile(M, 25, axis=0)],
+                "p75": [round(float(x) * 100, 2) for x in np.percentile(M, 75, axis=0)],
+            }
     return res
 
 

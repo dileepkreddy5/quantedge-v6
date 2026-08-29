@@ -27,7 +27,7 @@ from loguru import logger
 
 WINDOWS = (20, 60)
 STRIDE = 5
-HORIZONS = (1, 5, 20, 60)
+HORIZONS = (1, 5, 20, 60, 120, 252)  # long horizons NaN near data end; stats exclude them
 MIN_BARS = 750          # ~3y minimum history to contribute
 MIN_PRICE = 3.0         # sub-$3 names: spreads dominate shape
 MIN_DOLLAR_VOL = 1e6    # thinly traded shapes are microstructure, not pattern
@@ -72,6 +72,7 @@ async def build_library(pool, out_dir: str) -> dict:
         trajs, vslopes, fwd = [], [], {h: [] for h in HORIZONS}
         spy_fwd = {h: [] for h in HORIZONS}
         meta_tk, meta_start, meta_end = [], [], []
+        vol_pcts, d52hs, d52ls = [], [], []
         skipped = {"flat": 0, "price": 0, "liquidity": 0}
         regimes = []
         for tk in tickers:
@@ -82,7 +83,16 @@ async def build_library(pool, out_dir: str) -> dict:
             c = np.array([r["c"] for r in rows], dtype=np.float64)
             v = np.array([float(r["v"] or 0) for r in rows], dtype=np.float64)
             ds = [r["d"] for r in rows]
-            for i in range(0, len(c) - W - max(HORIZONS), STRIDE):
+            # Per-date context for conditional filtering: 21d realized vol and
+            # its percentile vs the trailing year; distance from 52w high/low.
+            lr = np.diff(np.log(np.maximum(c, 1e-9)), prepend=np.log(max(c[0], 1e-9)))
+            v21 = np.array([np.std(lr[max(0, j - 20):j + 1]) for j in range(len(c))])
+            # Bound by the SHORTEST horizon: longer horizons NaN out per-window.
+            # Bounding by max(HORIZONS) silently dropped the most recent ~10
+            # months of windows — the panel truncation bug, reintroduced here
+            # when 120/252d were added. Caught by the window count falling
+            # 509k -> 421k on rebuild.
+            for i in range(0, len(c) - W - min(HORIZONS), STRIDE):
                 seg = c[i:i + W]
                 if seg.min() < MIN_PRICE:
                     skipped["price"] += 1; continue
@@ -102,6 +112,10 @@ async def build_library(pool, out_dir: str) -> dict:
                                   if end + h < len(c) else np.nan)
                 meta_tk.append(tk); meta_start.append(ds[i].toordinal())
                 meta_end.append(ds[end].toordinal())
+                _lo = max(0, end - 251)
+                vol_pcts.append(float((v21[_lo:end] < v21[end]).mean()) if end > _lo else 0.5)
+                d52hs.append(float(c[end] / c[_lo:end + 1].max() - 1))
+                d52ls.append(float(c[end] / c[_lo:end + 1].min() - 1))
                 sp = spy_pos.get(ds[end].toordinal())
                 for h in HORIZONS:
                     spy_fwd[h].append(spy_c[sp + h] / spy_c[sp] - 1
@@ -116,6 +130,8 @@ async def build_library(pool, out_dir: str) -> dict:
             **{f"spy_fwd_{h}d": np.array(spy_fwd[h], np.float32) for h in HORIZONS},
             ticker=np.array(meta_tk), start_ord=np.array(meta_start, np.int32),
             end_ord=np.array(meta_end, np.int32),
+            vol_pct=np.array(vol_pcts, np.float32),
+            d52h=np.array(d52hs, np.float32), d52l=np.array(d52ls, np.float32),
             regime=np.array(regimes),
         )
         stats[W] = {"windows": len(trajs), "skipped": skipped}

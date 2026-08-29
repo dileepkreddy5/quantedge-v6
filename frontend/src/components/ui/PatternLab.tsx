@@ -1,3 +1,4 @@
+import AnalogsDeep from './AnalogsDeep';
 // ============================================================
 // QuantEdge v6.0 — Pattern Lab tab
 // Historical analogs of the ticker's current trajectory: overlay
@@ -435,7 +436,7 @@ const PatternLab: React.FC<{ ticker: string }> = ({ ticker }) => {
           }}>{m.label}</button>
         ))}
       </div>
-      {mode === 'analogs' && <AnalogsMode ticker={ticker} />}
+      {mode === 'analogs' && <AnalogsDeep ticker={ticker} />}
       {mode === 'formations' && <FormationsMode />}
       {(mode === 'momentum' || mode === 'extremes' || mode === 'volatility') &&
         <ConditionsMode ticker={ticker} set={mode} />}

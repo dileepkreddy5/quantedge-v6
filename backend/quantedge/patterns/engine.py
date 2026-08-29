@@ -29,7 +29,7 @@ from datetime import date, timedelta
 from pathlib import Path
 from loguru import logger
 
-HORIZONS = (1, 5, 20, 60)
+HORIZONS = (1, 5, 20, 60, 120, 252)
 TOP_EUCLID = 300      # pool re-ranked by DTW
 TOP_RETURN = 120      # analogs kept after DTW, before dedup
 MIN_CELL = 15         # minimum episodes for a split cell
@@ -68,6 +68,8 @@ def _dist_stats(vals: np.ndarray) -> dict | None:
         "p25_pct": round(float(np.percentile(v, 25)) * 100, 2),
         "p75_pct": round(float(np.percentile(v, 75)) * 100, 2),
         "p90_pct": round(float(np.percentile(v, 90)) * 100, 2),
+        "negative_pct": round(float((v < 0).mean()) * 100, 1),
+        "outcome_vol_pct": round(float(v.std()) * 100, 2),
     }
 
 
@@ -92,7 +94,11 @@ class PatternLibrary:
         return lib
 
     def query(self, closes: np.ndarray, ticker: str, W: int,
-              query_end: date) -> dict | None:
+              query_end: date, filters: dict | None = None) -> dict | None:
+        """filters: optional conditional matching over the retained episodes —
+        {'volume': 'rising'|'falling', 'vola': 'high'|'low',
+         'regime': <regime str>, 'extreme': 'near_high'|'near_low'}.
+        Applied AFTER dedup, so n shrinks and the response says by how much."""
         lib = self.load(W)
         if lib is None or len(closes) < W:
             return None
@@ -131,6 +137,33 @@ class PatternLibrary:
         if len(kept) == 0:
             return None
 
+        pre_filter_n = len(kept)
+        applied = {}
+        if filters:
+            m = np.ones(len(kept), dtype=bool)
+            vs = lib["vslope"][kept]
+            if filters.get("volume") == "rising":  m &= vs > 0; applied["volume"] = "rising"
+            if filters.get("volume") == "falling": m &= vs < 0; applied["volume"] = "falling"
+            vp = lib.get("vol_pct")
+            if vp is not None and filters.get("vola") == "high":
+                m &= vp[kept] >= 0.67; applied["vola"] = "high"
+            if vp is not None and filters.get("vola") == "low":
+                m &= vp[kept] <= 0.33; applied["vola"] = "low"
+            if filters.get("regime"):
+                m &= lib["regime"][kept] == filters["regime"]; applied["regime"] = filters["regime"]
+            dh, dl = lib.get("d52h"), lib.get("d52l")
+            if dh is not None and filters.get("extreme") == "near_high":
+                m &= dh[kept] >= -0.05; applied["extreme"] = "near_high"
+            if dl is not None and filters.get("extreme") == "near_low":
+                m &= dl[kept] <= 0.10; applied["extreme"] = "near_low"
+            kept = kept[m]
+            kept_d = [d for d, keep in zip(kept_d, m) if keep]
+            if len(kept) == 0:
+                return {"window_days": W, "episodes": 0,
+                        "pre_filter_episodes": pre_filter_n,
+                        "filters_applied": applied,
+                        "insufficient": "no episodes match these conditions"}
+
         # Similarity as a percentage users can read: normalized against the
         # distance of a completely dissimilar pair (~2*sqrt(W) for z-series).
         worst = 2.0 * np.sqrt(W)
@@ -139,6 +172,10 @@ class PatternLibrary:
         out = {
             "window_days": W,
             "episodes": int(len(kept)),
+            "pre_filter_episodes": int(pre_filter_n),
+            "filters_applied": applied,
+            "search_scope": {"windows_searched": int(len(T)),
+                             "tickers_in_library": int(len(np.unique(lib["ticker"])))},
             "windows_matched_before_dedup": int(TOP_RETURN),
             "distributions": {}, "base_rates": lib["base"],
             "splits": {"volume_slope": {}, "regime": {}},
@@ -175,6 +212,8 @@ class PatternLibrary:
             _end = (date.fromordinal(int(lib["end_ord"][i])).isoformat()
                     if "end_ord" in lib else None)
             out["analogs"].append({
+                "vol_pctile": (round(float(lib["vol_pct"][i]), 2) if "vol_pct" in lib else None),
+                "dist_52w_high": (round(float(lib["d52h"][i]) * 100, 1) if "d52h" in lib else None),
                 "ticker": str(lib["ticker"][i]),
                 "start": date.fromordinal(int(lib["start_ord"][i])).isoformat(),
                 "end": _end,
@@ -188,6 +227,10 @@ class PatternLibrary:
                         for h in HORIZONS},
             })
         out["query_trajectory"] = [round(float(x), 3) for x in q]
+        out["episodes_for_paths"] = [
+            {"ticker": str(lib["ticker"][i]),
+             "end": date.fromordinal(int(lib["end_ord"][i])).isoformat()}
+            for i in kept[:60] if "end_ord" in lib]
         out["method"] = {
             "normalization": "z-score per window (mean 0, std 1) — scale-free shape",
             "stage1": "z-normalized Euclidean distance, full library, vectorized",
