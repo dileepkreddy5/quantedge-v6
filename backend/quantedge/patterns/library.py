@@ -1,0 +1,108 @@
+"""Pattern Lab — window library builder.
+
+Slides fixed-length windows over every ticker with enough history, stores each
+as a z-normalized close trajectory plus its context (volume slope, forward
+returns, market regime), and writes one compact .npz per window length.
+
+Design decisions, and why:
+- Z-normalized closes (not returns): shape matching per Lo/Mamaysky and the
+  PR-DTW literature — a $180 stock and a $900 stock with the same trajectory
+  must be the same pattern. Mean 0, std 1 per window.
+- Stride 5 (weekly), not 1: adjacent daily windows are near-duplicates that
+  bloat the library 5x and then get deduped at query time anyway. Weekly
+  stride keeps every distinct episode reachable within 2 DTW warping steps.
+- Forward returns computed from the window's LAST bar, at +1/+5/+20/+60d,
+  stored alongside — the outcome is baked at build time, never recomputed.
+- Windows whose forward horizon runs past the data end carry NaN outcomes and
+  are excluded from distributions (not from matching).
+- Volume slope: OLS slope of z-normalized volume over the window — the
+  stage-2 dimension, captured now so the library needn't rebuild.
+- float16 trajectories: 60d x ~400k windows ~ 48MB. Precision loss is far
+  below the noise floor of price data.
+"""
+from __future__ import annotations
+import numpy as np
+from datetime import date
+from loguru import logger
+
+WINDOWS = (20, 60)
+STRIDE = 5
+HORIZONS = (1, 5, 20, 60)
+MIN_BARS = 750          # ~3y minimum history to contribute
+MIN_PRICE = 3.0         # sub-$3 names: spreads dominate shape
+MIN_DOLLAR_VOL = 1e6    # thinly traded shapes are microstructure, not pattern
+
+
+def _znorm(x: np.ndarray) -> np.ndarray | None:
+    s = x.std()
+    if not np.isfinite(s) or s < 1e-9:
+        return None                      # flat window: no shape to match
+    return (x - x.mean()) / s
+
+
+async def build_library(pool, out_dir: str) -> dict:
+    from pathlib import Path
+    out = Path(out_dir); out.mkdir(parents=True, exist_ok=True)
+
+    tickers = [r["ticker"] for r in await pool.fetch(
+        "SELECT ticker FROM daily_bars GROUP BY ticker HAVING count(*) >= $1", MIN_BARS)]
+    logger.info(f"[patterns] building library from {len(tickers)} tickers")
+
+    # SPY regime by date: tag every window with the market state it formed in.
+    spy = await pool.fetch("SELECT d, c FROM daily_bars WHERE ticker='SPY' ORDER BY d")
+    regime_by_date: dict[date, str] = {}
+    if len(spy) > 220:
+        closes = np.array([r["c"] for r in spy]); ds = [r["d"] for r in spy]
+        for i in range(220, len(closes)):
+            ret63 = closes[i] / closes[i - 63] - 1
+            vol21 = np.std(np.diff(np.log(closes[i - 21:i + 1]))) * np.sqrt(252)
+            trend = "BULL" if ret63 > 0 else "BEAR"
+            vol = "HIGH_VOL" if vol21 > 0.18 else "LOW_VOL"
+            regime_by_date[ds[i]] = f"{trend}_{vol}"
+
+    stats = {}
+    for W in WINDOWS:
+        trajs, vslopes, fwd = [], [], {h: [] for h in HORIZONS}
+        meta_tk, meta_start = [], []
+        skipped = {"flat": 0, "price": 0, "liquidity": 0}
+        regimes = []
+        for tk in tickers:
+            rows = await pool.fetch(
+                "SELECT d, c, v FROM daily_bars WHERE ticker=$1 ORDER BY d", tk)
+            if len(rows) < W + max(HORIZONS) + 1:
+                continue
+            c = np.array([r["c"] for r in rows], dtype=np.float64)
+            v = np.array([float(r["v"] or 0) for r in rows], dtype=np.float64)
+            ds = [r["d"] for r in rows]
+            for i in range(0, len(c) - W - max(HORIZONS), STRIDE):
+                seg = c[i:i + W]
+                if seg.min() < MIN_PRICE:
+                    skipped["price"] += 1; continue
+                if np.median(seg * v[i:i + W]) < MIN_DOLLAR_VOL:
+                    skipped["liquidity"] += 1; continue
+                z = _znorm(seg)
+                if z is None:
+                    skipped["flat"] += 1; continue
+                vz = _znorm(v[i:i + W])
+                vs = 0.0 if vz is None else float(
+                    np.polyfit(np.arange(W), vz, 1)[0])
+                end = i + W - 1
+                trajs.append(z.astype(np.float16))
+                vslopes.append(vs)
+                for h in HORIZONS:
+                    fwd[h].append(c[end + h] / c[end] - 1
+                                  if end + h < len(c) else np.nan)
+                meta_tk.append(tk); meta_start.append(ds[i].toordinal())
+                regimes.append(regime_by_date.get(ds[end], "UNKNOWN"))
+        np.savez_compressed(
+            out / f"library_{W}d.npz",
+            trajs=np.stack(trajs) if trajs else np.zeros((0, W), np.float16),
+            vslope=np.array(vslopes, np.float32),
+            **{f"fwd_{h}d": np.array(fwd[h], np.float32) for h in HORIZONS},
+            ticker=np.array(meta_tk), start_ord=np.array(meta_start, np.int32),
+            regime=np.array(regimes),
+        )
+        stats[W] = {"windows": len(trajs), "skipped": skipped}
+        logger.info(f"[patterns] {W}d: {len(trajs)} windows "
+                    f"(skipped {skipped})")
+    return stats
