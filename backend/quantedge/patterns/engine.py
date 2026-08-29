@@ -65,6 +65,8 @@ def _dist_stats(vals: np.ndarray) -> dict | None:
         "median_pct": round(float(np.median(v)) * 100, 2),
         "mean_pct": round(float(v.mean()) * 100, 2),
         "p10_pct": round(float(np.percentile(v, 10)) * 100, 2),
+        "p25_pct": round(float(np.percentile(v, 25)) * 100, 2),
+        "p75_pct": round(float(np.percentile(v, 75)) * 100, 2),
         "p90_pct": round(float(np.percentile(v, 90)) * 100, 2),
     }
 
@@ -144,6 +146,12 @@ class PatternLibrary:
         }
         for h in HORIZONS:
             out["distributions"][f"{h}d"] = _dist_stats(lib[f"fwd_{h}d"][kept])
+            # Excess vs SPY over each episode's own dates: the question is not
+            # "did it go up" but "did it beat what the market did anyway".
+            sk = lib.get(f"spy_fwd_{h}d")
+            if sk is not None:
+                ex = lib[f"fwd_{h}d"][kept] - sk[kept]
+                out.setdefault("excess_vs_spy", {})[f"{h}d"] = _dist_stats(ex)
 
         # RQ5: volume-slope terciles of the matched episodes.
         vs = lib["vslope"][kept]
@@ -164,9 +172,15 @@ class PatternLibrary:
 
         # Top analogs for the overlay chart.
         for rank, (i, s) in enumerate(zip(kept[:12], sims[:12])):
+            _end = (date.fromordinal(int(lib["end_ord"][i])).isoformat()
+                    if "end_ord" in lib else None)
             out["analogs"].append({
                 "ticker": str(lib["ticker"][i]),
                 "start": date.fromordinal(int(lib["start_ord"][i])).isoformat(),
+                "end": _end,
+                "duration_sessions": W,
+                "regime": str(lib["regime"][i]),
+                "volume_slope": round(float(lib["vslope"][i]), 3),
                 "similarity_pct": round(float(s), 1),
                 "trajectory": [round(float(x), 3) for x in lib["trajs"][i]],
                 "fwd": {f"{h}d": (None if not np.isfinite(lib[f"fwd_{h}d"][i])
@@ -174,6 +188,19 @@ class PatternLibrary:
                         for h in HORIZONS},
             })
         out["query_trajectory"] = [round(float(x), 3) for x in q]
+        out["method"] = {
+            "normalization": "z-score per window (mean 0, std 1) — scale-free shape",
+            "stage1": "z-normalized Euclidean distance, full library, vectorized",
+            "stage2": f"Sakoe-Chiba banded DTW (band {max(2, W // 10)}) on top {TOP_EUCLID}",
+            "dedup": "greedy non-overlapping episodes per ticker",
+            "look_ahead": "outcomes baked at build time strictly after window end",
+            "parameter_fitting": ("none — analog matching fits no parameters, so a "
+                                  "discovery/validation split is not applicable; controls "
+                                  "are dedup, base rates, and date-range disclosure"),
+        }
+        ords = lib["start_ord"][kept]
+        out["episode_date_range"] = [date.fromordinal(int(ords.min())).isoformat(),
+                                     date.fromordinal(int(ords.max())).isoformat()]
         out["caveat"] = (
             "Library spans 2021-2026 — one macro era. Distributions answer "
             "'what followed this shape in recent regimes', not a universal law. "

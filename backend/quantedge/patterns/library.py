@@ -60,10 +60,18 @@ async def build_library(pool, out_dir: str) -> dict:
             vol = "HIGH_VOL" if vol21 > 0.18 else "LOW_VOL"
             regime_by_date[ds[i]] = f"{trend}_{vol}"
 
+    # SPY forward returns by date-position: lets every window carry the
+    # market's move over its own outcome horizon, so the engine can report
+    # EXCESS return ("did this beat what the market did anyway?") instead of
+    # raw return alone.
+    spy_c = np.array([r["c"] for r in spy], dtype=np.float64) if len(spy) else np.zeros(0)
+    spy_pos = {r["d"].toordinal(): i for i, r in enumerate(spy)}
+
     stats = {}
     for W in WINDOWS:
         trajs, vslopes, fwd = [], [], {h: [] for h in HORIZONS}
-        meta_tk, meta_start = [], []
+        spy_fwd = {h: [] for h in HORIZONS}
+        meta_tk, meta_start, meta_end = [], [], []
         skipped = {"flat": 0, "price": 0, "liquidity": 0}
         regimes = []
         for tk in tickers:
@@ -93,13 +101,21 @@ async def build_library(pool, out_dir: str) -> dict:
                     fwd[h].append(c[end + h] / c[end] - 1
                                   if end + h < len(c) else np.nan)
                 meta_tk.append(tk); meta_start.append(ds[i].toordinal())
+                meta_end.append(ds[end].toordinal())
+                sp = spy_pos.get(ds[end].toordinal())
+                for h in HORIZONS:
+                    spy_fwd[h].append(spy_c[sp + h] / spy_c[sp] - 1
+                                      if sp is not None and sp + h < len(spy_c)
+                                      else np.nan)
                 regimes.append(regime_by_date.get(ds[end], "UNKNOWN"))
         np.savez_compressed(
             out / f"library_{W}d.npz",
             trajs=np.stack(trajs) if trajs else np.zeros((0, W), np.float16),
             vslope=np.array(vslopes, np.float32),
             **{f"fwd_{h}d": np.array(fwd[h], np.float32) for h in HORIZONS},
+            **{f"spy_fwd_{h}d": np.array(spy_fwd[h], np.float32) for h in HORIZONS},
             ticker=np.array(meta_tk), start_ord=np.array(meta_start, np.int32),
+            end_ord=np.array(meta_end, np.int32),
             regime=np.array(regimes),
         )
         stats[W] = {"windows": len(trajs), "skipped": skipped}
