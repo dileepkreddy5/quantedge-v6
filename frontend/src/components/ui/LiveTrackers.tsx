@@ -121,7 +121,7 @@ const LiveTrackers: React.FC = () => {
   });
 
   return (
-    <section style={{ maxWidth: 1400, margin: '0 auto 72px', padding: '0 4rem' }}>
+    <section style={{ position: 'relative', zIndex: 1, maxWidth: 1400, margin: '0 auto 72px', padding: '0 4rem' }}>
       <div style={{ fontFamily: mono, fontSize: 10, letterSpacing: 3, color: C.cocoa, marginBottom: 10 }}>
         LIVE INTELLIGENCE · REGENERATED NIGHTLY
       </div>

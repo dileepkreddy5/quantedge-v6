@@ -52,6 +52,7 @@ export default function Landing() {
       {/* Ambient glow */}
       <div style={{
         position: 'fixed', inset: 0, zIndex: 0,
+        pointerEvents: 'none',
         background: `radial-gradient(ellipse at 15% 25%, rgba(212,149,108,0.07) 0%, transparent 55%),
                      radial-gradient(ellipse at 85% 75%, rgba(218,165,32,0.05) 0%, transparent 55%)`,
       }} />

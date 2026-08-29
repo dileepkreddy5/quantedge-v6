@@ -17,14 +17,20 @@ from loguru import logger
 
 router = APIRouter()
 
-_ARTIFACT = Path(__file__).resolve().parent.parent / "research_data" / "cf_artifact.json"
+from core.artifact_paths import artifact_read_path
+# Resolved per-request: the volume copy wins over the image-baked fallback,
+# so a rebuild no longer reverts the board to a stale scan.
+_ARTIFACT_NAME = "cf_artifact.json"
 
 
 @router.get("/research/cf")
 async def research_cf():
     """Serve the CF directional-check artifact (status: research)."""
     try:
-        with open(_ARTIFACT) as fh:
+        _p = artifact_read_path(_ARTIFACT_NAME)
+        if _p is None:
+            raise FileNotFoundError(_ARTIFACT_NAME)
+        with open(_p) as fh:
             return json.load(fh)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Research artifact not generated yet")

@@ -10,10 +10,14 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 from quantedge.fundamentals.price_ladder import price_ladder
 from quantedge.fundamentals.volume_signal import volume_signal
 
-PATH = os.path.join(os.path.dirname(__file__), "..", "..", "backend", "research_data", "scan_artifact.json")
+from core.artifact_paths import artifact_write_path, artifact_read_path
+# Was: dirname/../../backend/research_data/ — resolves to /app/backend/... inside
+# the container, which does not exist, so every scan write failed silently. The
+# artifact now goes to the mounted volume and survives image rebuilds.
+PATH = str(artifact_write_path("scan_artifact.json"))
 
 def enrich():
-    d = json.load(open(PATH))
+    d = json.load(open(artifact_read_path("scan_artifact.json") or PATH))
     total = sum(len(d["tiers"][t]) for t in d["tiers"])
     done = 0
     for tier in d["tiers"]:

@@ -81,7 +81,11 @@ def run_bulk_scan(top_universe=1000, display=100, rank_pool=4000, workers=12):
         by_score=sorted([r for r,_ in ranked],key=lambda x:x["score"],reverse=True)[:display]
         out["tiers"][tier]=by_score
         print(f"{tier}: {len(tiers[tier])} in tier, kept top {len(by_score)} by score ({time.time()-t0:.0f}s)",flush=True)
-    path=os.path.join(os.path.dirname(__file__),"..","..","backend","research_data","scan_artifact.json")
+    from core.artifact_paths import artifact_write_path
+    # Was: dirname/../../backend/research_data/ — resolves to /app/backend/... inside
+    # the container, which does not exist, so every scan write failed silently. The
+    # artifact now goes to the mounted volume and survives image rebuilds.
+    path = str(artifact_write_path("scan_artifact.json"))
     json.dump(out,open(path,"w"),indent=2)
     print(f"DONE in {time.time()-t0:.0f}s — wrote {path}",flush=True)
 
