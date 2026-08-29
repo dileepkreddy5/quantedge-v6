@@ -86,6 +86,9 @@ const SV: React.FC<{sv:any}> = ({sv}) => {
             vo.direction==='rising'?C.warn:C.latte)}
       {cell('VOLUME', `${vl.percentile??'—'}th pctile`, `${vl.trend} · p×v corr ${vl.price_volume_corr_20d}`)}
       {cell('52W POSITION', pf(p.vs_52w_high_pct,1)+' vs high', `${pf(p.vs_52w_low_pct,1)} vs low · dd ${pf(p.drawdown_pct,1)}`)}
+      {sv.multi_scale && cell('MULTI-SCALE', sv.multi_scale.verdict,
+        Object.entries(sv.multi_scale.signals).map(([k,v])=>`${k}:${String(v)[0]}`).join(' '),
+        sv.multi_scale.verdict==='ALIGNED'?C.bull:sv.multi_scale.verdict==='CONFLICTED'?C.warn:C.latte)}
       {cell('VS MOVING AVGS', `${pf(p.vs_sma20_pct,1)} / ${pf(p.vs_sma50_pct,1)}`, `sma20 / sma50 · sma200 ${pf(p.vs_sma200_pct,1)}`)}
     </div>);
 };
@@ -95,6 +98,7 @@ const FILTERS: {group:string; param:string; opts:[string,string][]}[] = [
   {group:'VOLATILITY', param:'vola', opts:[['high','HIGH'],['low','LOW']]},
   {group:'REGIME', param:'regime', opts:[['BULL_LOW_VOL','BULL·LOW'],['BULL_HIGH_VOL','BULL·HIGH'],['BEAR_LOW_VOL','BEAR·LOW'],['BEAR_HIGH_VOL','BEAR·HIGH']]},
   {group:'52W', param:'extreme', opts:[['near_high','NEAR HIGH'],['near_low','NEAR LOW']]},
+  {group:'SCOPE', param:'scope', opts:[['same','SAME STOCK'],['cross','CROSS-STOCK']]},
 ];
 
 const AnalogsDeep: React.FC<{ticker:string}> = ({ticker}) => {

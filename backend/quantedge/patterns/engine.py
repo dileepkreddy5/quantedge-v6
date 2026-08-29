@@ -151,6 +151,10 @@ class PatternLibrary:
                 m &= vp[kept] <= 0.33; applied["vola"] = "low"
             if filters.get("regime"):
                 m &= lib["regime"][kept] == filters["regime"]; applied["regime"] = filters["regime"]
+            if filters.get("scope") == "same":
+                m &= lib["ticker"][kept] == ticker; applied["scope"] = "same"
+            if filters.get("scope") == "cross":
+                m &= lib["ticker"][kept] != ticker; applied["scope"] = "cross"
             dh, dl = lib.get("d52h"), lib.get("d52l")
             if dh is not None and filters.get("extreme") == "near_high":
                 m &= dh[kept] >= -0.05; applied["extreme"] = "near_high"

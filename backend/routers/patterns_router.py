@@ -20,7 +20,8 @@ _LIB = PatternLibrary("/app/models/patterns")
 async def pattern_analogs(ticker: str, request: Request,
                           window: int = Query(60, description="20 or 60"),
                           volume: str | None = Query(None), vola: str | None = Query(None),
-                          regime: str | None = Query(None), extreme: str | None = Query(None)):
+                          regime: str | None = Query(None), extreme: str | None = Query(None),
+                          scope: str | None = Query(None)):
     if window not in (20, 60):
         raise HTTPException(status_code=422, detail="window must be 20 or 60")
     tk = ticker.upper().strip()
@@ -43,7 +44,8 @@ async def pattern_analogs(ticker: str, request: Request,
     q_end: date = rows[-1]["d"]
 
     fl = {k: v for k, v in (("volume", volume), ("vola", vola),
-                            ("regime", regime), ("extreme", extreme)) if v}
+                            ("regime", regime), ("extreme", extreme),
+                            ("scope", scope)) if v}
     res = _LIB.query(closes, tk, window, q_end, filters=fl or None)
     if res is None:
         raise HTTPException(status_code=503,
@@ -85,6 +87,21 @@ async def pattern_analogs(ticker: str, request: Request,
                 "percentile": round(float((hist < np.std(lr[-21:])).mean()) * 100, 0),
                 "direction": ("rising" if np.std(lr[-21:]) > np.std(lr[-42:-21]) else "falling"),
             },
+            "multi_scale": (lambda momsigns: {
+                "signals": momsigns,
+                "alignment_pct": round(100 * max(sum(1 for x in momsigns.values() if x == "bullish"),
+                                                 sum(1 for x in momsigns.values() if x == "bearish"))
+                                       / len(momsigns), 0),
+                "verdict": ("ALIGNED" if len(set(momsigns.values())) == 1 else
+                            "MIXED" if max(sum(1 for x in momsigns.values() if x == v)
+                                           for v in set(momsigns.values())) >= len(momsigns) - 1
+                            else "CONFLICTED"),
+            })({
+                "5d": "bullish" if closes[-1] > closes[-6] else "bearish",
+                "20d": "bullish" if closes[-1] > closes[-21] else "bearish",
+                "60d": "bullish" if closes[-1] > closes[-61] else "bearish",
+                "252d": ("bullish" if closes[-1] > closes[-253] else "bearish") if len(closes) > 253 else "n/a",
+            }),
             "volume": {
                 "percentile": round(float((vroll[:-1] < vroll[-1]).mean()) * 100, 0),
                 "trend": "rising" if vroll[-1] > vroll[-21] else "falling",
@@ -177,3 +194,39 @@ async def ticker_conditions(ticker: str, request: Request):
             "cell": spec["cells"].get(f"Q{q+1}"),
         }
     return out
+
+
+@router.get("/patterns/evolution/{ticker}")
+async def pattern_evolution(ticker: str, request: Request):
+    """The ticker's current discrete state (60d trend x vol tercile) and the
+    MEASURED historical transition frequencies out of that state, each with
+    the +20d return distribution that accompanied it. Counted, not modeled."""
+    import json
+    import numpy as np
+    from core.artifact_paths import artifact_read_path
+    tk = ticker.upper().strip()
+    p = artifact_read_path("conditions_scan.json")
+    if p is None:
+        raise HTTPException(status_code=503, detail="condition scan not run yet")
+    art = json.loads(p.read_text())
+    if "evolution" not in art:
+        raise HTTPException(status_code=503, detail="evolution not in current scan artifact")
+    pool = getattr(request.app.state, "db", None)
+    rows = await pool.fetch(
+        "SELECT c FROM daily_bars WHERE ticker=$1 ORDER BY d DESC LIMIT 320", tk)
+    if len(rows) < 280:
+        raise HTTPException(status_code=404, detail=f"{tk}: insufficient history")
+    c = np.array([r["c"] for r in rows], np.float64)[::-1]
+    lr = np.diff(np.log(c))
+    v21 = np.array([np.std(lr[max(0, j - 20):j + 1]) for j in range(len(lr))])
+    vp = float((v21[-251:-1] < v21[-1]).mean())
+    volq = 0 if vp <= 0.33 else 2 if vp >= 0.67 else 1
+    mom60 = float(c[-1] / c[-61] - 1)
+    t = "UP" if mom60 > 0.03 else "DOWN" if mom60 < -0.03 else "FLAT"
+    state = f"{t}_{('LOWVOL','MIDVOL','HIGHVOL')[volq]}"
+    return {"ticker": tk, "current_state": state,
+            "inputs": {"mom_60d_pct": round(mom60 * 100, 2), "vol_pctile": round(vp * 100, 0)},
+            "state_definition": art["state_definition"],
+            "history": art["evolution"].get(state),
+            "all_states": {k: v["n"] for k, v in art["evolution"].items()},
+            "note": art["note"], "generated": art["generated"]}

@@ -1,3 +1,5 @@
+import FormationsDeep from './FormationsDeep';
+import EvolutionMode from './EvolutionMode';
 import AnalogsDeep from './AnalogsDeep';
 // ============================================================
 // QuantEdge v6.0 — Pattern Lab tab
@@ -420,6 +422,7 @@ const MODES = [
   { id: 'momentum', label: 'MOMENTUM & REVERSAL' },
   { id: 'extremes', label: 'PRICE EXTREMES' },
   { id: 'volatility', label: 'VOLATILITY' },
+  { id: 'evolution', label: 'PATTERN EVOLUTION' },
 ];
 
 const PatternLab: React.FC<{ ticker: string }> = ({ ticker }) => {
@@ -437,7 +440,8 @@ const PatternLab: React.FC<{ ticker: string }> = ({ ticker }) => {
         ))}
       </div>
       {mode === 'analogs' && <AnalogsDeep ticker={ticker} />}
-      {mode === 'formations' && <FormationsMode />}
+      {mode === 'formations' && <FormationsDeep />}
+      {mode === 'evolution' && <EvolutionMode ticker={ticker} />}
       {(mode === 'momentum' || mode === 'extremes' || mode === 'volatility') &&
         <ConditionsMode ticker={ticker} set={mode} />}
     </div>
