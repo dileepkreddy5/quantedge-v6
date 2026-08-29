@@ -487,6 +487,23 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning(f"Rebound scan not scheduled: {e}")
 
+        # Pattern-library rebuild — 18:45 ET, after the 17:30 bars sync and
+        # 18:15 peer scan, so the analog library shares the market's last
+        # session with the query. ~4 min of CPU on a closed market.
+        try:
+            from services.pattern_lib_job import PatternLibJob
+            _pat = PatternLibJob(app.state.db)
+            scheduler.add_job(
+                _pat.run,
+                trigger=CronTrigger(hour=18, minute=45, timezone=et),
+                id="pattern_lib_rebuild",
+                name="Nightly pattern-library rebuild 18:45 ET",
+                replace_existing=True, max_instances=1, coalesce=True,
+            )
+            logger.info("✅ Pattern library rebuild scheduled (18:45 ET nightly)")
+        except Exception as e:
+            logger.warning(f"Pattern library rebuild not scheduled: {e}")
+
         # Nightly full-universe panel rebuild + multi-horizon retrain.
         # 02:15 America/Denver — after the 02:00/02:30 ET scans have finished and
         # clear of the 08:00 UTC pg_dumpall. Runs as subprocesses and promotes
@@ -554,6 +571,18 @@ async def lifespan(app: FastAPI):
     logger.info("✅ Cache warmer started — will pre-warm AAPL MSFT NVDA TSLA SPY QQQ AMZN META")
 
     logger.info("✅ QuantEdge v6.0 ready")
+    # Pre-warm the pattern library (~90MB) in a thread so the first
+    # Pattern Lab query doesn't pay the lazy load.
+    try:
+        import asyncio as _aio
+        from routers.patterns_router import _LIB as _pattern_lib
+        def _warm():
+            _pattern_lib.load(20); _pattern_lib.load(60)
+        _aio.get_event_loop().run_in_executor(None, _warm)
+        logger.info("🧬 Pattern library pre-warm dispatched")
+    except Exception as _e:
+        logger.warning(f"Pattern library pre-warm skipped: {_e}")
+
     yield
 
     # Shutdown
