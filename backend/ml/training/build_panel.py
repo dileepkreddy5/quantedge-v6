@@ -85,20 +85,26 @@ def _multi_horizon_labels(close: pd.Series, dates: pd.DatetimeIndex,
                            pt_mult: float = 2.0, sl_mult: float = 2.0):
     """Path-dependent forward-return labels for MULTIPLE horizons.
     Returns (labels_dict, valid_idx) where labels_dict[h] is the list of realized
-    log-returns at horizon h, aligned with valid_idx. A sample is valid only if the
-    LONGEST horizon fits (so all horizons share the same rows). 21d uses triple-barrier
-    (path-dependent); longer horizons use terminal return (barriers are a short-horizon
-    trading concept). No lookahead: only uses prices after the sample date."""
+    log-returns at horizon h (NaN where that horizon's forward path runs past the
+    data end), aligned with valid_idx. A sample is valid if the SHORTEST horizon
+    fits. Previously a row was kept only if the LONGEST horizon (252d) fit, which
+    truncated the ENTIRE panel a full trading year before the present — the 5-day
+    model trained on data ending 12 months back, discarding the most recent and
+    most regime-relevant year it could legally use. Each horizon's trainer already
+    drops its own NaNs (dropna(subset=[label_col])), so per-horizon validity is
+    the correct contract. 21d and shorter use triple-barrier (path-dependent);
+    longer horizons use terminal return. No lookahead: only prices after the
+    sample date."""
     log_ret = np.log(close / close.shift(1))
     sigma = log_ret.rolling(20, min_periods=5).std().bfill()
     n = len(close)
-    max_h = max(HORIZONS)
+    min_h = min(HORIZONS)
     labels = {h: [] for h in HORIZONS}
     valid = []
     for k, d in enumerate(dates):
         try:
             pos = close.index.get_loc(d)
-            if pos + max_h >= n:
+            if pos + min_h >= n:
                 continue
             entry = float(close.iloc[pos]); s = float(sigma.iloc[pos])
             if s <= 0 or not np.isfinite(s):
@@ -106,6 +112,9 @@ def _multi_horizon_labels(close: pd.Series, dates: pd.DatetimeIndex,
             row_labels = {}
             ok = True
             for h in HORIZONS:
+                if pos + h >= n:
+                    row_labels[h] = np.nan       # this horizon unresolved; others stay
+                    continue
                 if h <= 21:
                     # triple-barrier for the short horizon
                     upper = entry * np.exp(pt_mult * s); lower = entry * np.exp(-sl_mult * s)
@@ -120,9 +129,11 @@ def _multi_horizon_labels(close: pd.Series, dates: pd.DatetimeIndex,
                     # terminal log-return for longer horizons
                     realized = np.log(float(close.iloc[pos + h]) / entry)
                 if not np.isfinite(realized):
-                    ok = False; break
+                    row_labels[h] = np.nan       # bad price path for this horizon only
+                    continue
                 row_labels[h] = float(realized)
-            if not ok:
+            # A row is kept if its shortest horizon resolved to a finite label.
+            if not np.isfinite(row_labels.get(min_h, np.nan)):
                 continue
             for h in HORIZONS:
                 labels[h].append(row_labels[h])
@@ -258,7 +269,8 @@ def main():
         "raw_features": feat_cols, "csrank_features": csrank_cols,
         "years": args.years, "step": args.step, "lookback": args.lookback,
         "date_range": [str(panel["date"].min()), str(panel["date"].max())],
-        "label_stats": {h: {"mean": float(panel[f"label_{h}d"].mean()), "std": float(panel[f"label_{h}d"].std())}
+        "label_stats": {h: {"mean": float(panel[f"label_{h}d"].mean()), "std": float(panel[f"label_{h}d"].std()),
+                            "n": int(panel[f"label_{h}d"].notna().sum())}
                         for h in [5,10,21,63,126,252] if f"label_{h}d" in panel.columns},
     }
     (PANEL_DIR / f"panel_{stamp}_meta.json").write_text(json.dumps(meta, indent=2))
