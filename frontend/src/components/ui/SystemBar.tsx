@@ -6,6 +6,7 @@
 // ============================================================
 
 import React, { useEffect, useState } from 'react';
+import { api } from '../../auth/authStore';
 
 interface Tab { tab: string; categories: number; signals: number; live: number; needs_source: number; reference: number; }
 interface Board { board: string; available: boolean; generated: string | null; age_hours: number | null; stale: boolean; }
@@ -44,8 +45,8 @@ const SystemBar: React.FC = () => {
   useEffect(() => {
     (async () => {
       try {
-        const r = await fetch('/api/v6/system/stats');
-        if (r.ok) setD(await r.json());
+        const r = await api.get('/api/v6/system/stats');
+        if (r.data?.signals) setD(r.data);
       } catch { /* render nothing */ }
     })();
   }, []);

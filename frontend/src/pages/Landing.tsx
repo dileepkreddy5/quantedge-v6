@@ -6,7 +6,11 @@
 
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import AscentTeaser from './AscentTeaser';
+import SystemBar from '../components/ui/SystemBar';
+import LiveTape from '../components/ui/LiveTape';
+import DailyBrief from '../components/ui/DailyBrief';
+import PipelinePulse from '../components/ui/PipelinePulse';
+import CommandSearch from '../components/ui/CommandSearch';
 import LiveTrackers from '../components/ui/LiveTrackers';
 
 const GRAIN = `url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='3' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`;
@@ -74,10 +78,6 @@ export default function Landing() {
             fontSize: 8, color: '#8a7560', letterSpacing: 2, marginLeft: 10, paddingTop: 2,
           }}>v6.0</div>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 24, alignItems: 'center' }}>
-            <a className="qe-hide-mobile" href="https://dileepkapu.com" target="_blank" rel="noopener noreferrer"
-              style={{ color: '#9d8b7a', fontSize: 12, fontWeight: 600, textDecoration: 'none', letterSpacing: 1 }}>
-              dileepkapu.com
-            </a>
             <button className="qe-hide-mobile" onClick={() => navigate('/screener')} style={{
               background: 'none', border: 'none',
               color: '#9d8b7a', fontFamily: "'Fira Code', monospace",
@@ -98,11 +98,7 @@ export default function Landing() {
               fontFamily: "'Fira Code', monospace", fontSize: 10, letterSpacing: 2,
               padding: '7px 4px', cursor: 'pointer', fontWeight: 700,
             }}>↻ REBOUND</button>
-            <button className="qe-hide-mobile" onClick={() => navigate('/methodology')} style={{
-              background: 'none', border: 'none', color: '#9d8b7a',
-              fontFamily: "'Fira Code', monospace", fontSize: 10, letterSpacing: 2,
-              padding: '7px 4px', cursor: 'pointer', fontWeight: 700,
-            }}>§ METHODOLOGY</button>
+            
             <button onClick={() => navigate('/login')} style={{
               background: 'none', border: '1px solid rgba(212,149,108,0.3)',
               color: '#d4c4b0', fontFamily: "'Fira Code', monospace",
@@ -187,6 +183,9 @@ export default function Landing() {
           </button>
         </div>
 
+        {/* Command search */}
+        <CommandSearch />
+
         {/* Quick tickers */}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
           <span style={{ fontFamily: "'Fira Code', monospace", fontSize: 9, color: '#8a7560', letterSpacing: 2, marginRight: 4, alignSelf: 'center' }}>QUICK ANALYZE:</span>
@@ -221,13 +220,21 @@ export default function Landing() {
         </div>
       </section>
 
+      <LiveTape />
+
+      {/* The machine's own morning note */}
+      <DailyBrief />
+
+      {/* Live inventory — computed at request time, never hardcoded */}
+      <SystemBar />
+
+      {/* The nightly cycle, stamped from real artifact ages */}
+      <PipelinePulse />
+
       {/* Live scan board — real rows from the nightly scans */}
       <LiveTrackers />
 
-      {/* Ascent Radar teaser */}
-      <section style={{ position: 'relative', zIndex: 1, padding: '0 4rem' }}>
-        <AscentTeaser />
-      </section>
+
 
       {/* ── Models grid ── */}
       <section style={{ position: 'relative', zIndex: 1, padding: '80px 4rem' }}>
@@ -320,11 +327,11 @@ export default function Landing() {
           <div>
             <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 18, letterSpacing: 4, color: '#daa520', marginBottom: 4 }}>QUANTEDGE</div>
             <div style={{ fontFamily: "'Fira Code', monospace", fontSize: 9, color: '#8a7560', letterSpacing: 2 }}>
-              Built by{' '}
-              <a href="https://dileepkapu.com" target="_blank" rel="noopener noreferrer"
-                style={{ color: '#9d8b7a', textDecoration: 'none' }}>
-                Dileep Kumar Reddy Kapu
-              </a>
+              <span style={{ fontFamily: "'Fira Code', monospace", fontSize: 11, color: '#8a7560' }}>
+                $ developed by Dileep{' '}
+                <a href="https://dileepkapu.com" target="_blank" rel="noopener noreferrer"
+                   style={{ color: '#daa520', textDecoration: 'none' }}>→ dileepkapu.com</a>
+              </span>
             </div>
           </div>
           <div style={{ fontFamily: "'Fira Code', monospace", fontSize: 9, color: '#8a7560', letterSpacing: 1, textAlign: 'right' }}>

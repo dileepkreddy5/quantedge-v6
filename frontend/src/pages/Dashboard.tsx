@@ -84,7 +84,14 @@ export default function Dashboard() {
   // correctly re-triggers the analysis instead of being a no-op.
   useEffect(() => {
     const urlTicker = searchParams.get('ticker');
-    if (!urlTicker || !urlTicker.trim()) return;
+    if (!urlTicker || !urlTicker.trim()) {
+      // No ticker and nothing running: this page has no job to do. The idle
+      // state used to duplicate the landing page (with a stale model grid
+      // that still advertised LSTM+TFT and options GEX months after both
+      // were removed) — one front door, one place for that copy to live.
+      if (!ticker && !data && !loading) navigate('/', { replace: true });
+      return;
+    }
     const sym = urlTicker.toUpperCase().trim();
 
     // Skip if we're already analyzing this ticker (prevents duplicate fires
@@ -99,7 +106,7 @@ export default function Dashboard() {
       setElapsed(0);
       setActiveTab('overview');
       api.post('/api/v6/analyze', {
-        req: { ticker: sym, include_options: false, include_sentiment: true, mc_paths: 100000 }
+        req: { ticker: sym, include_options: false, include_sentiment: true, mc_paths: 10000 }
       }).then(res => {
         setData(res.data.data);
         toast.success(`Analysis complete: ${sym}`, { icon: '✅' });
@@ -131,14 +138,13 @@ export default function Dashboard() {
     // Progress messages
     const msgs = [
       'Fetching 5Y price history...',
-      'Computing 200+ features...',
+      'Computing 152 features...',
       'Running GARCH volatility model...',
       'Running HMM regime classifier...',
-      'Running LSTM price prediction...',
-      'Running XGBoost + LightGBM...',
+      'Running XGBoost + LightGBM panel (6 horizons)...',
       'Running FinBERT sentiment...',
-      'Computing options GEX + Greeks...',
-      'Running Monte Carlo (100K paths)...',
+      'Running Monte Carlo (10K paths, Student-t)...',
+      'Running risk engine (CVaR, position sizing)...',
       'Assembling institutional report...',
     ];
     let msgIdx = 0;
@@ -158,7 +164,7 @@ export default function Dashboard() {
           ticker: symbol,
           include_options: false,   // Polygon plan returns 403 on the options snapshot
           include_sentiment: true,
-          mc_paths: 100000,
+          mc_paths: 10000,
         }
       });
       setData(res.data.data);
@@ -334,62 +340,12 @@ export default function Dashboard() {
             }} />
           </div>
           <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 10, color: '#8a7560' }}>
-            {elapsed}s elapsed · 8 ML models · 200+ features
+            {elapsed}s elapsed · 12 panel models · 152 features
           </div>
         </div>
       )}
 
       <main style={{ maxWidth: 2100, margin: '0 auto', padding: '16px 28px' }}>
-
-        {/* ── No data state ── */}
-        {!data && !loading && (
-          <div style={{ textAlign: 'center', paddingTop: 80 }}>
-            <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 56, color: '#2d1e18', letterSpacing: 6, marginBottom: 12 }}>
-              QUANTEDGE
-            </div>
-            <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 11, color: '#8a7560', letterSpacing: 3, marginBottom: 40 }}>
-              INSTITUTIONAL · QUANTITATIVE · ANALYTICS · v6.0
-            </div>
-            <div style={{ fontFamily: "'Outfit',sans-serif", color: '#9d8b7a', fontSize: 14, marginBottom: 40 }}>
-              Enter a ticker above and run institutional-grade analysis
-            </div>
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
-              {QUICK_TICKERS.map(t => (
-                <button key={t} onClick={() => runAnalysis(t)}
-                  style={{
-                    background: '#2d1e18', border: '1px solid rgba(212,149,108,0.2)',
-                    color: '#d4c4b0', fontFamily: "'Fira Code',monospace",
-                    fontSize: 12, padding: '10px 20px', borderRadius: 6,
-                    cursor: 'pointer', transition: 'all 0.15s',
-                  }}
-                  onMouseOver={e => { (e.target as any).style.borderColor = '#daa520'; (e.target as any).style.color = '#daa520'; }}
-                  onMouseOut={e => { (e.target as any).style.borderColor = 'rgba(212,149,108,0.2)'; (e.target as any).style.color = '#d4c4b0'; }}
-                >{t}</button>
-              ))}
-            </div>
-
-            {/* Feature grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginTop: 60, maxWidth: 900, margin: '60px auto 0' }}>
-              {[
-                { icon: '🧠', title: 'LSTM + TFT', desc: 'Deep learning return forecasts\n5W, 2W, 1M, 3M, 1Y horizons' },
-                { icon: '🌡', title: 'HMM REGIME', desc: '5-state market regime detector\nBull/Bear/Mean-Revert' },
-                { icon: '📊', title: 'GJR-GARCH', desc: 'Asymmetric volatility model\nVaR & CVaR with Student-t' },
-                { icon: '💬', title: 'FINBERT NLP', desc: 'SEC filings + Reddit + News\nInstitutional sentiment signals' },
-                { icon: '⚙', title: 'OPTIONS GEX', desc: 'Gamma exposure & vol surface\nMax pain & dealer flows' },
-                { icon: '🎲', title: 'MONTE CARLO', desc: '100K paths, Merton jump diffusion\nFat-tailed return distributions' },
-              ].map(f => (
-                <div key={f.title} style={{
-                  background: '#2d1e18', border: '1px solid rgba(212,149,108,0.1)',
-                  borderRadius: 8, padding: '20px 16px', textAlign: 'left',
-                }}>
-                  <div style={{ fontSize: 24, marginBottom: 8 }}>{f.icon}</div>
-                  <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 10, color: '#daa520', letterSpacing: 2, marginBottom: 4 }}>{f.title}</div>
-                  <div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 11, color: '#9d8b7a', whiteSpace: 'pre-line', lineHeight: 1.6 }}>{f.desc}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* ── Data loaded ── */}
         {data && (

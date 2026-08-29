@@ -16,6 +16,11 @@ interface MBRow {
   vol_change_pct: number | null; up_vol_ratio: number | null;
   quiet_price: boolean | null; price_move_6mo: number | null;
 }
+interface RbRow {
+  ticker: string; name?: string; score?: number | null; prior_high?: number | null;
+  discount_pct?: number | null; drawdown_pct?: number | null;
+  recovery?: { progress_pct?: number | null } | null; [k: string]: any;
+}
 interface AscRow {
   rank: number; ticker: string; name: string; sector: string;
   ascent_score: number; tier: string; is_new: boolean;
@@ -91,11 +96,12 @@ const Chip: React.FC<{ label: string; value: string; tone?: string }> = ({ label
 
 const LiveTrackers: React.FC = () => {
   const navigate = useNavigate();
-  const [tab, setTab] = useState<'mb' | 'asc'>('mb');
+  const [tab, setTab] = useState<'mb' | 'asc' | 'rb'>('mb');
   const [tier, setTier] = useState<'small' | 'mid' | 'large'>('small');
   const [mb, setMb] = useState<Record<string, MBRow[]> | null>(null);
   const [gen, setGen] = useState<string>('');
   const [asc, setAsc] = useState<AscRow[]>([]);
+  const [rb, setRb] = useState<RbRow[]>([]);
 
   useEffect(() => {
     (async () => {
@@ -107,6 +113,15 @@ const LiveTrackers: React.FC = () => {
         const a = await api.get('/api/v6/ascent/top/5');
         if (a.data?.rows?.length) setAsc(a.data.rows);
       } catch { /* board not ready */ }
+      try {
+        const b = await api.get('/api/v6/rebound/list');
+        const tiers = b.data?.tiers;
+        if (tiers) {
+          const flat: RbRow[] = Object.values(tiers).flat() as RbRow[];
+          flat.sort((x, y) => (y.score ?? 0) - (x.score ?? 0));
+          setRb(flat.slice(0, 6));
+        }
+      } catch { /* scan not ready */ }
     })();
   }, []);
 
@@ -136,6 +151,9 @@ const LiveTrackers: React.FC = () => {
       <div style={{ display: 'flex', gap: 10, marginBottom: 18, flexWrap: 'wrap', alignItems: 'center' }}>
         <button style={tabBtn(tab === 'mb')} onClick={() => setTab('mb')}>◆ MULTIBAGGER</button>
         <button style={tabBtn(tab === 'asc')} onClick={() => setTab('asc')}>★ ASCENT RADAR</button>
+        {rb.length > 0 && (
+          <button style={tabBtn(tab === 'rb')} onClick={() => setTab('rb')}>↻ REBOUND</button>
+        )}
         {tab === 'mb' && (
           <div style={{ display: 'flex', gap: 6, marginLeft: 8 }}>
             {(['small', 'mid', 'large'] as const).map(t => (
@@ -151,7 +169,7 @@ const LiveTrackers: React.FC = () => {
           {tab === 'mb'
             ? `${(mb?.[tier] || []).length} ${tier.toUpperCase()}-CAP RANKED` +
               (gen ? ` · SCAN ${new Date(gen).toLocaleDateString()}` : '')
-            : `${asc.length} CLIMBERS`}
+            : tab === 'asc' ? `${asc.length} CLIMBERS` : `${rb.length} DISCOUNTED-QUALITY NAMES`}
         </span>
       </div>
 
@@ -257,6 +275,51 @@ const LiveTrackers: React.FC = () => {
             </div>
           </div>
         ))}
+        {tab === 'rb' && rb.map((r, i) => {
+          const prog = r.recovery?.progress_pct;
+          const disc = r.discount_pct ?? r.drawdown_pct;
+          return (
+            <div key={r.ticker} onClick={() => navigate(`/dashboard?ticker=${r.ticker}`)}
+              style={{
+                display: 'grid', gridTemplateColumns: '54px 1fr auto', gap: 20, alignItems: 'center',
+                padding: '16px 20px', cursor: 'pointer', minHeight: 84,
+                background: `linear-gradient(90deg, ${C.s2}, ${C.s0})`,
+                border: `1px solid ${C.b1}`, borderLeft: `3px solid ${heat(r.score ?? null)}`,
+                borderRadius: 8,
+              }}>
+              <div style={{ fontFamily: mono, fontSize: 20, color: C.b2, fontWeight: 700 }}>
+                {String(i + 1).padStart(2, '0')}
+              </div>
+              <div>
+                <div style={{ fontFamily: mono, fontSize: 17, color: C.cream, fontWeight: 700 }}>{r.ticker}</div>
+                {r.name && <div style={{ color: C.dust, fontSize: 12.5, marginTop: 4 }}>{r.name}</div>}
+                {prog != null && (
+                  <div style={{ marginTop: 9, maxWidth: 320 }}>
+                    <div style={{ fontFamily: mono, fontSize: 8, letterSpacing: 1.1, color: C.cocoa, marginBottom: 4 }}>
+                      RECOVERY TOWARD PRIOR HIGH — {Number(prog).toFixed(0)}%
+                    </div>
+                    <div style={{ height: 5, background: 'rgba(0,0,0,0.35)', borderRadius: 3 }}>
+                      <div style={{ height: 5, width: `${Math.max(0, Math.min(100, Number(prog)))}%`,
+                                    background: `linear-gradient(90deg,${C.caramel},${C.bull})`, borderRadius: 3 }} />
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                {disc != null && (
+                  <>
+                    <div style={{ fontFamily: mono, fontSize: 22, color: C.bear, fontWeight: 700 }}>
+                      {Number(disc) > 0 ? '-' : ''}{Math.abs(Number(disc)).toFixed(0)}%
+                    </div>
+                    <div style={{ fontFamily: mono, fontSize: 8.5, letterSpacing: 1.2, color: C.cocoa }}>
+                      OFF PRIOR HIGH
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       <div style={{
