@@ -277,7 +277,7 @@ const LiveTrackers: React.FC = () => {
         ))}
         {tab === 'rb' && rb.map((r, i) => {
           const prog = r.recovery?.progress_pct;
-          const disc = r.discount_pct ?? r.drawdown_pct;
+          const disc = r.discount_pct ?? r.drawdown_pct ?? (r as any).drawdown_from_high_pct;
           return (
             <div key={r.ticker} onClick={() => navigate(`/dashboard?ticker=${r.ticker}`)}
               style={{

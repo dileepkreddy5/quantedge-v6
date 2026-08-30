@@ -143,7 +143,12 @@ def _shape(artifact: dict, live_prices: bool = True) -> dict:
                 "prior_high": r.get("prior_high"),
                 "insights": _insights(r),
             }
-            if live_prices and r.get("prior_high") and r.get("price"):
+            if r.get("recovery"):
+                # v1 artifact carries recovery computed at scan time; the sqlite
+                # price store this block falls back to never shipped in this image.
+                row["current_price"] = r.get("price")
+                row["recovery"] = r["recovery"]
+            elif live_prices and r.get("prior_high") and r.get("price"):
                 cur = closes.get(r["ticker"])
                 if cur:
                     row["current_price"] = round(cur, 2)

@@ -475,7 +475,7 @@ async def lifespan(app: FastAPI):
 
         try:
             from services.rebound_scan_job import ReboundScanJob
-            rb_job = ReboundScanJob()
+            rb_job = ReboundScanJob(app.state.db)
             scheduler.add_job(
                 rb_job.run,
                 trigger=CronTrigger(hour=2, minute=30, timezone=et),

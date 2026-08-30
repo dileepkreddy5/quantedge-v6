@@ -1,47 +1,33 @@
-"""Nightly rebound scan — refreshes the discounted-quality shortlist.
+"""Nightly rebound scan — 02:30 ET.
 
-Runs the rebound scan over the live universe against current fundamentals:
-finds stocks down >=35% from their 3y high that pass the health + no-falling-
-knife gates, scores and stages them, writes the artifact the /rebound/*
-endpoints serve. The artifact includes each name's prior_high so the live API
-can compute recovery-to-high progress on every request.
-
-Runs at 02:30 ET, after the multibagger scan (02:00) which refreshes the EDGAR
-bulk file this reuses.
+Rewritten: the original imported quantedge.fundamentals.rebound.scan with a
+sqlite/insider-DB signature from an external research environment; that
+module never existed in this repo, so the job failed on its import line
+every night and logged one warning that container restarts erased. Now
+pool-based against the v1 engine, and failure is a loud logger.error.
 """
-from __future__ import annotations
-import asyncio
-import os
+import asyncio, json, os
 from loguru import logger
 
 
 class ReboundScanJob:
-    def __init__(self, price_db=None, insider_db=None, out_path=None,
-                 sample=None, workers=8):
-        self.price_db = price_db or os.environ.get("PRICE_DB", "/app/data/price_store.db")
-        self.insider_db = insider_db or os.environ.get(
-            "INSIDER_DB", "/app/data/insider_store.db")
-        self.out_path = out_path or os.environ.get(
+    def __init__(self, pool=None):
+        self.pool = pool
+        self.out_path = os.environ.get(
             "REBOUND_ARTIFACT", "/app/data/rebound_artifact.json")
-        self.sample = sample
-        self.workers = workers
 
     async def run(self):
         logger.info("🔍 Nightly rebound scan starting…")
         try:
+            if self.pool is None:
+                raise RuntimeError("ReboundScanJob needs a DB pool")
             from quantedge.fundamentals.rebound.scan import run_scan
-            artifact = await asyncio.to_thread(
-                run_scan, self.price_db, self.insider_db, None,
-                self.sample, False, self.workers, None)
-            await asyncio.to_thread(self._write, artifact)
-            n = artifact.get("total_passed", 0)
-            logger.info(f"✅ Rebound scan complete — {n} names, artifact at {self.out_path}")
+            artifact = await run_scan(self.pool)
+            tmp = self.out_path + ".tmp"
+            with open(tmp, "w") as fh:
+                json.dump(artifact, fh, default=str)
+            os.replace(tmp, self.out_path)
+            logger.info(f"✅ Rebound scan complete — {artifact['n_passed_gates']} "
+                        f"names, artifact at {self.out_path}")
         except Exception as e:
-            logger.warning(f"Rebound scan failed: {e}")
-
-    def _write(self, artifact):
-        import json
-        tmp = self.out_path + ".tmp"
-        with open(tmp, "w") as fh:
-            json.dump(artifact, fh, default=str)
-        os.replace(tmp, self.out_path)   # atomic — readers never see a partial file
+            logger.error(f"❌ Rebound scan FAILED (artifact stale): {e}")
