@@ -86,12 +86,12 @@ def _sha(o) -> str:
     return hashlib.sha256(json.dumps(o, sort_keys=True, default=str).encode()).hexdigest()
 
 
-async def ingest_capital(pool, limit: int = 700) -> dict:
+async def ingest_capital(pool, limit: int | None = None) -> dict:
     companies = await pool.fetch("""
         SELECT u.ticker, u.cik FROM universe u
         JOIN (SELECT ticker FROM daily_bars GROUP BY ticker HAVING count(*) >= 500) b USING (ticker)
         WHERE u.cik IS NOT NULL AND u.active
-        ORDER BY u.market_cap DESC NULLS LAST LIMIT $1""", limit)
+        ORDER BY u.market_cap DESC NULLS LAST LIMIT $1""", limit if limit else 100000)
     stats = {"companies": len(companies), "no_facts": 0, "filings_new": 0, "events_new": 0,
              "derived_new": 0, "relevant": 0}
     for co in companies:

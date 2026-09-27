@@ -71,10 +71,10 @@ async def _company_universe(pool, limit: int):
         FROM universe u
         JOIN (SELECT ticker FROM daily_bars GROUP BY ticker HAVING count(*) >= 500) b USING (ticker)
         WHERE u.cik IS NOT NULL AND u.active
-        ORDER BY u.market_cap DESC NULLS LAST LIMIT $1""", limit)
+        ORDER BY u.market_cap DESC NULLS LAST LIMIT $1""", limit if limit else 100000)
 
 
-async def ingest(pool, limit: int = 700, concurrency: int = 2) -> dict:
+async def ingest(pool, limit: int | None = None, concurrency: int = 2) -> dict:
     await ensure_tables(pool)
     companies = await _company_universe(pool, limit)
     logger.info(f"[ci/edgar] ingesting {len(companies)} companies")

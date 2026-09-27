@@ -285,7 +285,7 @@ async def lifespan(app: FastAPI):
                 from services.bars_store import BarsStore
                 bs = BarsStore(app.state.db)
                 await bs.ensure_tables()
-                n = await bs.sync_day()
+                n = (await bs.sync_missing()).get('bars', 0)   # self-healing: fills every missing session, not one day
                 logger.info(f"daily bars synced: {n} rows")
             except Exception as e:
                 logger.error(f"bars sync failed: {e}")
