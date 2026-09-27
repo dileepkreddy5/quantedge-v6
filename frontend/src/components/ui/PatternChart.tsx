@@ -1,3 +1,4 @@
+import PatternChartPro from './PatternChartPro';
 // Pattern Chart — the picture half of Pattern Lab. Everything drawn comes
 // from /patterns/chart; every odds figure is a universe-measured scorecard
 // at the chosen horizon, or says it isn't measured yet.
@@ -87,86 +88,11 @@ const PatternChart:React.FC<{ticker:string}>=({ticker})=>{
           {cell('DOWNSIDE CASE (P25)',pf(dist.p25_pct),C.bear,`worst 10%: ${pf(dist.p10_pct)}`)}
           {cell('SPREAD (σ)',`${dist.outcome_vol_pct??'—'}%`,C.latte,`n=${dist.n} non-overlapping episodes`)}
         </div></div>);})()}
-    {/* chart */}
-    <div style={{background:'rgba(0,0,0,0.28)',border:`1px solid ${C.b1}`,borderRadius:10,padding:6,position:'relative'}}>
-      <svg viewBox={`0 0 ${W} ${H}`} style={{width:'100%',display:'block'}} onMouseLeave={()=>setHover(null)}>
-        {/* 52w lines */}
-        {[['52W HIGH',d.high_52w,C.caramel],['52W LOW',d.low_52w,C.blue]].map(([lab,p,col]:any)=>(<g key={lab}>
-          <line x1={PL} x2={W-PR} y1={y(p)} y2={y(p)} stroke={col} strokeDasharray="4,4" opacity={.5}/>
-          <text x={W-PR+4} y={y(p)+3} fill={col} fontSize={8} fontFamily={mono}>{lab} {p.toFixed(2)}</text></g>))}
-        {d.sma20&&line(d.sma20,C.gold)}{d.sma50&&line(d.sma50,C.caramel,'3,3')}{d.sma200&&line(d.sma200,C.dust,'1,3')}
-        {(d.earnings||[]).map((e:any,k:number)=>(<g key={'e'+k}>
-          <line x1={x(e.i)} x2={x(e.i)} y1={14} y2={H-VH-8} stroke={C.blue} strokeDasharray="2,4" opacity={.6}/>
-          <text x={x(e.i)+3} y={H-VH-20} fill={C.blue} fontSize={8} fontFamily={mono}>EARNINGS {e.date.slice(5)}</text></g>))}
-        {d.relative_strength_vs_spy&&(()=>{const rs=d.relative_strength_vs_spy.filter((v:any)=>v!=null); if(!rs.length) return null;
-          const mn=Math.min(...rs),mx=Math.max(...rs); const top=PT+8, hgt=48; const ry=(v:number)=>top+(1-(v-mn)/((mx-mn)||1))*hgt;
-          let p=''; d.relative_strength_vs_spy.forEach((v:any,i:number)=>{if(v==null)return;p+=`${p?'L':'M'}${x(i).toFixed(1)},${ry(v).toFixed(1)}`;});
-          const lastv=rs[rs.length-1];
-          return (<g opacity={.9}><path d={p} fill="none" stroke={lastv>=1?C.bull:C.bear} strokeWidth={1}/>
-            <text x={PL+4} y={top-2} fill={C.cocoa} fontSize={7.5} fontFamily={mono}>RELATIVE STRENGTH vs SPY (window start = 1.00) · now {lastv.toFixed(3)} {lastv>=1?'outperforming':'lagging'}</text></g>);})()}
-        {/* volume */}
-        {d.candles.map((c:any,i:number)=><rect key={'v'+i} x={x(i)-cw*0.35} y={vy(c.v)} width={cw*0.7} height={H-8-vy(c.v)} fill={c.c>=c.o?C.bull:C.bear} opacity={.18}/>)}
-        {/* candles */}
-        {d.candles.map((c:any,i:number)=>{const up=c.c>=c.o;const col=up?C.bull:C.bear;return (<g key={i}>
-          <line x1={x(i)} x2={x(i)} y1={y(c.h)} y2={y(c.l)} stroke={col} strokeWidth={1}/>
-          <rect x={x(i)-cw*0.35} y={y(Math.max(c.o,c.c))} width={Math.max(1,cw*0.7)} height={Math.max(1,Math.abs(y(c.o)-y(c.c)))} fill={up?col:C.s0} stroke={col} strokeWidth={1}/></g>);})}
-        {/* formations: points + neckline-ish polyline */}
-        {show.f&&d.formations.map((f:Occ,k:number)=>{const pts=f.points||[];const col=BEAR_F.has(f.name)?C.bear:C.bull;
-          return (<g key={'f'+k} onMouseEnter={()=>setHover(f)} style={{cursor:'pointer'}}>
-            <polyline points={pts.map(p=>`${x(p.i)},${y(p.price)}`).join(' ')} fill="none" stroke={col} strokeWidth={1.5} opacity={.9}/>
-            {pts.map((p,j)=><circle key={j} cx={x(p.i)} cy={y(p.price)} r={3} fill={col}/>)}
-            {f.confirm_i!=null&&<line x1={x(f.confirm_i)} x2={x(f.confirm_i)} y1={y(pts[pts.length-1].price)-16} y2={y(pts[pts.length-1].price)+16} stroke={col} strokeDasharray="2,2"/>}
-            <text x={x(pts[0].i)} y={y(Math.max(...pts.map(p=>p.price)))-8} fill={col} fontSize={9} fontFamily={mono}>{LABEL[f.name]}</text></g>);})}
-        {/* candlestick markers */}
-        {show.c&&d.candlesticks.filter((o:Occ)=>show.doji||o.name!=='doji').map((o:Occ,k:number)=>{const c=d.candles[o.i];if(!c)return null;const up=o.direction==='bullish',neu=o.direction==='neutral';
-          const col=neu?C.gold:up?C.bull:C.bear; const yy=up?y(c.l)+12:y(c.h)-12;
-          return (<g key={'c'+k} onMouseEnter={()=>setHover(o)} style={{cursor:'pointer'}}>
-            {neu?<circle cx={x(o.i)} cy={y(c.h)-8} r={3} fill="none" stroke={col}/>:
-              <polygon points={up?`${x(o.i)-4},${yy+6} ${x(o.i)+4},${yy+6} ${x(o.i)},${yy-2}`:`${x(o.i)-4},${yy-6} ${x(o.i)+4},${yy-6} ${x(o.i)},${yy+2}`} fill={col} opacity={.9}/>}
-          </g>);})}
-        {/* forward envelope */}
-        {fan&&F>0&&(()=>{const xs=(j:number)=>x(n-1+j);
-          const band=fan.p75.slice(0,F).map((v:number,j:number)=>`${j?'L':'M'}${xs(j)},${y(fp(v))}`).join('')+' '+[...fan.p25.slice(0,F)].reverse().map((v:number,j:number)=>`L${xs(F-1-j)},${y(fp(v))}`).join(' ')+' Z';
-          const med=fan.median.slice(0,F).map((v:number,j:number)=>`${j?'L':'M'}${xs(j)},${y(fp(v))}`).join('');
-          return (<g><line x1={x(n-1)} x2={x(n-1)} y1={14} y2={H-VH-8} stroke={C.gold} opacity={.5}/>
-            <text x={x(n-1)+4} y={22} fill={C.gold} fontSize={8} fontFamily={mono}>TODAY → what followed ({fan.n_paths} real paths)</text>
-            <path d={band} fill="rgba(218,165,32,0.13)"/><path d={med} fill="none" stroke={C.gold} strokeWidth={2}/>
-            <text x={xs(F-1)+4} y={y(fp(fan.median[F-1]))+3} fill={C.gold} fontSize={9} fontFamily={mono}>med {pf(fan.median[F-1])}</text>
-            <text x={xs(F-1)+4} y={y(fp(fan.p75[F-1]))-2} fill={C.dust} fontSize={8} fontFamily={mono}>p75 {pf(fan.p75[F-1])}</text>
-            <text x={xs(F-1)+4} y={y(fp(fan.p25[F-1]))+10} fill={C.dust} fontSize={8} fontFamily={mono}>p25 {pf(fan.p25[F-1])}</text></g>);})()}
-        {d.candles.map((c:any,i:number)=>{if(i<20)return null;const avg=d.candles.slice(i-20,i).reduce((a:number,z:any)=>a+z.v,0)/20;
-          return c.v>=2.5*avg?<g key={'cl'+i}><rect x={x(i)-cw*0.35} y={vy(c.v)} width={cw*0.7} height={H-8-vy(c.v)} fill={C.gold} opacity={.55}/>
-            <text x={x(i)} y={vy(c.v)-3} fill={C.gold} fontSize={7} fontFamily={mono} textAnchor="middle">{(c.v/avg).toFixed(1)}×</text></g>:null;})}
-        {(()=>{const cs=d.candles; const roll=(k:number)=>cs.map((_:any,i:number)=>i+1>=k?cs.slice(i+1-k,i+1).reduce((a:number,z:any)=>a+z.v,0)/k:null);
-          const a5=roll(5), a20=roll(20);
-          const path=(arr:(number|null)[],col:string,w:number)=>{let p='';arr.forEach((v,i)=>{if(v==null)return;p+=`${p?'L':'M'}${x(i).toFixed(1)},${vy(v).toFixed(1)}`;});return <path d={p} fill="none" stroke={col} strokeWidth={w}/>;};
-          const cur5=a5[n-1], prev5=a5[n-6]; const ch=cur5&&prev5?(cur5/prev5-1)*100:null;
-          // weekly strip: every 5 sessions, avg vs previous 5
-          const strip=[]; for(let i=n-1;i-9>=0;i-=5){const a=a5[i], b=a5[i-5]; if(a==null||b==null) continue; strip.push({i,ch:(a/b-1)*100});}
-          return (<g>
-            {path(a20,C.dust,1)}{path(a5,C.gold,1.5)}
-            {cur5!=null&&<text x={x(n-1)+4} y={vy(cur5)+3} fill={C.gold} fontSize={8} fontFamily={mono}>5d avg {(cur5/1e6).toFixed(1)}M{ch!=null?` (${ch>=0?'+':''}${ch.toFixed(0)}% vs prior wk)`:''}</text>}
-            {strip.map((w,k)=><text key={'w'+k} x={x(w.i-2)} y={H-1} fill={w.ch>=0?C.bull:C.bear} fontSize={7} fontFamily={mono} textAnchor="middle">{w.ch>=0?'▲':'▼'}{Math.abs(w.ch).toFixed(0)}%</text>)}
-            <text x={PL+4} y={H-VH+8} fill={C.cocoa} fontSize={7.5} fontFamily={mono}>VOLUME · gold = 5-day avg · grey = 20-day avg · ▲▼ = each week's avg vs the week before</text>
-          </g>);})()}
-        {(()=>{const cands=[...d.formations,...d.candlesticks].filter((o:Occ)=>{const st=o.scorecard?.all||o.scorecard;return st&&st.median_pct!=null&&st.p25_pct!=null;}).sort((a:Occ,b:Occ)=>b.i-a.i);
-          const o=cands[0]; if(!o) return null; const st=o.scorecard?.all||o.scorecard; const i0=o.confirm_i??o.i; const p0=d.candles[i0]?.c; if(!p0) return null;
-          const K=d.outcome_sessions; const col=st.positive_pct>=50?C.bull:C.bear; const pt=(pct:number)=>y(p0*(1+pct/100));
-          return (<g opacity={.85}>
-            <line x1={x(i0)} x2={x(i0+K)} y1={y(p0)} y2={pt(st.median_pct)} stroke={col} strokeWidth={1.5} strokeDasharray="5,3"/>
-            <line x1={x(i0)} x2={x(i0+K)} y1={y(p0)} y2={pt(st.p75_pct)} stroke={col} strokeWidth={1} strokeDasharray="2,3"/>
-            <line x1={x(i0)} x2={x(i0+K)} y1={y(p0)} y2={pt(st.p25_pct)} stroke={col} strokeWidth={1} strokeDasharray="2,3"/>
-            <text x={W-PR-4} y={PT+80} fill={col} fontSize={8} fontFamily={mono} textAnchor="end">CONE · {LABEL[o.name]} · {st.positive_pct}% up · med {pf(st.median_pct,1)} @{K}s (n={st.n})</text></g>);})()}
-        <text x={PL+4} y={H-VH-14} fill={C.cocoa} fontSize={8} fontFamily={mono}>{d.candles[0].d} → {d.candles[n-1].d} · last {last}</text>
-      </svg>
-      {hover&&<div style={{position:'absolute',left:14,top:14,background:'rgba(16,10,7,0.95)',border:`1px solid ${C.gold}`,borderRadius:6,padding:'8px 12px',fontFamily:mono,fontSize:10,maxWidth:460}}>
-        <div style={{color:C.cream,fontWeight:700}}>{LABEL[hover.name]||hover.name} <span style={{color:C.cocoa,fontWeight:400}}>· {hover.family} · {d.candles[hover.i]?.d}</span></div>
-        <div style={{marginTop:4}}><ScoreLine o={hover} hz={hz.toUpperCase()}/></div>
-        {hover.scorecard?.by_regime&&<div style={{marginTop:4,color:C.dust}}>by regime: {Object.entries(hover.scorecard.by_regime).map(([k,v]:any)=>`${k.replace(/_/g,' ')} ${v?v.positive_pct+'%':'n/a'}`).join(' · ')}</div>}
-        {hover.scorecard?.by_period&&<div style={{color:C.dust}}>2021–24 {hover.scorecard.by_period['2021-2024']?.positive_pct??'n/a'}% · 2025+ {hover.scorecard.by_period['2025+']?.positive_pct??'n/a'}%</div>}
-      </div>}
+    {/* chart — canvas engine */}
+    <div style={{background:'rgba(0,0,0,0.28)',border:`1px solid ${C.b1}`,borderRadius:10,padding:6}}>
+      <PatternChartPro d={d} show={show}/>
+      <div style={{fontFamily:mono,fontSize:8,color:C.cocoa,padding:'6px 8px 2px'}}>gold = 20d SMA · dashed = 50d · dotted = 200d · blue top line = relative strength vs SPY · ▲▼ candlestick patterns · ■ formation completions · ● earnings · gold volume bars = climax (≥2.5× 20d avg) · dotted gold = 5d avg volume · beyond today: median and p25–p75 of what followed similar shapes; dashed cone = latest measured pattern's own odds</div>
     </div>
-    {/* catalog in window, ranked by measured edge */}
     {(()=>{const cs=d.candles; const H20=d.outcome_sessions;
       const avg=(i:number,k:number)=>cs.slice(Math.max(0,i-k),i).reduce((a:number,z:any)=>a+z.v,0)/Math.max(1,Math.min(k,i));
       const recent=[...d.formations,...d.candlesticks].filter((o:Occ)=>o.i>=n-25&&cs[o.i]).sort((a:Occ,b:Occ)=>b.i-a.i).slice(0,8);

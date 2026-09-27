@@ -2,7 +2,7 @@
   "name": "quantedge-frontend",
   "version": "5.0.0",
   "private": true,
-  "description": "QuantEdge — Institutional Quant Platform for Dileep Kumar Reddy Kapu",
+  "description": "QuantEdge \u2014 Institutional Quant Platform for Dileep Kumar Reddy Kapu",
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
@@ -25,7 +25,8 @@
     "react-router-dom": "^6.23.1",
     "react-scripts": "5.0.1",
     "recharts": "^2.12.5",
-    "zustand": "^4.5.2"
+    "zustand": "^4.5.2",
+    "lightweight-charts": "^4.2.0"
   },
   "devDependencies": {
     "@types/d3": "^7.4.3",
