@@ -315,3 +315,86 @@ async def situation_report(ticker: str, request: Request):
                       "options positioning (plan returns 403)"],
         "note": "Every distribution is historical frequency with its n and base rate. Nothing here is a prediction.",
     }
+
+
+HZ = {"1w": (5, 40), "1m": (21, 90), "3m": (63, 180), "6m": (126, 260), "12m": (252, 520)}   # (outcome sessions, history shown)
+
+
+@router.get("/patterns/chart/{ticker}")
+async def pattern_chart(ticker: str, request: Request, horizon: str = Query("3m")):
+    """Everything the Pattern Chart draws: candles, 52w lines, SMAs, regime,
+    formation and candlestick occurrences in the window, each with its
+    universe-measured scorecard at the chosen horizon ('not yet measured' when
+    the scan hasn't run or the cell is under the occurrence floor), the analog
+    forward envelope, and whether today's state matches a pattern."""
+    import json, httpx
+    from quantedge.patterns.formations import _smooth, _extrema, classify_last5
+    from quantedge.patterns.candlesticks import detect
+    from core.artifact_paths import artifact_read_path
+    tk = ticker.upper().strip()
+    if horizon not in HZ: raise HTTPException(status_code=422, detail="horizon must be 1w|1m|3m|6m|12m")
+    out_sessions, shown = HZ[horizon]
+    pool = getattr(request.app.state, "db", None)
+    rows = await pool.fetch("SELECT d, o, h, l, c, v FROM daily_bars WHERE ticker=$1 ORDER BY d", tk)
+    if len(rows) < 260: raise HTTPException(status_code=404, detail=f"{tk}: insufficient history")
+    c = np.array([r["c"] for r in rows], np.float64); o = np.array([r["o"] or r["c"] for r in rows], np.float64)
+    h = np.array([r["h"] or r["c"] for r in rows], np.float64); l = np.array([r["l"] or r["c"] for r in rows], np.float64)
+    v = np.array([float(r["v"] or 0) for r in rows]); ds = [r["d"] for r in rows]
+    n = len(c); start = max(0, n - shown)
+    def sma(k): return [round(float(c[i - k + 1:i + 1].mean()), 2) if i >= k - 1 else None for i in range(start, n)]
+
+    # Formations on this ticker (same detector as the universe scan).
+    sm = _smooth(c); ext = _extrema(sm); forms = []
+    for at in range(4, len(ext)):
+        name = classify_last5(c, ext, at)
+        if name and ext[at][0] >= start:
+            pts = [{"i": ext[k][0] - start, "price": round(float(c[ext[k][0]]), 2)} for k in range(at - 4, at + 1)]
+            forms.append({"family": "formation", "name": name, "i": ext[at][0] - start, "points": pts,
+                          "confirm_i": min(ext[at][0] + 3, n - 1) - start})
+    cands = [{"family": "candlestick", **x, "i": x["i"] - start} for x in detect(o, h, l, c) if x["i"] >= start]
+
+    # Scorecards at this horizon from the nightly scans (formations: 5/20/60/120d; candles: 5/21/63/126/252d).
+    fkey = {"1w": "5d", "1m": "20d", "3m": "60d", "6m": "120d", "12m": None}[horizon]
+    ckey = f"{out_sessions}d"
+    fa = artifact_read_path("formations_scan.json"); ca = artifact_read_path("candlestick_scan.json")
+    fart = json.loads(fa.read_text()) if fa else {}; cart = json.loads(ca.read_text()) if ca else {}
+    def fscore(name):
+        f = (fart.get("formations") or {}).get(name)
+        if not f or not fkey: return None
+        d = (f.get("distributions") or {}).get(fkey)
+        return {**d, "breakout_up_pct": f.get("breakout_up_pct"), "follow_through_pct": f.get("follow_through_pct")} if d else None
+    def cscore(name):
+        p = (cart.get("patterns") or {}).get(name)
+        if not p: return None
+        hz = (p.get("horizons") or {}).get(ckey) or {}
+        return {"all": hz.get("all"), "by_regime": hz.get("by_regime"), "by_period": hz.get("by_period"),
+                "base": (cart.get("base") or {}).get(ckey), "occurrences": p.get("occurrences")}
+    for f_ in forms: f_["scorecard"] = fscore(f_["name"])
+    for x in cands: x["scorecard"] = cscore(x["name"])
+
+    # Analog forward envelope (real forward paths) at the closest library window.
+    fan = None
+    akey = {5: "5d", 21: "20d", 63: "60d", 126: "120d", 252: "252d"}[out_sessions]   # analog library horizon keys
+    try:
+        async with httpx.AsyncClient(timeout=120) as cx:
+            r = await cx.get(f"http://localhost:8000/api/v6/patterns/analogs/{tk}", params={"window": 20 if out_sessions <= 21 else 60})
+            j = r.json() if r.status_code == 200 else {}
+            fan = {"forward_fan": j.get("forward_fan"), "episodes": j.get("episodes"),
+                   "distribution": (j.get("distributions") or {}).get(akey),
+                   "base": (j.get("base_rates") or {}).get(akey[:-1]) or (j.get("base_rates") or {}).get(int(akey[:-1]))}
+    except Exception:
+        fan = None
+
+    recent = [x for x in forms + cands if x["i"] >= (n - start) - 3]
+    hi52, lo52 = float(c[-252:].max()), float(c[-252:].min())
+    return {"ticker": tk, "horizon": horizon, "outcome_sessions": out_sessions,
+            "candles": [{"d": ds[i].isoformat(), "o": round(float(o[i]), 2), "h": round(float(h[i]), 2),
+                         "l": round(float(l[i]), 2), "c": round(float(c[i]), 2), "v": int(v[i])} for i in range(start, n)],
+            "sma20": sma(20), "sma50": sma(50), "sma200": sma(200) if n >= 200 else None,
+            "high_52w": hi52, "low_52w": lo52,
+            "formations": forms, "candlesticks": cands,
+            "current_match": recent,
+            "analog": fan,
+            "scorecards_note": ("candlestick odds appear once the nightly universe scan has run; formation odds are "
+                                "measured from 58k occurrences; cells under the occurrence floor say 'not enough history'"),
+            "catalog_measured": {"formations": bool(fart), "candlesticks": bool(cart)}}

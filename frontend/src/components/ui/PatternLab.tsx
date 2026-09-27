@@ -1,3 +1,4 @@
+import PatternChart from './PatternChart';
 import SituationMode from './SituationMode';
 import FormationsDeep from './FormationsDeep';
 import EvolutionMode from './EvolutionMode';
@@ -418,6 +419,7 @@ const ConditionsMode: React.FC<{ ticker: string; set: string }> = ({ ticker, set
 
 // ── Shell ─────────────────────────────────────────────────────
 const MODES = [
+  { id: 'chart', label: 'PATTERN CHART' },
   { id: 'situation', label: 'SITUATION REPORT' },
   { id: 'analogs', label: 'HISTORICAL ANALOGS' },
   { id: 'formations', label: 'CLASSICAL FORMATIONS' },
@@ -428,7 +430,7 @@ const MODES = [
 ];
 
 const PatternLab: React.FC<{ ticker: string }> = ({ ticker }) => {
-  const [mode, setMode] = useState('analogs');
+  const [mode, setMode] = useState('chart');
   return (
     <div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
@@ -441,6 +443,7 @@ const PatternLab: React.FC<{ ticker: string }> = ({ ticker }) => {
           }}>{m.label}</button>
         ))}
       </div>
+      {mode === 'chart' && <PatternChart ticker={ticker} />}
       {mode === 'situation' && <SituationMode ticker={ticker} />}
       {mode === 'analogs' && <AnalogsDeep ticker={ticker} />}
       {mode === 'formations' && <FormationsDeep />}
