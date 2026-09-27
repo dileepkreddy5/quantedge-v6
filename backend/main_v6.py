@@ -74,6 +74,7 @@ from routers.scan_router import router as scan_router
 from routers.system_router import router as system_router
 from routers.brief_router import router as brief_router
 from routers.patterns_router import router as patterns_router
+from routers.intel_router import router as intel_router
 from ml.price_oracle.router import router as oracle_router
 from services.signal_tracker import SignalTracker, OutcomeFillerJob
 
@@ -504,6 +505,17 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning(f"Pattern library rebuild not scheduled: {e}")
 
+        # Company Intelligence — 05:00 ET, after EDGAR's overnight posting.
+        try:
+            from services.ci_ingest_job import CIIngestJob
+            _ci = CIIngestJob(app.state.db)
+            scheduler.add_job(_ci.run, trigger=CronTrigger(hour=5, minute=0, timezone=et),
+                              id="ci_ingest", name="Nightly Company Intelligence ingest",
+                              replace_existing=True, max_instances=1, coalesce=True)
+            logger.info("✅ CI ingest scheduled (05:00 ET nightly)")
+        except Exception as e:
+            logger.warning(f"CI ingest not scheduled: {e}")
+
         # Nightly full-universe panel rebuild + multi-horizon retrain.
         # 02:15 America/Denver — after the 02:00/02:30 ET scans have finished and
         # clear of the 08:00 UTC pg_dumpall. Runs as subprocesses and promotes
@@ -685,6 +697,7 @@ app.include_router(ascent_router,        prefix="/api/v6",             tags=["As
 app.include_router(system_router,        prefix="/api/v6",             tags=["System"])
 app.include_router(brief_router,         prefix="/api/v6",             tags=["Brief"])
 app.include_router(patterns_router,      prefix="/api/v6",             tags=["Patterns"])
+app.include_router(intel_router,         prefix="/api/v6",             tags=["Intel"])
 app.include_router(peers_router,         prefix="/api/v6",             tags=["Peers"])
 app.include_router(ecosystem_router,     prefix="/api/v6",             tags=["Ecosystem"])
 app.include_router(news_router,          prefix="/api/v6",             tags=["News"])
