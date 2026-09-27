@@ -48,7 +48,7 @@ const PatternChart:React.FC<{ticker:string}>=({ticker})=>{
     return {W,H,VH,PL,PR,PT,PB,n,F,cw,x,y,vy,fp,last,fan};},[d]);
   if(err)return <div style={{fontFamily:mono,fontSize:11,color:C.warn}}>{err}</div>;
   if(!d||!geom)return <div style={{fontFamily:mono,fontSize:11,color:C.dust}}>drawing {ticker}…</div>;
-  const {W,H,VH,PL,PR,n,F,cw,x,y,vy,fp,last,fan}=geom;
+  const {W,H,VH,PL,PR,PT,n,F,cw,x,y,vy,fp,last,fan}=geom;
   const occs:Occ[]=[...(show.f?d.formations:[]),...(show.c?d.candlesticks:[])];
   const catalog=Array.from(new Map<string,Occ>([...d.formations,...d.candlesticks].map((o:Occ)=>[o.name,o] as [string,Occ])).values())
     .sort((a:any,b:any)=>Math.abs(edgeOf(b)??-99)-Math.abs(edgeOf(a)??-99));
@@ -137,6 +137,18 @@ const PatternChart:React.FC<{ticker:string}>=({ticker})=>{
         {d.candles.map((c:any,i:number)=>{if(i<20)return null;const avg=d.candles.slice(i-20,i).reduce((a:number,z:any)=>a+z.v,0)/20;
           return c.v>=2.5*avg?<g key={'cl'+i}><rect x={x(i)-cw*0.35} y={vy(c.v)} width={cw*0.7} height={H-8-vy(c.v)} fill={C.gold} opacity={.55}/>
             <text x={x(i)} y={vy(c.v)-3} fill={C.gold} fontSize={7} fontFamily={mono} textAnchor="middle">{(c.v/avg).toFixed(1)}×</text></g>:null;})}
+        {(()=>{const cs=d.candles; const roll=(k:number)=>cs.map((_:any,i:number)=>i+1>=k?cs.slice(i+1-k,i+1).reduce((a:number,z:any)=>a+z.v,0)/k:null);
+          const a5=roll(5), a20=roll(20);
+          const path=(arr:(number|null)[],col:string,w:number)=>{let p='';arr.forEach((v,i)=>{if(v==null)return;p+=`${p?'L':'M'}${x(i).toFixed(1)},${vy(v).toFixed(1)}`;});return <path d={p} fill="none" stroke={col} strokeWidth={w}/>;};
+          const cur5=a5[n-1], prev5=a5[n-6]; const ch=cur5&&prev5?(cur5/prev5-1)*100:null;
+          // weekly strip: every 5 sessions, avg vs previous 5
+          const strip=[]; for(let i=n-1;i-9>=0;i-=5){const a=a5[i], b=a5[i-5]; if(a==null||b==null) continue; strip.push({i,ch:(a/b-1)*100});}
+          return (<g>
+            {path(a20,C.dust,1)}{path(a5,C.gold,1.5)}
+            {cur5!=null&&<text x={x(n-1)+4} y={vy(cur5)+3} fill={C.gold} fontSize={8} fontFamily={mono}>5d avg {(cur5/1e6).toFixed(1)}M{ch!=null?` (${ch>=0?'+':''}${ch.toFixed(0)}% vs prior wk)`:''}</text>}
+            {strip.map((w,k)=><text key={'w'+k} x={x(w.i-2)} y={H-1} fill={w.ch>=0?C.bull:C.bear} fontSize={7} fontFamily={mono} textAnchor="middle">{w.ch>=0?'▲':'▼'}{Math.abs(w.ch).toFixed(0)}%</text>)}
+            <text x={PL+4} y={H-VH+8} fill={C.cocoa} fontSize={7.5} fontFamily={mono}>VOLUME · gold = 5-day avg · grey = 20-day avg · ▲▼ = each week's avg vs the week before</text>
+          </g>);})()}
         {(()=>{const cands=[...d.formations,...d.candlesticks].filter((o:Occ)=>{const st=o.scorecard?.all||o.scorecard;return st&&st.median_pct!=null&&st.p25_pct!=null;}).sort((a:Occ,b:Occ)=>b.i-a.i);
           const o=cands[0]; if(!o) return null; const st=o.scorecard?.all||o.scorecard; const i0=o.confirm_i??o.i; const p0=d.candles[i0]?.c; if(!p0) return null;
           const K=d.outcome_sessions; const col=st.positive_pct>=50?C.bull:C.bear; const pt=(pct:number)=>y(p0*(1+pct/100));
