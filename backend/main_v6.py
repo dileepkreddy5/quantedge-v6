@@ -75,6 +75,7 @@ from routers.system_router import router as system_router
 from routers.brief_router import router as brief_router
 from routers.patterns_router import router as patterns_router
 from routers.intel_router import router as intel_router
+from routers.agent_router import router as agent_router
 from ml.price_oracle.router import router as oracle_router
 from services.signal_tracker import SignalTracker, OutcomeFillerJob
 
@@ -699,6 +700,7 @@ app.include_router(system_router,        prefix="/api/v6",             tags=["Sy
 app.include_router(brief_router,         prefix="/api/v6",             tags=["Brief"])
 app.include_router(patterns_router,      prefix="/api/v6",             tags=["Patterns"])
 app.include_router(intel_router,         prefix="/api/v6",             tags=["Intel"])
+app.include_router(agent_router,         prefix="/api/v6",             tags=["Agent"])
 app.include_router(peers_router,         prefix="/api/v6",             tags=["Peers"])
 app.include_router(ecosystem_router,     prefix="/api/v6",             tags=["Ecosystem"])
 app.include_router(news_router,          prefix="/api/v6",             tags=["News"])
