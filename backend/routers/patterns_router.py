@@ -413,6 +413,25 @@ async def pattern_chart(ticker: str, request: Request, horizon: str = Query("3m"
                 rs.append(None)
     except Exception:
         rs = None
+    # The panel's ensemble forecast for this horizon with its validation status — the one
+    # model number on the chart, carrying its own RELIABLE / not-validated badge.
+    forecast = None
+    try:
+        import json as _j
+        async with httpx.AsyncClient(timeout=150) as cx:
+            r = await cx.post("http://localhost:8000/api/v6/analyze", json={"req": {"ticker": tk, "include_options": False,
+                                                                                    "include_sentiment": False, "mc_paths": 10000}})
+            ens = (((r.json() or {}).get("data") or {}).get("ml_predictions") or {}).get("ensemble") or {}
+        rep = _j.load(open("/app/models/panel/training_report.json"))
+        hmap = {"1w": ("pred_5d", "1wk"), "1m": ("pred_21d", "1mo"), "3m": ("pred_63d", "3mo"), "6m": (None, "6mo"), "12m": ("pred_252d", "1yr")}
+        pk, lab = hmap[horizon]
+        hv = next((v for v in rep.get("horizons", {}).values() if v.get("horizon_label") == lab), {})
+        forecast = {"horizon_label": lab, "pred_pct": (round(float(ens[pk]), 2) if pk and ens.get(pk) is not None else None),
+                    "produced": bool(pk), "validated": bool(hv.get("reliable")),
+                    "ic": (hv.get("ic_all_dates") or {}).get("ensemble"), "t_stat": hv.get("ic_t_stat"),
+                    "confidence": ens.get("confidence"), "note": hv.get("confidence_note")}
+    except Exception as e:
+        forecast = {"error": f"{type(e).__name__}: {e}"[:200]}   # visible, never swallowed
     recent = [x for x in forms + cands if x["i"] >= (n - start) - 3]
     hi52, lo52 = float(c[-252:].max()), float(c[-252:].min())
     return {"ticker": tk, "horizon": horizon, "outcome_sessions": out_sessions,
@@ -421,7 +440,7 @@ async def pattern_chart(ticker: str, request: Request, horizon: str = Query("3m"
             "sma20": sma(20), "sma50": sma(50), "sma200": sma(200) if n >= 200 else None,
             "high_52w": hi52, "low_52w": lo52,
             "formations": forms, "candlesticks": cands,
-            "current_match": recent, "earnings": earnings, "relative_strength_vs_spy": rs,
+            "current_match": recent, "earnings": earnings, "relative_strength_vs_spy": rs, "forecast": forecast,
             "analog": fan,
             "scorecards_note": ("candlestick odds appear once the nightly universe scan has run; formation odds are "
                                 "measured from 58k occurrences; cells under the occurrence floor say 'not enough history'"),

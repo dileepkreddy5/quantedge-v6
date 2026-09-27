@@ -2,10 +2,38 @@
 // change, 4w/13w/52w averages. Weekly, because daily volume is noise.
 import React, { useEffect, useMemo, useState } from 'react';
 import { api } from '../../auth/authStore';
+import { createChart, LineStyle } from 'lightweight-charts';
 const C={s2:'#241610',b1:'#3a2920',b2:'#4a3428',gold:'#daa520',caramel:'#d4956c',cocoa:'#8a7560',dust:'#9d8b7a',latte:'#d4c4b0',cream:'#f4e8d8',bull:'#22c55e',bear:'#ef4444'};
 const mono="'Fira Code',monospace";
 const HZ:Record<string,number>={'1m':5,'3m':13,'6m':26,'12m':52,'24m':104};
 const fmt=(v:number)=>v>=1e9?`${(v/1e9).toFixed(2)}B`:v>=1e6?`${(v/1e6).toFixed(1)}M`:`${(v/1e3).toFixed(0)}K`;
+const WeeklyCanvas:React.FC<{weeks:any[];a52:number}>=({weeks,a52})=>{
+  const ref=React.useRef<HTMLDivElement>(null); const [leg,setLeg]=useState<any>(null);
+  useEffect(()=>{ if(!ref.current||!weeks.length) return;
+    const chart=createChart(ref.current,{height:320,layout:{background:{color:'rgba(0,0,0,0)'},textColor:C.dust,fontFamily:mono,fontSize:10},
+      grid:{vertLines:{color:'rgba(58,41,32,0.35)'},horzLines:{color:'rgba(58,41,32,0.35)'}},rightPriceScale:{borderColor:C.b1},timeScale:{borderColor:C.b1,barSpacing:14},
+      crosshair:{mode:0,vertLine:{color:C.gold,labelBackgroundColor:'#3a2920'},horzLine:{color:C.gold,labelBackgroundColor:'#3a2920'}}});
+    const vol=chart.addHistogramSeries({priceScaleId:'vol',priceFormat:{type:'volume'},lastValueVisible:false,priceLineVisible:false});
+    chart.priceScale('vol').applyOptions({scaleMargins:{top:0.45,bottom:0}});
+    vol.setData(weeks.map(w=>({time:w.week,value:w.avg,color:w.avg>=1.5*a52?'rgba(218,165,32,0.9)':w.ret>=0?'rgba(34,197,94,0.55)':'rgba(239,68,68,0.55)'})));
+    const base=chart.addLineSeries({priceScaleId:'vol',color:C.dust,lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:true,priceLineVisible:false,crosshairMarkerVisible:false,title:'52w avg'});
+    base.setData(weeks.map(w=>({time:w.week,value:a52})));
+    const px=chart.addLineSeries({color:C.gold,lineWidth:2,lastValueVisible:true,priceLineVisible:false,title:'close'});
+    chart.priceScale('right').applyOptions({scaleMargins:{top:0.05,bottom:0.6}});
+    px.setData(weeks.map(w=>({time:w.week,value:w.close})));
+    chart.subscribeCrosshairMove((p:any)=>{if(!p.time){setLeg(null);return;} const w=weeks.find(z=>z.week===p.time); setLeg(w||null);});
+    chart.timeScale().fitContent();
+    const ro=new ResizeObserver(()=>chart.applyOptions({width:ref.current?.clientWidth||800})); ro.observe(ref.current);
+    return ()=>{ro.disconnect();chart.remove();};},[weeks,a52]);
+  return (<div style={{background:'rgba(0,0,0,0.28)',border:`1px solid ${C.b1}`,borderRadius:10,padding:6,position:'relative'}}>
+    <div ref={ref} style={{width:'100%'}}/>
+    <div style={{position:'absolute',left:10,top:8,fontFamily:mono,fontSize:10,color:C.latte,pointerEvents:'none',background:'rgba(16,10,7,0.75)',padding:'4px 8px',borderRadius:4}}>
+      {leg?<><span style={{color:C.cream}}>week of {leg.week}</span> · avg vol {fmt(leg.avg)} · <span style={{color:leg.avg>=a52?C.bull:C.dust}}>{a52?((leg.avg/a52-1)*100).toFixed(0):'—'}% vs 52w</span> · up-day share {leg.upShare?.toFixed(0)}% · week <span style={{color:leg.ret>=0?C.bull:C.bear}}>{leg.ret>=0?'+':''}{leg.ret.toFixed(1)}%</span> · close {leg.close}</>
+        :<span style={{color:C.cocoa}}>bars: avg daily volume per week (gold ≥1.5× 52w avg) · line: weekly close · hover a week</span>}
+    </div>
+  </div>);
+};
+
 const VolumeTracker:React.FC<{ticker:string}>=({ticker})=>{
   const [hz,setHz]=useState('12m'); const [d,setD]=useState<any>(null); const [err,setErr]=useState('');
   useEffect(()=>{let dead=false;(async()=>{setD(null);setErr('');
@@ -40,15 +68,7 @@ const VolumeTracker:React.FC<{ticker:string}>=({ticker})=>{
           <div style={{fontFamily:mono,fontSize:8,letterSpacing:1.3,color:C.cocoa,marginBottom:4}}>{k}</div>
           <div style={{fontFamily:mono,fontSize:14,fontWeight:700,color:col}}>{v}</div><div style={{fontFamily:mono,fontSize:8.5,color:C.dust,marginTop:2}}>{sub}</div></div>))}
     </div>
-    <div style={{background:'rgba(0,0,0,0.28)',border:`1px solid ${C.b1}`,borderRadius:10,padding:6}}>
-      <svg viewBox={`0 0 ${W} ${H}`} style={{width:'100%',display:'block'}}>
-        <line x1={PL} x2={W-PR} y1={yv(a52)} y2={yv(a52)} stroke={C.dust} strokeDasharray="4,4" opacity={.6}/><text x={W-PR+4} y={yv(a52)+3} fill={C.dust} fontSize={8} fontFamily={mono}>52w avg</text>
-        {weeks.map((w,i)=>(<g key={w.week}><rect x={x(i)+1} y={yv(w.avg)} width={Math.max(1,cw-2)} height={H-PB-yv(w.avg)} fill={w.ret>=0?C.bull:C.bear} opacity={w.avg>=1.5*a52?.95:.5}/>
-          {i%Math.max(1,Math.floor(weeks.length/12))===0&&<text x={x(i)+cw/2} y={H-PB+12} fill={C.cocoa} fontSize={7} fontFamily={mono} textAnchor="middle">{w.week.slice(5)}</text>}</g>))}
-        <path d={weeks.map((w,i)=>`${i?'L':'M'}${x(i)+cw/2},${yp(w.close)}`).join('')} fill="none" stroke={C.gold} strokeWidth={1.5}/>
-        <text x={PL+4} y={PT+10} fill={C.cocoa} fontSize={8} fontFamily={mono}>bars: average daily volume per week (green = up week) · gold line: weekly close · bright bars ≥1.5× 52w avg</text>
-      </svg>
-    </div>
+    <WeeklyCanvas weeks={weeks} a52={a52}/>
     <div style={{background:C.s2,border:`1px solid ${C.b1}`,borderRadius:10,padding:'10px 14px',marginTop:12,overflowX:'auto'}}>
       <div style={{fontFamily:mono,fontSize:9,letterSpacing:1.5,color:C.cocoa,marginBottom:6}}>WEEK BY WEEK · MOST RECENT FIRST</div>
       <table style={{width:'100%',borderCollapse:'collapse',fontFamily:mono,fontSize:10}}>
