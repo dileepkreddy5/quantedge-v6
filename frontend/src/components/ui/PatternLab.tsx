@@ -1,3 +1,4 @@
+import SituationMode from './SituationMode';
 import FormationsDeep from './FormationsDeep';
 import EvolutionMode from './EvolutionMode';
 import AnalogsDeep from './AnalogsDeep';
@@ -417,6 +418,7 @@ const ConditionsMode: React.FC<{ ticker: string; set: string }> = ({ ticker, set
 
 // ── Shell ─────────────────────────────────────────────────────
 const MODES = [
+  { id: 'situation', label: 'SITUATION REPORT' },
   { id: 'analogs', label: 'HISTORICAL ANALOGS' },
   { id: 'formations', label: 'CLASSICAL FORMATIONS' },
   { id: 'momentum', label: 'MOMENTUM & REVERSAL' },
@@ -439,6 +441,7 @@ const PatternLab: React.FC<{ ticker: string }> = ({ ticker }) => {
           }}>{m.label}</button>
         ))}
       </div>
+      {mode === 'situation' && <SituationMode ticker={ticker} />}
       {mode === 'analogs' && <AnalogsDeep ticker={ticker} />}
       {mode === 'formations' && <FormationsDeep />}
       {mode === 'evolution' && <EvolutionMode ticker={ticker} />}

@@ -89,9 +89,12 @@ async def _run_tool(name: str, args: dict) -> dict:
                 d = (r.json() or {}).get("data") or {}
                 if not d:
                     return {"error": f"no QuantEdge data for {tk}"}
-                keep = {k: d.get(k) for k in ("name", "current_price", "overall_signal", "overall_score", "composite_score",
-                                              "signal", "current_regime", "regime", "garch", "risk_metrics",
-                                              "portfolio_construction", "data_quality") if k in d}
+                keep = {k: d.get(k) for k in ("name", "sector", "industry", "current_price", "overall_signal", "overall_score",
+                                              "composite_score", "signal", "current_regime", "regime", "garch", "risk_metrics",
+                                              "portfolio_construction", "data_quality", "pe_ratio", "price_to_sales",
+                                              "gross_margin", "operating_margin", "net_margin", "revenue_growth",
+                                              "earnings_growth", "roic", "debt_to_equity", "week_52_high", "week_52_low") if k in d}
+                keep["sentiment"] = {k: (d.get("sentiment") or {}).get(k) for k in ("composite", "label", "n_articles_ticker_tagged")}
                 ml = d.get("ml_predictions") or {}
                 keep["ml_ensemble"] = ml.get("ensemble")
                 keep["rank_ic_source"] = ml.get("rank_ic_source")
