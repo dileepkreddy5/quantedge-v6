@@ -9,6 +9,14 @@ class CIIngestJob:
         try:
             from quantedge.intel.edgar_adapter import ingest
             stats = await ingest(self.pool)
-            logger.info(f"✅ CI ingest complete: {stats}")
+            logger.info(f"✅ CI EDGAR ingest complete: {stats}")
         except Exception as e:
-            logger.error(f"❌ CI ingest FAILED: {e}")
+            logger.error(f"❌ CI EDGAR ingest FAILED: {e}")
+        try:
+            # Capital allocation reads the bulk zip the 02:00 ET multibagger job
+            # refreshed; runs after it by schedule (05:00 ET).
+            from quantedge.intel.xbrl_capital_adapter import ingest_capital
+            stats = await ingest_capital(self.pool)
+            logger.info(f"✅ CI capital-allocation ingest complete: {stats}")
+        except Exception as e:
+            logger.error(f"❌ CI capital-allocation ingest FAILED: {e}")

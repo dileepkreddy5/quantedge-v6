@@ -18,10 +18,11 @@ import httpx
 from loguru import logger
 from .schema import CREATE_SQL, ITEM_RULES, IGNORE_ITEMS
 
-HEADERS = {"User-Agent": "QuantEdge research contact@quantedge.local"}
-FORM4_LOOKBACK_DAYS = 120
+from quantedge.fundamentals.edgar_bulk import UA
+HEADERS = {"User-Agent": UA}   # SEC fair-access policy wants a real contact
+FORM4_LOOKBACK_DAYS = 365
 EIGHTK_LOOKBACK_DAYS = 365
-FORM4_MAX_PER_COMPANY_PER_RUN = 12
+FORM4_MAX_PER_COMPANY_PER_RUN = 60   # NEW filings only — known accessions are skipped before any fetch
 EXTRACTOR_FORM4 = "form4-xml-v1"
 
 
@@ -73,7 +74,7 @@ async def _company_universe(pool, limit: int):
         ORDER BY u.market_cap DESC NULLS LAST LIMIT $1""", limit)
 
 
-async def ingest(pool, limit: int = 700, concurrency: int = 3) -> dict:
+async def ingest(pool, limit: int = 700, concurrency: int = 2) -> dict:
     await ensure_tables(pool)
     companies = await _company_universe(pool, limit)
     logger.info(f"[ci/edgar] ingesting {len(companies)} companies")
@@ -90,14 +91,21 @@ async def ingest(pool, limit: int = 700, concurrency: int = 3) -> dict:
                 try:
                     c10 = str(cik).zfill(10)
                     r = await client.get(f"https://data.sec.gov/submissions/CIK{c10}.json")
-                    if r.status_code == 429:
-                        await asyncio.sleep(3)
+                    if r.status_code in (429, 403):
+                        await asyncio.sleep(15)          # SEC throttle: back off hard, once
                         r = await client.get(f"https://data.sec.gov/submissions/CIK{c10}.json")
                     if r.status_code != 200:
-                        stats["http_fail"] += 1; return
+                        stats["http_fail"] += 1
+                        if stats["http_fail"] <= 5:
+                            logger.warning(f"[ci/edgar] {tk} submissions HTTP {r.status_code}: {r.text[:120]!r}")
+                        return
                     rec = (r.json() or {}).get("filings", {}).get("recent", {})
                     n = len(rec.get("accessionNumber", []))
                     f4_done = 0
+                    # Incremental: skip accessions already stored BEFORE any HTTP fetch.
+                    async with pool.acquire() as _c:
+                        known = {row["source_id"] for row in await _c.fetch(
+                            "SELECT source_id FROM ci_raw_evidence WHERE cik=$1", str(cik))}
                     for i in range(n):
                         form = rec["form"][i]
                         fdate = date.fromisoformat(rec["filingDate"][i])
@@ -105,6 +113,7 @@ async def ingest(pool, limit: int = 700, concurrency: int = 3) -> dict:
                         if form == "4" and (fdate < cutf4 or f4_done >= FORM4_MAX_PER_COMPANY_PER_RUN): continue
                         if form not in ("8-K", "4"): continue
                         acc = rec["accessionNumber"][i]
+                        if acc in known: continue
                         acc_dt = rec.get("acceptanceDateTime", [None] * n)[i]
                         filed_at = (datetime.fromisoformat(acc_dt.replace("Z", "+00:00"))
                                     if acc_dt else datetime.combine(fdate, datetime.min.time(), timezone.utc))
@@ -120,6 +129,10 @@ async def ingest(pool, limit: int = 700, concurrency: int = 3) -> dict:
                                    f"{acc.replace('-', '')}/{raw_name}")
                             await asyncio.sleep(0.35)
                             rx = await client.get(url)
+                            if rx.status_code in (429, 403):
+                                await asyncio.sleep(15); rx = await client.get(url)
+                            if rx.status_code != 200 and stats["http_fail"] <= 5:
+                                logger.warning(f"[ci/edgar] {tk} form4 HTTP {rx.status_code} {url}")
                             if rx.status_code == 200:
                                 parsed = _parse_form4(rx.text)
                                 if parsed: payload["form4"] = parsed; stats["form4_parsed"] += 1
@@ -165,8 +178,9 @@ async def ingest(pool, limit: int = 700, concurrency: int = 3) -> dict:
                                                         "location": f"nonDerivativeTable/transaction[{k}]"}))
                 except Exception as e:
                     stats["http_fail"] += 1
-                    logger.debug(f"[ci/edgar] {tk}: {type(e).__name__}: {e}")
-                await asyncio.sleep(0.35)
+                    if stats["http_fail"] <= 5:
+                        logger.warning(f"[ci/edgar] {tk}: {type(e).__name__}: {e}")
+                await asyncio.sleep(0.6)
 
         batch = [(r["ticker"], r["cik"]) for r in companies]
         for i in range(0, len(batch), 60):

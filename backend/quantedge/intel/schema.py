@@ -86,3 +86,31 @@ ITEM_RULES = {
     "8.01": ("other_event",               "UNKNOWN",  "Other events (content inspection required)"),
 }
 IGNORE_ITEMS = {"9.01"}   # exhibits: companion to another item, never an event itself
+
+# ── Entity resolution — mandatory before any non-SEC adapter ──────────
+# A wrong assignee/applicant/recipient match contaminates a whole evidence
+# family, so every mapping carries how it was matched, how confident, and
+# when it was last verified. Rows are never updated: a correction is a new
+# row with valid_from, and the old row gets status='superseded' via a new
+# row — append-only like everything else.
+ENTITY_SQL = """
+CREATE TABLE IF NOT EXISTS ci_entity_map (
+    id               BIGSERIAL PRIMARY KEY,
+    company_id       TEXT NOT NULL,          -- CIK
+    ticker           TEXT NOT NULL,
+    entity_type      TEXT NOT NULL,          -- 'assignee','applicant','recipient','sponsor','job_board','affiliation'
+    source_type      TEXT NOT NULL,          -- 'PATENTSVIEW','FDA','USASPENDING','CLINICALTRIALS','GREENHOUSE','LEVER','PUBMED'
+    external_id      TEXT,
+    external_name    TEXT NOT NULL,
+    match_method     TEXT NOT NULL CHECK (match_method IN ('exact','alias','fuzzy','manual')),
+    match_confidence TEXT NOT NULL CHECK (match_confidence IN ('HIGH','MEDIUM','LOW')),
+    verified_at      TIMESTAMPTZ,
+    valid_from       DATE NOT NULL DEFAULT CURRENT_DATE,
+    valid_to         DATE,
+    status           TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','superseded','rejected')),
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_ci_entity_lookup ON ci_entity_map (source_type, external_name);
+CREATE INDEX IF NOT EXISTS idx_ci_entity_company ON ci_entity_map (company_id, source_type);
+"""
+CREATE_SQL = CREATE_SQL + ENTITY_SQL

@@ -12,6 +12,7 @@ router = APIRouter()
 TIER = {"SEC": "PRIMARY"}
 FAMILIES = {   # evidence families → adapter status; UI renders NO_SOURCE honestly
     "sec_filings": "active", "insider_transactions": "active",
+    "capital_allocation": "active",
     "institutional_13f": "planned_session_2", "market_attention": "planned_session_2",
     "patents": "planned_session_3b", "research_papers": "planned_session_3b",
     "customers": "no_source", "government_contracts": "no_source",
@@ -83,6 +84,6 @@ async def intel_timeline(ticker: str, request: Request,
             "counts": {r["significance"]: r["n"] for r in sig_counts},
             "insider_open_market": {"buys": nb, "buy_value": round(buy), "sells": ns,
                                     "sell_value": round(sell), "net_value": round(buy - sell),
-                                    "note": "open-market P/S codes only; grants/exercises excluded. Form 4 ingest is capped at 12 most recent filings per company per run (120d lookback) — heavy filers are undercounted until Session 2 lifts the cap."},
+                                    "note": "open-market P/S codes only; grants/exercises excluded. Form 4 ingest is incremental — new filings only, up to 60 per company per night, 365d initial lookback."},
             "families": FAMILIES,
             "pit_note": "available_at is the SEC acceptance timestamp — the moment the information became public. event_date is the economic date. Downstream engines read available_at."}

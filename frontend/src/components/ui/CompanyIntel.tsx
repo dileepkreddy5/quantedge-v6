@@ -13,7 +13,7 @@ type Res={ticker:string;events:Ev[];counts?:Record<string,number>;note?:string;
   insider_open_market?:{buys:number;buy_value:number;sells:number;sell_value:number;net_value:number;note:string};
   families:Record<string,string>;pit_note?:string};
 const money=(v:number)=>Math.abs(v)>=1e6?`$${(v/1e6).toFixed(1)}M`:`$${(v/1e3).toFixed(0)}K`;
-const FAM_LABEL:Record<string,string>={sec_filings:'SEC FILINGS',insider_transactions:'INSIDER TRANSACTIONS',
+const FAM_LABEL:Record<string,string>={sec_filings:'SEC FILINGS',insider_transactions:'INSIDER TRANSACTIONS',capital_allocation:'CAPITAL ALLOCATION',
   institutional_13f:'13F OWNERSHIP',market_attention:'MARKET ATTENTION',patents:'PATENTS',research_papers:'RESEARCH',
   customers:'CUSTOMERS',government_contracts:'GOV CONTRACTS',capacity_utilization:'CAPACITY',
   job_postings:'JOB POSTINGS',earnings_transcripts:'TRANSCRIPTS'};
