@@ -92,7 +92,13 @@ def _scan_freshness() -> list:
 async def system_stats():
     cat = _catalog_counts()
     panel = _panel_info()
+    import shutil
+    _du = shutil.disk_usage("/")
+    disk = {"used_pct": round(_du.used / _du.total * 100, 1),
+            "free_gb": round(_du.free / 1e9, 1),
+            "warning": _du.used / _du.total > 0.85}
     return {
+        "disk": disk,
         "signals": cat,
         "panel": panel,
         "boards": _scan_freshness(),

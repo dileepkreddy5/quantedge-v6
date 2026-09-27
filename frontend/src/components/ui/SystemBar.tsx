@@ -104,6 +104,11 @@ const SystemBar: React.FC = () => {
           </div>
         </div>
 
+        {(d as any).disk?.warning && (
+          <div style={{ fontFamily: mono, fontSize: 10, color: C.warn, marginTop: 10, letterSpacing: 1 }}>
+            ⚠ DISK {(d as any).disk.used_pct}% USED · {(d as any).disk.free_gb} GB FREE — nightly jobs fail at 100%
+          </div>
+        )}
         {stale.length > 0 && (
           <div style={{
             borderTop: `1px solid ${C.b1}`, background: 'rgba(245,158,11,0.05)',

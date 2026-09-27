@@ -1,3 +1,9 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "3"
+
 ###############################################################################
 #  QuantEdge v6.0 — Full Stack (one command: docker compose up -d)
 #  Replaces: CloudFront->caddy, ECS->backend, RDS->postgres,
@@ -8,6 +14,7 @@
 services:
 
   postgres:
+    logging: *default-logging
     image: postgres:15-alpine
     container_name: quantedge-db
     environment:
@@ -25,6 +32,7 @@ services:
     restart: unless-stopped
 
   redis:
+    logging: *default-logging
     image: redis:7-alpine
     container_name: quantedge-redis
     command: >
@@ -38,6 +46,7 @@ services:
     restart: unless-stopped
 
   backend:
+    logging: *default-logging
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -63,6 +72,7 @@ services:
     restart: unless-stopped
 
   frontend:
+    logging: *default-logging
     build:
       context: ./frontend
       dockerfile: Dockerfile
@@ -74,6 +84,7 @@ services:
     restart: unless-stopped
 
   caddy:
+    logging: *default-logging
     image: caddy:2-alpine
     container_name: quantedge-caddy
     ports:
