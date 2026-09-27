@@ -30,7 +30,7 @@ const ScoreLine:React.FC<{o:Occ;hz:string}>=({o,hz})=>{const s=o.scorecard; cons
 
 const PatternChart:React.FC<{ticker:string}>=({ticker})=>{
   const [hz,setHz]=useState('3m'); const [d,setD]=useState<any>(null); const [err,setErr]=useState('');
-  const [hover,setHover]=useState<Occ|null>(null); const [show,setShow]=useState<{f:boolean;c:boolean}>({f:true,c:true});
+  const [hover,setHover]=useState<Occ|null>(null); const [show,setShow]=useState<{f:boolean;c:boolean;doji:boolean}>({f:true,c:true,doji:false});
   useEffect(()=>{let dead=false;(async()=>{setD(null);setErr('');
     try{const r=await api.get(`/api/v6/patterns/chart/${ticker}?horizon=${hz}`);if(!dead)setD(r.data);}
     catch(e:any){if(!dead)setErr(e?.response?.data?.detail||'chart unavailable');}})();return()=>{dead=true};},[ticker,hz]);
@@ -63,9 +63,9 @@ const PatternChart:React.FC<{ticker:string}>=({ticker})=>{
         background:hz===h?'rgba(218,165,32,0.12)':'none',border:`1px solid ${hz===h?C.gold:C.b1}`,borderRadius:4,color:hz===h?C.gold:C.dust,cursor:'pointer'}}>{h.toUpperCase()}</button>)}
       <span style={{fontFamily:mono,fontSize:8.5,color:C.cocoa}}>outcome window {d.outcome_sessions} sessions</span>
       <span style={{flex:1}}/>
-      {(['f','c'] as const).map(k=><button key={k} onClick={()=>setShow(s=>({...s,[k]:!s[k]}))} style={{fontFamily:mono,fontSize:8.5,padding:'5px 9px',
+      {(['f','c','doji'] as const).map(k=><button key={k} onClick={()=>setShow(s=>({...s,[k]:!s[k]}))} style={{fontFamily:mono,fontSize:8.5,padding:'5px 9px',
         background:show[k]?'rgba(218,165,32,0.08)':'none',border:`1px solid ${show[k]?C.caramel:C.b1}`,borderRadius:3,color:show[k]?C.caramel:C.dust,cursor:'pointer'}}>
-        {k==='f'?'FORMATIONS':'CANDLESTICKS'}</button>)}
+        {k==='f'?'FORMATIONS':k==='c'?'CANDLESTICKS':'DOJI (noisy)'}</button>)}
     </div>
     <div style={{background:C.s2,border:`1px solid ${cur.length?C.gold:C.b1}`,borderRadius:8,padding:'10px 14px',marginBottom:10,fontFamily:mono,fontSize:11}}>
       {cur.length?(<><span style={{color:C.gold}}>NOW · </span><span style={{color:C.cream}}>{d.ticker} completed {cur.map((o:Occ)=>LABEL[o.name]||o.name).join(', ')} within the last 3 sessions. </span>
@@ -118,7 +118,7 @@ const PatternChart:React.FC<{ticker:string}>=({ticker})=>{
             {f.confirm_i!=null&&<line x1={x(f.confirm_i)} x2={x(f.confirm_i)} y1={y(pts[pts.length-1].price)-16} y2={y(pts[pts.length-1].price)+16} stroke={col} strokeDasharray="2,2"/>}
             <text x={x(pts[0].i)} y={y(Math.max(...pts.map(p=>p.price)))-8} fill={col} fontSize={9} fontFamily={mono}>{LABEL[f.name]}</text></g>);})}
         {/* candlestick markers */}
-        {show.c&&d.candlesticks.map((o:Occ,k:number)=>{const c=d.candles[o.i];if(!c)return null;const up=o.direction==='bullish',neu=o.direction==='neutral';
+        {show.c&&d.candlesticks.filter((o:Occ)=>show.doji||o.name!=='doji').map((o:Occ,k:number)=>{const c=d.candles[o.i];if(!c)return null;const up=o.direction==='bullish',neu=o.direction==='neutral';
           const col=neu?C.gold:up?C.bull:C.bear; const yy=up?y(c.l)+12:y(c.h)-12;
           return (<g key={'c'+k} onMouseEnter={()=>setHover(o)} style={{cursor:'pointer'}}>
             {neu?<circle cx={x(o.i)} cy={y(c.h)-8} r={3} fill="none" stroke={col}/>:
@@ -156,7 +156,7 @@ const PatternChart:React.FC<{ticker:string}>=({ticker})=>{
             <line x1={x(i0)} x2={x(i0+K)} y1={y(p0)} y2={pt(st.median_pct)} stroke={col} strokeWidth={1.5} strokeDasharray="5,3"/>
             <line x1={x(i0)} x2={x(i0+K)} y1={y(p0)} y2={pt(st.p75_pct)} stroke={col} strokeWidth={1} strokeDasharray="2,3"/>
             <line x1={x(i0)} x2={x(i0+K)} y1={y(p0)} y2={pt(st.p25_pct)} stroke={col} strokeWidth={1} strokeDasharray="2,3"/>
-            <text x={x(i0)+4} y={y(p0)-10} fill={col} fontSize={8} fontFamily={mono}>{LABEL[o.name]} cone · {st.positive_pct}% up · med {pf(st.median_pct,1)} @{K}s (n={st.n})</text></g>);})()}
+            <text x={W-PR-4} y={PT+80} fill={col} fontSize={8} fontFamily={mono} textAnchor="end">CONE · {LABEL[o.name]} · {st.positive_pct}% up · med {pf(st.median_pct,1)} @{K}s (n={st.n})</text></g>);})()}
         <text x={PL+4} y={H-VH-14} fill={C.cocoa} fontSize={8} fontFamily={mono}>{d.candles[0].d} → {d.candles[n-1].d} · last {last}</text>
       </svg>
       {hover&&<div style={{position:'absolute',left:14,top:14,background:'rgba(16,10,7,0.95)',border:`1px solid ${C.gold}`,borderRadius:6,padding:'8px 12px',fontFamily:mono,fontSize:10,maxWidth:460}}>
