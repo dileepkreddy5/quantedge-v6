@@ -11,7 +11,10 @@ type Ev={id:number;event_date:string|null;available_at:string;retrieved_at:strin
   source:{type:string;accession:string;form:string;url:string};derived:{field:string;value:any}[]};
 type Res={ticker:string;events:Ev[];counts?:Record<string,number>;note?:string;
   insider_open_market?:{buys:number;buy_value:number;sells:number;sell_value:number;net_value:number;note:string};
-  families:Record<string,string>;pit_note?:string};
+  families:Record<string,string>;pit_note?:string;
+  attention_vs_fundamentals?:{articles_30d:number;articles_prior_90d_per_30:number;attention_ratio:number|null;
+    fundamental_events_30d:number;fundamental_prior_90d_per_30:number;fundamental_ratio:number|null;
+    days_covered:number;note:string}|null};
 const money=(v:number)=>Math.abs(v)>=1e6?`$${(v/1e6).toFixed(1)}M`:`$${(v/1e3).toFixed(0)}K`;
 const FAM_LABEL:Record<string,string>={sec_filings:'SEC FILINGS',insider_transactions:'INSIDER TRANSACTIONS',capital_allocation:'CAPITAL ALLOCATION',
   institutional_13f:'13F INSTITUTIONAL',market_attention:'MARKET ATTENTION',patents:'PATENTS',research_papers:'RESEARCH',
@@ -83,6 +86,23 @@ const CompanyIntel:React.FC<{ticker:string}>=({ticker})=>{
             <div style={{fontSize:8.5,color:C.cocoa,marginTop:4}}>{ins.note}</div>
           </div>}
         </div>
+        {d.attention_vs_fundamentals&&(()=>{const a=d.attention_vs_fundamentals!;
+          const bar=(label:string,ratio:number|null,now:number,base:number,col:string)=>(
+            <div style={{marginBottom:10}}>
+              <div style={{display:'flex',justifyContent:'space-between',fontFamily:mono,fontSize:9.5,marginBottom:4}}>
+                <span style={{color:C.latte}}>{label}</span>
+                <span style={{color:ratio==null?C.cocoa:ratio>=1.5?C.gold:C.dust}}>
+                  {ratio==null?'no baseline':`${ratio.toFixed(2)}×`} <span style={{color:C.cocoa}}>({now} vs {base}/30d)</span></span></div>
+              <div style={{height:6,background:'rgba(0,0,0,0.3)',borderRadius:3}}>
+                <div style={{height:6,width:`${Math.min(100,(ratio??0)/3*100)}%`,background:col,borderRadius:3}}/></div>
+            </div>);
+          return (<div style={{background:C.s2,border:`1px solid ${C.b1}`,borderRadius:10,padding:16,marginBottom:14}}>
+            <div style={{fontFamily:mono,fontSize:9,letterSpacing:1.5,color:C.cocoa,marginBottom:10}}>FUNDAMENTALS vs ATTENTION · 30D vs OWN 90D</div>
+            {bar('FILING EVENTS',a.fundamental_ratio,a.fundamental_events_30d,a.fundamental_prior_90d_per_30,C.gold)}
+            {bar('NEWS COVERAGE',a.attention_ratio,a.articles_30d,a.articles_prior_90d_per_30,C.caramel)}
+            <div style={{fontFamily:mono,fontSize:8.5,color:C.cocoa,lineHeight:1.6}}>
+              {a.note} News coverage is Polygon's curated feed (~150–300 company mentions/day) — thin for small caps.</div>
+          </div>);})()}
         <div style={{background:C.s2,border:`1px solid ${C.b1}`,borderRadius:10,padding:16}}>
           <div style={{fontFamily:mono,fontSize:9,letterSpacing:1.5,color:C.cocoa,marginBottom:10}}>EVIDENCE FAMILIES</div>
           {Object.entries(d.families).map(([k,v])=>(<div key={k} style={{display:'flex',justifyContent:'space-between',fontFamily:mono,fontSize:9.5,padding:'3px 0'}}>

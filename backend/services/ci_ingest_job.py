@@ -26,3 +26,9 @@ class CIIngestJob:
             logger.info(f"✅ CI 13F ingest complete: {stats}")
         except Exception as e:
             logger.error(f"❌ CI 13F ingest FAILED: {e}")
+        try:
+            from quantedge.intel.attention_adapter import ingest_attention
+            stats = await ingest_attention(self.pool)
+            logger.info(f"✅ CI attention ingest complete: {stats}")
+        except Exception as e:
+            logger.error(f"❌ CI attention ingest FAILED: {e}")

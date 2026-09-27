@@ -9,11 +9,11 @@ import json
 from fastapi import APIRouter, HTTPException, Query, Request
 
 router = APIRouter()
-TIER = {"SEC": "PRIMARY"}
+TIER = {"SEC": "PRIMARY", "SEC_XBRL": "PRIMARY", "SEC_13F": "PRIMARY", "POLYGON_NEWS": "SECONDARY"}
 FAMILIES = {   # evidence families → adapter status; UI renders NO_SOURCE honestly
     "sec_filings": "active", "insider_transactions": "active",
     "capital_allocation": "active",
-    "institutional_13f": "active", "market_attention": "planned_session_2",
+    "institutional_13f": "active", "market_attention": "active",
     "patents": "planned_session_3b", "research_papers": "planned_session_3b",
     "customers": "no_source", "government_contracts": "no_source",
     "capacity_utilization": "no_source", "job_postings": "no_source",
@@ -80,7 +80,31 @@ async def intel_timeline(ticker: str, request: Request,
         if not v.get("open_market"): continue
         if v.get("code") == "P": buy += v.get("value", 0); nb += 1
         elif v.get("code") == "S": sell += v.get("value", 0); ns += 1
-    return {"ticker": tk, "window_days": days, "events": events,
+    # Fundamental-event activity vs attention, each vs its own trailing baseline.
+    # Descriptive two-bar comparison per the contract — a research trigger, not a score.
+    att = None
+    try:
+        a = await pool.fetchrow("""
+            SELECT coalesce(sum(n_articles) FILTER (WHERE d > CURRENT_DATE - 30),0) AS a30,
+                   coalesce(sum(n_articles) FILTER (WHERE d <= CURRENT_DATE - 30 AND d > CURRENT_DATE - 120),0) AS a90,
+                   count(DISTINCT d) AS days_covered
+            FROM ci_attention_daily WHERE ticker=$1 AND d > CURRENT_DATE - 120""", tk)
+        f = await pool.fetchrow("""
+            SELECT count(*) FILTER (WHERE available_at > NOW() - INTERVAL '30 days') AS f30,
+                   count(*) FILTER (WHERE available_at <= NOW() - INTERVAL '30 days'
+                                      AND available_at > NOW() - INTERVAL '120 days') AS f90
+            FROM ci_events WHERE ticker=$1 AND significance IN ('MATERIAL','RELEVANT')
+              AND event_type NOT IN ('attention_spike','insider_transaction')""", tk)
+        if a and a["days_covered"]:
+            att = {"articles_30d": a["a30"], "articles_prior_90d_per_30": round(a["a90"] / 3, 1),
+                   "attention_ratio": (round(a["a30"] / (a["a90"] / 3), 2) if a["a90"] else None),
+                   "fundamental_events_30d": f["f30"], "fundamental_prior_90d_per_30": round(f["f90"] / 3, 1),
+                   "fundamental_ratio": (round(f["f30"] / (f["f90"] / 3), 2) if f["f90"] else None),
+                   "days_covered": a["days_covered"],
+                   "note": "Each ratio compares the last 30 days to the company's own prior 90-day average. Descriptive research trigger, not a score."}
+    except Exception:
+        att = None
+    return {"ticker": tk, "window_days": days, "events": events, "attention_vs_fundamentals": att,
             "counts": {r["significance"]: r["n"] for r in sig_counts},
             "insider_open_market": {"buys": nb, "buy_value": round(buy), "sells": ns,
                                     "sell_value": round(sell), "net_value": round(buy - sell),
