@@ -87,6 +87,10 @@ const PatternChart:React.FC<{ticker:string}>=({ticker})=>{
           {cell('UPSIDE CASE (P75)',pf(dist.p75_pct),C.bull,`best 10%: ${pf(dist.p90_pct)}`)}
           {cell('DOWNSIDE CASE (P25)',pf(dist.p25_pct),C.bear,`worst 10%: ${pf(dist.p10_pct)}`)}
           {cell('SPREAD (σ)',`${dist.outcome_vol_pct??'—'}%`,C.latte,`n=${dist.n} non-overlapping episodes`)}
+          {d.forecast&&!d.forecast.error&&cell(`ML FORECAST · ${d.forecast.horizon_label.toUpperCase()}`,
+            d.forecast.produced?(d.forecast.pred_pct!=null?pf(d.forecast.pred_pct,2):'—'):'not produced',
+            d.forecast.validated?C.gold:C.cocoa,
+            d.forecast.validated?`VALIDATED · IC ${d.forecast.ic?.toFixed(3)} · t ${d.forecast.t_stat?.toFixed(2)}`:'NOT VALIDATED — shown for transparency, not as a signal')}
         </div></div>);})()}
     {/* chart — canvas engine */}
     <div style={{background:'rgba(0,0,0,0.28)',border:`1px solid ${C.b1}`,borderRadius:10,padding:6}}>

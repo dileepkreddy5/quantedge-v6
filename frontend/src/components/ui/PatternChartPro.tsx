@@ -22,10 +22,12 @@ const PatternChartPro:React.FC<{d:any;show:{f:boolean;c:boolean;doji:boolean};he
   useEffect(()=>{ if(!ref.current||!d) return;
     const chart=createChart(ref.current,{height,layout:{background:{color:'rgba(0,0,0,0)'},textColor:C.dust,fontFamily:mono,fontSize:10},
       grid:{vertLines:{color:'rgba(58,41,32,0.35)'},horzLines:{color:'rgba(58,41,32,0.35)'}},
-      rightPriceScale:{borderColor:C.b1,scaleMargins:{top:0.12,bottom:0.22}},timeScale:{borderColor:C.b1,rightOffset:d.outcome_sessions+4,barSpacing:7},
+      rightPriceScale:{borderColor:C.b1,scaleMargins:{top:0.12,bottom:0.22}},timeScale:{borderColor:C.b1,rightOffset:4,barSpacing:7,fixLeftEdge:true,fixRightEdge:true,lockVisibleTimeRangeOnResize:true},
+      handleScale:{axisPressedMouseMove:{time:true,price:false}},
       crosshair:{mode:0,vertLine:{color:C.gold,labelBackgroundColor:'#3a2920'},horzLine:{color:C.gold,labelBackgroundColor:'#3a2920'}}});
     chartRef.current=chart;
-    const cs=d.candles; const t=(i:number)=>cs[i].d as any;
+    const cs=d.candles; const N=cs.length; const t=(i:number)=>cs[Math.max(0,Math.min(N-1,i))].d as any;
+    const inWin=(i:number)=>i>=0&&i<N;
     const candles=chart.addCandlestickSeries({upColor:C.bull,downColor:C.bear,borderUpColor:C.bull,borderDownColor:C.bear,wickUpColor:C.bull,wickDownColor:C.bear});
     candles.setData(cs.map((c:any)=>({time:c.d,open:c.o,high:c.h,low:c.l,close:c.c})));
     const vol=chart.addHistogramSeries({priceScaleId:'vol',priceFormat:{type:'volume'},lastValueVisible:false,priceLineVisible:false});
@@ -45,16 +47,17 @@ const PatternChartPro:React.FC<{d:any;show:{f:boolean;c:boolean;doji:boolean};he
       rs.setData(d.relative_strength_vs_spy.map((v:any,i:number)=>v==null?null:{time:t(i),value:v}).filter(Boolean) as any);}
     // formations drawn through their five extrema
     if(show.f) d.formations.forEach((f:any)=>{const col=BEAR_F.has(f.name)?C.bear:C.bull;
-      const s=chart.addLineSeries({color:col,lineWidth:2,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false,title:LABEL[f.name]});
-      s.setData(f.points.map((p:any)=>({time:t(p.i),value:p.price})));});
+      const pts=f.points.filter((p:any)=>inWin(p.i)); if(pts.length<2) return;   // extrema before the window can't be drawn
+      const s=chart.addLineSeries({color:col,lineWidth:2,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false});
+      s.setData(pts.map((p:any)=>({time:t(p.i),value:p.price})));});
     // markers: candlestick patterns + earnings + formation completions
     const marks:any[]=[];
-    if(show.c) d.candlesticks.filter((o:any)=>show.doji||o.name!=='doji').forEach((o:any)=>{const up=o.direction==='bullish',neu=o.direction==='neutral';
+    if(show.c) d.candlesticks.filter((o:any)=>inWin(o.i)&&(show.doji||o.name!=='doji')).forEach((o:any)=>{const up=o.direction==='bullish',neu=o.direction==='neutral';
       marks.push({time:t(o.i),position:up?'belowBar':'aboveBar',color:neu?C.gold:up?C.bull:C.bear,shape:neu?'circle':up?'arrowUp':'arrowDown',size:0.8});});
     if(show.f) d.formations.forEach((f:any)=>marks.push({time:t(Math.min(f.confirm_i??f.i,cs.length-1)),position:BEAR_F.has(f.name)?'aboveBar':'belowBar',color:BEAR_F.has(f.name)?C.bear:C.bull,shape:'square',text:LABEL[f.name],size:1}));
-    (d.earnings||[]).forEach((e:any)=>marks.push({time:t(e.i),position:'aboveBar',color:C.blue,shape:'circle',text:'EARNINGS',size:1}));
+    (d.earnings||[]).filter((e:any)=>inWin(e.i)).forEach((e:any)=>marks.push({time:t(e.i),position:'aboveBar',color:C.blue,shape:'circle',text:'EARNINGS',size:1}));
     marks.sort((a,b)=>String(a.time)<String(b.time)?-1:String(a.time)>String(b.time)?1:0);
-    candles.setMarkers(marks);
+    try{ candles.setMarkers(marks); }catch(e){ console.warn('markers skipped',e); }
     // analog envelope extended past today (real forward paths' median / p25 / p75)
     const fan=d.analog?.forward_fan; const last=cs[cs.length-1];
     if(fan){const F=Math.min(fan.sessions,d.outcome_sessions); const fp=(p:number)=>last.c*(1+p/100);

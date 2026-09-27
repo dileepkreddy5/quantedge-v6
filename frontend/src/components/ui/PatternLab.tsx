@@ -1,3 +1,4 @@
+import SafeBoundary from './SafeBoundary';
 import VolumeTracker from './VolumeTracker';
 import PatternChart from './PatternChart';
 import SituationMode from './SituationMode';
@@ -166,9 +167,9 @@ const PatternLab: React.FC<{ ticker: string }> = ({ ticker }) => {
           }}>{m.label}</button>
         ))}
       </div>
-      {mode === 'chart' && <PatternChart ticker={ticker} />}
-      {mode === 'situation' && <SituationMode ticker={ticker} />}
-      {mode === 'volume' && <VolumeTracker ticker={ticker} />}
+      {mode === 'chart' && <SafeBoundary label="chart"><PatternChart ticker={ticker} /></SafeBoundary>}
+      {mode === 'situation' && <SafeBoundary label="situation"><SituationMode ticker={ticker} /></SafeBoundary>}
+      {mode === 'volume' && <SafeBoundary label="volume"><VolumeTracker ticker={ticker} /></SafeBoundary>}
       {mode === 'analogs' && <AnalogsDeep ticker={ticker} />}
       {mode === 'formations' && <FormationsDeep />}
       {mode === 'evolution' && <EvolutionMode ticker={ticker} />}
