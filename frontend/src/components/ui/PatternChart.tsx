@@ -24,6 +24,8 @@ const ScoreLine:React.FC<{o:Occ;hz:string}>=({o,hz})=>{const s=o.scorecard; cons
     <span style={{color:C.dust}}> · med {pf(st.median_pct,2)} · n={st.n?.toLocaleString()}</span>
     {e!=null&&<span style={{color:Math.abs(e)<2?C.cocoa:e>0?C.bull:C.bear}}> · {e>=0?'+':''}{e.toFixed(1)} vs base</span>}
     {o.scorecard?.follow_through_pct!=null&&<span style={{color:C.dust}}> · follow-through {o.scorecard.follow_through_pct}%</span>}
+    {o.scorecard?.by_volume?.confirmed&&<span style={{color:C.gold}}> · vol-confirmed {o.scorecard.by_volume.confirmed.positive_pct}%</span>}
+    {o.scorecard?.by_volume?.unconfirmed&&<span style={{color:C.cocoa}}> / unconfirmed {o.scorecard.by_volume.unconfirmed.positive_pct}%</span>}
     <span style={{color:C.cocoa}}> @ {hz}</span></span>);};
 
 const PatternChart:React.FC<{ticker:string}>=({ticker})=>{
@@ -93,6 +95,15 @@ const PatternChart:React.FC<{ticker:string}>=({ticker})=>{
           <line x1={PL} x2={W-PR} y1={y(p)} y2={y(p)} stroke={col} strokeDasharray="4,4" opacity={.5}/>
           <text x={W-PR+4} y={y(p)+3} fill={col} fontSize={8} fontFamily={mono}>{lab} {p.toFixed(2)}</text></g>))}
         {d.sma20&&line(d.sma20,C.gold)}{d.sma50&&line(d.sma50,C.caramel,'3,3')}{d.sma200&&line(d.sma200,C.dust,'1,3')}
+        {(d.earnings||[]).map((e:any,k:number)=>(<g key={'e'+k}>
+          <line x1={x(e.i)} x2={x(e.i)} y1={14} y2={H-VH-8} stroke={C.blue} strokeDasharray="2,4" opacity={.6}/>
+          <text x={x(e.i)+3} y={H-VH-20} fill={C.blue} fontSize={8} fontFamily={mono}>EARNINGS {e.date.slice(5)}</text></g>))}
+        {d.relative_strength_vs_spy&&(()=>{const rs=d.relative_strength_vs_spy.filter((v:any)=>v!=null); if(!rs.length) return null;
+          const mn=Math.min(...rs),mx=Math.max(...rs); const top=PT+8, hgt=48; const ry=(v:number)=>top+(1-(v-mn)/((mx-mn)||1))*hgt;
+          let p=''; d.relative_strength_vs_spy.forEach((v:any,i:number)=>{if(v==null)return;p+=`${p?'L':'M'}${x(i).toFixed(1)},${ry(v).toFixed(1)}`;});
+          const lastv=rs[rs.length-1];
+          return (<g opacity={.9}><path d={p} fill="none" stroke={lastv>=1?C.bull:C.bear} strokeWidth={1}/>
+            <text x={PL+4} y={top-2} fill={C.cocoa} fontSize={7.5} fontFamily={mono}>RELATIVE STRENGTH vs SPY (window start = 1.00) · now {lastv.toFixed(3)} {lastv>=1?'outperforming':'lagging'}</text></g>);})()}
         {/* volume */}
         {d.candles.map((c:any,i:number)=><rect key={'v'+i} x={x(i)-cw*0.35} y={vy(c.v)} width={cw*0.7} height={H-8-vy(c.v)} fill={c.c>=c.o?C.bull:C.bear} opacity={.18}/>)}
         {/* candles */}

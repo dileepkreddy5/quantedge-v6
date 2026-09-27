@@ -362,12 +362,15 @@ async def pattern_chart(ticker: str, request: Request, horizon: str = Query("3m"
         f = (fart.get("formations") or {}).get(name)
         if not f or not fkey: return None
         d = (f.get("distributions") or {}).get(fkey)
-        return {**d, "breakout_up_pct": f.get("breakout_up_pct"), "follow_through_pct": f.get("follow_through_pct")} if d else None
+        return {**d, "breakout_up_pct": f.get("breakout_up_pct"), "follow_through_pct": f.get("follow_through_pct"),
+                "base": (fart.get("base") or {}).get(fkey), "by_volume": f.get("by_volume_confirmation"),
+                "by_regime": f.get("by_regime") if fkey == "20d" else None} if d else None
     def cscore(name):
         p = (cart.get("patterns") or {}).get(name)
         if not p: return None
         hz = (p.get("horizons") or {}).get(ckey) or {}
         return {"all": hz.get("all"), "by_regime": hz.get("by_regime"), "by_period": hz.get("by_period"),
+                "by_volume": hz.get("by_volume"),
                 "base": (cart.get("base") or {}).get(ckey), "occurrences": p.get("occurrences")}
     for f_ in forms: f_["scorecard"] = fscore(f_["name"])
     for x in cands: x["scorecard"] = cscore(x["name"])
@@ -385,6 +388,31 @@ async def pattern_chart(ticker: str, request: Request, horizon: str = Query("3m"
     except Exception:
         fan = None
 
+    # Earnings releases (8-K item 2.02) in the window, with their public timestamp — Bernard-Thomas drift is measurable from these.
+    earnings = []
+    try:
+        ers = await pool.fetch("""SELECT event_date, available_at FROM ci_events
+                                  WHERE ticker=$1 AND item_code='2.02' AND event_date >= $2 ORDER BY event_date""", tk, ds[start])
+        dpos = {d_: i for i, d_ in enumerate(ds)}
+        for r in ers:
+            i = dpos.get(r["event_date"]) or next((dpos[d_] for d_ in ds if d_ >= r["event_date"]), None)
+            if i is not None and i >= start:
+                earnings.append({"i": i - start, "date": r["event_date"].isoformat(), "public": r["available_at"].isoformat()})
+    except Exception:
+        pass
+    # Relative strength vs SPY: ratio of the two price series, normalized to 1 at window start.
+    rs = None
+    try:
+        spy = await pool.fetch("SELECT d, c FROM daily_bars WHERE ticker='SPY' AND d >= $1 ORDER BY d", ds[start])
+        sp = {r["d"]: r["c"] for r in spy}
+        base_r = None; rs = []
+        for i in range(start, n):
+            if ds[i] in sp and sp[ds[i]]:
+                ratio = c[i] / sp[ds[i]]; base_r = base_r or ratio; rs.append(round(ratio / base_r, 4))
+            else:
+                rs.append(None)
+    except Exception:
+        rs = None
     recent = [x for x in forms + cands if x["i"] >= (n - start) - 3]
     hi52, lo52 = float(c[-252:].max()), float(c[-252:].min())
     return {"ticker": tk, "horizon": horizon, "outcome_sessions": out_sessions,
@@ -393,7 +421,7 @@ async def pattern_chart(ticker: str, request: Request, horizon: str = Query("3m"
             "sma20": sma(20), "sma50": sma(50), "sma200": sma(200) if n >= 200 else None,
             "high_52w": hi52, "low_52w": lo52,
             "formations": forms, "candlesticks": cands,
-            "current_match": recent,
+            "current_match": recent, "earnings": earnings, "relative_strength_vs_spy": rs,
             "analog": fan,
             "scorecards_note": ("candlestick odds appear once the nightly universe scan has run; formation odds are "
                                 "measured from 58k occurrences; cells under the occurrence floor say 'not enough history'"),

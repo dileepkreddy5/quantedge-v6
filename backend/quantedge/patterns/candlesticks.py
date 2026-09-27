@@ -79,9 +79,10 @@ async def scan_candlesticks(pool, out_path: str) -> dict:
     occ = {}
     base = {h: [] for h in HORIZONS}
     for tk in tickers:
-        rows = await pool.fetch("SELECT d, o, h, l, c FROM daily_bars WHERE ticker=$1 ORDER BY d", tk)
+        rows = await pool.fetch("SELECT d, o, h, l, c, v FROM daily_bars WHERE ticker=$1 ORDER BY d", tk)
         c = np.array([r["c"] for r in rows], np.float64)
         if c.min() < 3.0: continue
+        vol = np.array([float(r["v"] or 0) for r in rows]); v20 = np.array([vol[max(0, i - 20):i].mean() if i else vol[i] for i in range(len(vol))]) + 1e-9
         o = np.array([r["o"] or r["c"] for r in rows], np.float64); h = np.array([r["h"] or r["c"] for r in rows], np.float64)
         l = np.array([r["l"] or r["c"] for r in rows], np.float64); ds = [r["d"] for r in rows]
         # base rate sample: every 5th session
@@ -92,7 +93,8 @@ async def scan_candlesticks(pool, out_path: str) -> dict:
             i = occ_["i"]
             if i + 1 >= len(c): continue
             entry = c[i + 1]   # next session's close: no look-ahead on the completing candle
-            rec = {"regime": regime.get(ds[i], "UNKNOWN"), "period": "2021-2024" if ds[i].year <= 2024 else "2025+"}
+            rec = {"regime": regime.get(ds[i], "UNKNOWN"), "period": "2021-2024" if ds[i].year <= 2024 else "2025+",
+                   "vol_confirmed": bool(vol[i] >= 1.5 * v20[i])}   # Lee-Swaminathan: volume-confirmed vs not
             for hz in HORIZONS:
                 rec[hz] = c[i + 1 + hz] / entry - 1 if i + 1 + hz < len(c) else None
             occ.setdefault(occ_["name"], []).append(rec)
@@ -102,7 +104,9 @@ async def scan_candlesticks(pool, out_path: str) -> dict:
         for hz in HORIZONS:
             by_h[f"{hz}d"] = {"all": _stats([r[hz] for r in lst]),
                               "by_regime": {rg: _stats([r[hz] for r in lst if r["regime"] == rg]) for rg in set(r["regime"] for r in lst)},
-                              "by_period": {p: _stats([r[hz] for r in lst if r["period"] == p]) for p in ("2021-2024", "2025+")}}
+                              "by_period": {p: _stats([r[hz] for r in lst if r["period"] == p]) for p in ("2021-2024", "2025+")},
+                              "by_volume": {"confirmed": _stats([r[hz] for r in lst if r["vol_confirmed"]]),
+                                            "unconfirmed": _stats([r[hz] for r in lst if not r["vol_confirmed"]])}}
         summary[name] = {"occurrences": len(lst), "horizons": by_h}
     art = {"generated": date.today().isoformat(), "universe": len(tickers), "min_occurrences": MIN_OCC,
            "base": {f"{hz}d": _stats(base[hz]) for hz in HORIZONS},

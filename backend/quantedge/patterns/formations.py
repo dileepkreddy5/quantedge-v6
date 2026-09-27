@@ -110,6 +110,8 @@ async def scan_formations(pool, out_path: str) -> dict:
             vslope = float(np.polyfit(np.arange(len(vseg)), (vseg - vseg.mean()) / vz_s, 1)[0]) if vz_s > 0 else 0.0
             lo = max(0, end_i - 251)
             vol_pct = float((v21[lo:end_i] < v21[end_i]).mean()) if end_i > lo else 0.5
+            _v20 = vv[max(0, conf - 20):conf].mean() if conf > 0 else vv[conf]
+            vol_ratio = float(vv[conf] / _v20) if _v20 > 0 else 1.0
             fwd = {}
             for h in HORIZONS:
                 fwd[h] = (round(float(c[conf + h] / entry - 1) * 100, 2)
@@ -121,8 +123,17 @@ async def scan_formations(pool, out_path: str) -> dict:
                 "duration": int(end_i - start_i), "breakout_up": up, "follow_through": ft,
                 "regime": regime_by_date.get(ds[end_i], "UNKNOWN"),
                 "volume_slope": round(vslope, 3), "vol_pctile": round(vol_pct, 2),
+                "vol_ratio": round(vol_ratio, 2), "vol_confirmed": bool(vol_ratio >= 1.5),
                 **{f"fwd_{h}d": fwd[h] for h in HORIZONS}})
 
+    # Universe base rates per horizon, so a formation's odds have a comparator on the chart.
+    base = {h: [] for h in HORIZONS}
+    for tk in tickers[:800]:
+        rows = await pool.fetch("SELECT c FROM daily_bars WHERE ticker=$1 ORDER BY d", tk)
+        c = np.array([r["c"] for r in rows], np.float64)
+        for i in range(60, len(c) - 5, 10):
+            for h in HORIZONS:
+                base[h].append(round(float(c[i + h] / c[i] - 1) * 100, 2) if i + h < len(c) else None)
     summary = {}
     for name, lst in occ.items():
         lst.sort(key=lambda o: (o["ticker"], o["end"]))
@@ -148,6 +159,8 @@ async def scan_formations(pool, out_path: str) -> dict:
             "by_regime": by_regime,
             "by_volume": {"rising": _stats([o["fwd_20d"] for o in kept if o["volume_slope"] > 0]),
                           "falling": _stats([o["fwd_20d"] for o in kept if o["volume_slope"] < 0])},
+            "by_volume_confirmation": {"confirmed": _stats([o["fwd_20d"] for o in kept if o.get("vol_confirmed")]),
+                                       "unconfirmed": _stats([o["fwd_20d"] for o in kept if not o.get("vol_confirmed")])},
             "by_volatility": {"high": _stats([o["fwd_20d"] for o in kept if o["vol_pctile"] >= 0.67]),
                               "low": _stats([o["fwd_20d"] for o in kept if o["vol_pctile"] <= 0.33])},
             "examples": sorted(kept, key=lambda o: o["end"], reverse=True)[:12]}
@@ -156,7 +169,7 @@ async def scan_formations(pool, out_path: str) -> dict:
                       "templates (1.5% tol); outcomes from a 3-session confirmation bar; "
                       "per-ticker non-overlapping; horizons NaN individually near data end; "
                       "cells under 15 occurrences report null"),
-           "universe": len(tickers), "formations": summary}
+           "universe": len(tickers), "base": {f"{h}d": _stats(base[h]) for h in HORIZONS}, "formations": summary}
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
     Path(out_path).write_text(json.dumps(art))
     logger.info(f"[formations v2] {sum(v['occurrences'] for v in summary.values())} occurrences")
