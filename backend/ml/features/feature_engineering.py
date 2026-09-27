@@ -206,11 +206,17 @@ class TechnicalFeatures:
         # ── Commodity Channel Index ────────────────────────
         # CCI = (TP - SMA_TP) / (0.015 * MAD)
         tp = (high + low + close) / 3
-        sma_tp = tp.rolling(20).mean()
-        mad = tp.rolling(20).apply(lambda x: np.abs(x - x.mean()).mean())
-        cci = (tp - sma_tp) / (0.015 * mad + 1e-10)
-        features["cci"] = cci.iloc[-1]
-        features["cci_overbought"] = 1 if cci.iloc[-1] > 100 else -1 if cci.iloc[-1] < -100 else 0
+        # Only cci.iloc[-1] is used; the rolling.apply MAD lambda ran at every
+        # position. Exact same value from the last 20 rows.
+        if len(tp) >= 20:
+            x = tp.iloc[-20:]
+            _mean = x.mean(skipna=False)
+            _mad = (x - _mean).abs().mean(skipna=False)
+            _cci = (tp.iloc[-1] - _mean) / (0.015 * _mad + 1e-10)
+        else:
+            _cci = float("nan")
+        features["cci"] = _cci
+        features["cci_overbought"] = 1 if _cci > 100 else -1 if _cci < -100 else 0
 
         # ── Williams %R ────────────────────────────────────
         highest_14 = high.rolling(14).max()
@@ -355,9 +361,14 @@ class VolatilityFeatures:
         More efficient than close-to-close (5x fewer data points needed)
         """
         log_hl = np.log(high / low)
-        return np.sqrt(log_hl.rolling(window).apply(
-            lambda x: (x**2).sum() / (4 * len(x) * np.log(2))
-        )).iloc[-1] * np.sqrt(252)
+        # Only the final rolling value was ever used; the rolling.apply lambda
+        # evaluated it at every position (12s/ticker in profiling). Same
+        # formula on the last `window` rows; skipna=False preserves the
+        # rolling NaN semantics exactly.
+        if len(log_hl) < window:
+            return float("nan")
+        x = log_hl.iloc[-window:]
+        return float(np.sqrt((x ** 2).sum(skipna=False) / (4 * window * np.log(2))) * np.sqrt(252))
 
     @staticmethod
     def garman_klass_volatility(df: pd.DataFrame, window: int = 21) -> float:
@@ -408,14 +419,14 @@ class VolatilityFeatures:
         lags = range(min_lag, min(max_lag, len(ts) // 2))
         rs_values = []
         for lag in lags:
-            chunks = [ts[i:i+lag] for i in range(0, len(ts)-lag, lag)]
-            rs_chunk = []
-            for chunk in chunks:
-                mean = chunk.mean()
-                deviation = np.cumsum(chunk - mean)
-                rs = (deviation.max() - deviation.min()) / (chunk.std() + 1e-10)
-                rs_chunk.append(rs)
-            rs_values.append(np.mean(rs_chunk))
+            # Same chunks as range(0, len(ts)-lag, lag): k full chunks of `lag`.
+            k = len(range(0, len(ts) - lag, lag))
+            if k == 0:
+                rs_values.append(np.nan); continue
+            m = ts[:k * lag].reshape(k, lag)
+            dev = np.cumsum(m - m.mean(axis=1, keepdims=True), axis=1)
+            rs = (dev.max(axis=1) - dev.min(axis=1)) / (m.std(axis=1) + 1e-10)
+            rs_values.append(rs.mean())
         try:
             hurst, _ = np.polyfit(np.log(list(lags)), np.log(rs_values), 1)
             return np.clip(hurst, 0, 1)
