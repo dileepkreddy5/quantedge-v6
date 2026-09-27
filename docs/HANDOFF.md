@@ -12,6 +12,11 @@ Pattern Lab, Company Intelligence, the rebound resurrection and the disk outage.
 - **A backend rebuild recreates the API container and kills anything exec'd
   inside it.** Detached scans, library builds and ingests die silently.
   Never rebuild while one is running. Killed builds this way four times.
+- An exec'd process survives a dropped SSH session (it lives in the container),
+  but NOT a container rebuild. Still: run long jobs detached to a log file
+  (`docker compose exec -d backend sh -c '... > /app/models/X.log 2>&1'`) so the
+  output survives too. Kill a stray one from the host: `docker top quantedge-api`
+  gives host PIDs, then `kill <pid>`.
 - Manual runners live in `backend/run_*.py` (in the repo, so they survive
   rebuilds): `build_lib`, `run_formations`, `run_conditions`, `run_rebound`,
   `run_ci_ingest`, `run_ci_capital`. Run with
@@ -94,15 +99,19 @@ conditions (394k samples, quintiles) with a 9-state transition matrix.
 Motif discovery deliberately absent. Loop bounds must use
 `min(HORIZONS)` — bounding by max silently drops the most recent windows.
 
-**Company Intelligence** (`quantedge/intel/`, tab 🔎): frozen contract —
+**Company Intelligence** (`quantedge/intel/`, tab 🔎) — Phase A complete 2026-09-27: frozen contract —
 `ci_raw_evidence` immutable (accession + hash, `supersedes_id`),
 `ci_events` OBSERVED with deterministic significance, `ci_derived`
 DERIVED/HYPOTHESIS with `extractor_version` and structured citations,
 `ci_entity_map` with match provenance. **No UPDATE/DELETE in ingest code.**
 `available_at` = SEC acceptance timestamp (or first-report filing date for
-XBRL), never the economic `event_date`. Adapters live: EDGAR 8-K/Form 4
-(A1/A2), XBRL capital allocation (A3). Next: 13F with `as_of` vs
-`disclosed_at` (A4), Polygon attention series (A5), then patents,
+XBRL), never the economic `event_date`. Adapters live: EDGAR 8-K/Form 4 (A1/A2), XBRL capital
+allocation (A3, periods anchored to their FIRST reporting filing),
+13F institutional (A4: complete quarters only, >=2000 managers;
+available_at = quarter end + 45d; resolves ticker->CUSIP via the OWNERSHIP
+tab's ownership_for — one resolver — cached in ci_entity_map), market
+attention (A5: one pass/day over all Polygon news; spikes need a full 97-day
+baseline). Universe: all active filers. Next: patents,
 research, talent, products (B), USAspending/openFDA/ClinicalTrials (C),
 FRED industry state (D). Customers, capacity, transcripts: NO SOURCE —
 displayed as such, never inferred. SEC pace: 2 workers, ~3 req/s;
@@ -113,10 +122,14 @@ proxies (SPY/QQQ/XLK via Polygon /prev, uncached), SystemBar
 (`/api/v6/system/stats`: live counts, board staleness, disk), boards.
 
 ## Open items
-1. Signal-writer nulls (`xgb_confidence`, `recommended_position`).
-2. relationships artifact frozen — audit `relationship_extract` write path.
-3. CI Session 2 A4/A5; then B/C/D adapters per the contract.
-4. Reboot the box outside the nightly window.
+1. Panel expansion beyond 707: feature build is 7.2s/ticker after the Sep 27
+   vectorization; a 3-process pool makes all filers a ~2.7h nightly build.
+   Structural refactor (compute indicators once per series, not per sample)
+   is worth up to another 10x. Observe the first DB-path nightly first.
+2. recommended_position and vol_scale both 0.2 in the first populated signal
+   row — check for a floor/cap in portfolio_construction.
+3. CI Phase B/C/D adapters per the contract; OpenFIGI if a second CUSIP
+   source is ever needed.
 5. Redis cache for `/brief/indices` if traffic ever warrants.
 6. AI agent (tool-calling over QuantEdge endpoints; report, never invent;
    rate-limited or login-gated) — deliberately last.
