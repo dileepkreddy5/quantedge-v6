@@ -1,3 +1,4 @@
+import VolumeTracker from './VolumeTracker';
 import PatternChart from './PatternChart';
 import SituationMode from './SituationMode';
 import FormationsDeep from './FormationsDeep';
@@ -421,6 +422,7 @@ const ConditionsMode: React.FC<{ ticker: string; set: string }> = ({ ticker, set
 const MODES = [
   { id: 'chart', label: 'PATTERN CHART' },
   { id: 'situation', label: 'SITUATION REPORT' },
+  { id: 'volume', label: 'VOLUME TRACKER' },
   { id: 'analogs', label: 'HISTORICAL ANALOGS' },
   { id: 'formations', label: 'CLASSICAL FORMATIONS' },
   { id: 'momentum', label: 'MOMENTUM & REVERSAL' },
@@ -445,6 +447,7 @@ const PatternLab: React.FC<{ ticker: string }> = ({ ticker }) => {
       </div>
       {mode === 'chart' && <PatternChart ticker={ticker} />}
       {mode === 'situation' && <SituationMode ticker={ticker} />}
+      {mode === 'volume' && <VolumeTracker ticker={ticker} />}
       {mode === 'analogs' && <AnalogsDeep ticker={ticker} />}
       {mode === 'formations' && <FormationsDeep />}
       {mode === 'evolution' && <EvolutionMode ticker={ticker} />}

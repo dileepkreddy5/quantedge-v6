@@ -15,7 +15,8 @@ const LABEL:Record<string,string>={head_shoulders:'Head & Shoulders',inv_head_sh
 const BEAR_F=new Set(['head_shoulders','double_top','triple_top','rising_wedge','descending_triangle']);
 type Occ={family:string;name:string;i:number;direction?:string;points?:{i:number;price:number}[];confirm_i?:number;scorecard:any};
 const pf=(v:any,d=1)=>v==null?'—':`${v>=0?'+':''}${Number(v).toFixed(d)}%`;
-const edgeOf=(o:Occ)=>{const s=o.scorecard; const st=s?.all||s; const b=s?.base; if(!st||st.positive_pct==null)return null;
+let BASE_FALLBACK:any=null;   // analog-library base rate at the current horizon, set per render
+const edgeOf=(o:Occ)=>{const s=o.scorecard; const st=s?.all||s; const b=s?.base||BASE_FALLBACK; if(!st||st.positive_pct==null)return null;
   return b?.positive_pct!=null? st.positive_pct-b.positive_pct : null;};
 const ScoreLine:React.FC<{o:Occ;hz:string}>=({o,hz})=>{const s=o.scorecard; const st=s?.all||s;
   if(!st||st.positive_pct==null) return <span style={{color:C.cocoa}}>{o.family==='candlestick'?'not yet measured (nightly scan pending)':'not enough history'}</span>;
@@ -49,7 +50,7 @@ const PatternChart:React.FC<{ticker:string}>=({ticker})=>{
   const occs:Occ[]=[...(show.f?d.formations:[]),...(show.c?d.candlesticks:[])];
   const catalog=Array.from(new Map<string,Occ>([...d.formations,...d.candlesticks].map((o:Occ)=>[o.name,o] as [string,Occ])).values())
     .sort((a:any,b:any)=>Math.abs(edgeOf(b)??-99)-Math.abs(edgeOf(a)??-99));
-  const cur=d.current_match||[]; const dist=d.analog?.distribution; const base=d.analog?.base;
+  const cur=d.current_match||[]; const dist=d.analog?.distribution; const base=d.analog?.base; BASE_FALLBACK=base;
   const line=(arr:(number|null)[],col:string,dash?:string)=>{let p='';arr.forEach((v,i)=>{if(v==null)return;p+=`${p?'L':'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`;});
     return <path d={p} fill="none" stroke={col} strokeWidth={1} strokeDasharray={dash} opacity={.7}/>;};
   return (<div>
@@ -125,6 +126,14 @@ const PatternChart:React.FC<{ticker:string}>=({ticker})=>{
         {d.candles.map((c:any,i:number)=>{if(i<20)return null;const avg=d.candles.slice(i-20,i).reduce((a:number,z:any)=>a+z.v,0)/20;
           return c.v>=2.5*avg?<g key={'cl'+i}><rect x={x(i)-cw*0.35} y={vy(c.v)} width={cw*0.7} height={H-8-vy(c.v)} fill={C.gold} opacity={.55}/>
             <text x={x(i)} y={vy(c.v)-3} fill={C.gold} fontSize={7} fontFamily={mono} textAnchor="middle">{(c.v/avg).toFixed(1)}×</text></g>:null;})}
+        {(()=>{const cands=[...d.formations,...d.candlesticks].filter((o:Occ)=>{const st=o.scorecard?.all||o.scorecard;return st&&st.median_pct!=null&&st.p25_pct!=null;}).sort((a:Occ,b:Occ)=>b.i-a.i);
+          const o=cands[0]; if(!o) return null; const st=o.scorecard?.all||o.scorecard; const i0=o.confirm_i??o.i; const p0=d.candles[i0]?.c; if(!p0) return null;
+          const K=d.outcome_sessions; const col=st.positive_pct>=50?C.bull:C.bear; const pt=(pct:number)=>y(p0*(1+pct/100));
+          return (<g opacity={.85}>
+            <line x1={x(i0)} x2={x(i0+K)} y1={y(p0)} y2={pt(st.median_pct)} stroke={col} strokeWidth={1.5} strokeDasharray="5,3"/>
+            <line x1={x(i0)} x2={x(i0+K)} y1={y(p0)} y2={pt(st.p75_pct)} stroke={col} strokeWidth={1} strokeDasharray="2,3"/>
+            <line x1={x(i0)} x2={x(i0+K)} y1={y(p0)} y2={pt(st.p25_pct)} stroke={col} strokeWidth={1} strokeDasharray="2,3"/>
+            <text x={x(i0)+4} y={y(p0)-10} fill={col} fontSize={8} fontFamily={mono}>{LABEL[o.name]} cone · {st.positive_pct}% up · med {pf(st.median_pct,1)} @{K}s (n={st.n})</text></g>);})()}
         <text x={PL+4} y={H-VH-14} fill={C.cocoa} fontSize={8} fontFamily={mono}>{d.candles[0].d} → {d.candles[n-1].d} · last {last}</text>
       </svg>
       {hover&&<div style={{position:'absolute',left:14,top:14,background:'rgba(16,10,7,0.95)',border:`1px solid ${C.gold}`,borderRadius:6,padding:'8px 12px',fontFamily:mono,fontSize:10,maxWidth:460}}>
