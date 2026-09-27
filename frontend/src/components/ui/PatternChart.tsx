@@ -122,6 +122,9 @@ const PatternChart:React.FC<{ticker:string}>=({ticker})=>{
             <text x={xs(F-1)+4} y={y(fp(fan.median[F-1]))+3} fill={C.gold} fontSize={9} fontFamily={mono}>med {pf(fan.median[F-1])}</text>
             <text x={xs(F-1)+4} y={y(fp(fan.p75[F-1]))-2} fill={C.dust} fontSize={8} fontFamily={mono}>p75 {pf(fan.p75[F-1])}</text>
             <text x={xs(F-1)+4} y={y(fp(fan.p25[F-1]))+10} fill={C.dust} fontSize={8} fontFamily={mono}>p25 {pf(fan.p25[F-1])}</text></g>);})()}
+        {d.candles.map((c:any,i:number)=>{if(i<20)return null;const avg=d.candles.slice(i-20,i).reduce((a:number,z:any)=>a+z.v,0)/20;
+          return c.v>=2.5*avg?<g key={'cl'+i}><rect x={x(i)-cw*0.35} y={vy(c.v)} width={cw*0.7} height={H-8-vy(c.v)} fill={C.gold} opacity={.55}/>
+            <text x={x(i)} y={vy(c.v)-3} fill={C.gold} fontSize={7} fontFamily={mono} textAnchor="middle">{(c.v/avg).toFixed(1)}×</text></g>:null;})}
         <text x={PL+4} y={H-VH-14} fill={C.cocoa} fontSize={8} fontFamily={mono}>{d.candles[0].d} → {d.candles[n-1].d} · last {last}</text>
       </svg>
       {hover&&<div style={{position:'absolute',left:14,top:14,background:'rgba(16,10,7,0.95)',border:`1px solid ${C.gold}`,borderRadius:6,padding:'8px 12px',fontFamily:mono,fontSize:10,maxWidth:460}}>
@@ -132,6 +135,45 @@ const PatternChart:React.FC<{ticker:string}>=({ticker})=>{
       </div>}
     </div>
     {/* catalog in window, ranked by measured edge */}
+    {(()=>{const cs=d.candles; const H20=d.outcome_sessions;
+      const avg=(i:number,k:number)=>cs.slice(Math.max(0,i-k),i).reduce((a:number,z:any)=>a+z.v,0)/Math.max(1,Math.min(k,i));
+      const recent=[...d.formations,...d.candlesticks].filter((o:Occ)=>o.i>=n-25&&cs[o.i]).sort((a:Occ,b:Occ)=>b.i-a.i).slice(0,8);
+      const ago=(i:number)=>n-1-i;
+      const real=(i:number,k:number)=>(i+k<n)?(cs[i+k].c/cs[i].c-1)*100:null;
+      const upShare=(()=>{let u=0,t=0;for(let i=Math.max(1,n-20);i<n;i++){t+=cs[i].v;if(cs[i].c>=cs[i-1].c)u+=cs[i].v;}return t?u/t*100:null;})();
+      const obv=(()=>{let o=0;const a:number[]=[];for(let i=1;i<n;i++){o+=cs[i].c>cs[i-1].c?cs[i].v:cs[i].c<cs[i-1].c?-cs[i].v:0;a.push(o);}return a;})();
+      const obvTrend=obv.length>20?(obv[obv.length-1]>obv[obv.length-21]?'rising':'falling'):'—';
+      const v20=avg(n,20), v60=avg(n,60), vtoday=cs[n-1].v;
+      return (<>
+      <div style={{display:'grid',gridTemplateColumns:'minmax(340px,1.6fr) minmax(260px,1fr)',gap:12,marginTop:12}}>
+        <div style={{background:C.s2,border:`1px solid ${C.b1}`,borderRadius:10,padding:'12px 14px'}}>
+          <div style={{fontFamily:mono,fontSize:9,letterSpacing:1.5,color:C.cocoa,marginBottom:8}}>RECENT PATTERNS · WHAT THE ODDS SAID vs WHAT ACTUALLY HAPPENED</div>
+          {recent.length===0&&<div style={{fontFamily:mono,fontSize:10.5,color:C.cocoa}}>no catalog pattern in the last 25 sessions</div>}
+          {recent.map((o:Occ,k:number)=>{const st=o.scorecard?.all||o.scorecard; const since=real(o.i,ago(o.i)); const at5=real(o.i,5); const atH=real(o.i,H20);
+            const vr=cs[o.i].v/Math.max(1,avg(o.i,20)); const bull=o.direction?o.direction==='bullish':!BEAR_F.has(o.name);
+            return (<div key={k} style={{display:'grid',gridTemplateColumns:'86px 170px 1fr',gap:10,padding:'7px 0',borderBottom:'1px solid rgba(58,41,32,0.45)',fontFamily:mono,fontSize:10.5,alignItems:'center'}}>
+              <div><div style={{color:C.cream}}>{cs[o.i].d.slice(5)}</div><div style={{color:C.cocoa,fontSize:8.5}}>{ago(o.i)===0?'today':`${ago(o.i)} sessions ago`}</div></div>
+              <div><div style={{color:bull?C.bull:o.direction==='neutral'?C.gold:C.bear}}>{LABEL[o.name]||o.name}</div>
+                <div style={{color:vr>=1.5?C.gold:C.cocoa,fontSize:8.5}}>volume {vr.toFixed(1)}× 20d avg{vr>=1.5?' · confirmed':''}</div></div>
+              <div style={{fontSize:10}}>
+                <div style={{color:C.dust}}>odds @{hz.toUpperCase()}: {st?.positive_pct!=null?<span style={{color:st.positive_pct>=50?C.bull:C.bear}}>{st.positive_pct}% up · med {pf(st.median_pct,2)}</span>:<span style={{color:C.cocoa}}>not yet measured</span>}</div>
+                <div>actual: {since!=null?<span style={{color:since>=0?C.bull:C.bear}}>{pf(since,2)} since</span>:'—'}
+                  {at5!=null&&<span style={{color:at5>=0?C.bull:C.bear}}> · {pf(at5,2)} @5s</span>}
+                  {atH!=null?<span style={{color:atH>=0?C.bull:C.bear}}> · {pf(atH,2)} @{H20}s</span>:<span style={{color:C.cocoa}}> · @{H20}s pending</span>}</div>
+              </div></div>);})}
+        </div>
+        <div style={{background:C.s2,border:`1px solid ${C.b1}`,borderRadius:10,padding:'12px 14px'}}>
+          <div style={{fontFamily:mono,fontSize:9,letterSpacing:1.5,color:C.cocoa,marginBottom:8}}>VOLUME</div>
+          {[['TODAY vs 20D AVG',`${(vtoday/Math.max(1,v20)).toFixed(2)}×`,vtoday>=1.5*v20?C.gold:C.latte],
+            ['20D vs 60D AVG',`${(v20/Math.max(1,v60)).toFixed(2)}×`,v20>v60?C.bull:C.dust,],
+            ['UP-DAY VOLUME SHARE (20D)',upShare!=null?`${upShare.toFixed(0)}%`:'—',upShare!=null&&upShare>=55?C.bull:upShare!=null&&upShare<=45?C.bear:C.latte],
+            ['OBV TREND (20D)',obvTrend.toUpperCase(),obvTrend==='rising'?C.bull:obvTrend==='falling'?C.bear:C.latte],
+            ['CLIMAX DAYS IN WINDOW',String(cs.filter((c:any,i:number)=>i>=20&&c.v>=2.5*avg(i,20)).length),C.gold]].map(([k,v,col]:any)=>(
+            <div key={k} style={{display:'flex',justifyContent:'space-between',fontFamily:mono,fontSize:11,padding:'5px 0'}}><span style={{color:C.dust}}>{k}</span><span style={{color:col,fontWeight:700}}>{v}</span></div>))}
+          <div style={{fontFamily:mono,fontSize:8.5,color:C.cocoa,marginTop:8,lineHeight:1.6}}>Up-day share and OBV are accumulation proxies (true buy/sell split is not derivable from daily bars). Climax = volume ≥ 2.5× its 20d average, marked gold on the chart. Volume-confirmed pattern odds arrive with tomorrow's scan.</div>
+        </div>
+      </div>
+      </>);})()}
     {(()=>{const measured=catalog.filter((o:any)=>edgeOf(o)!=null); const top=measured.slice(0,5); const rest=catalog.filter((o:any)=>!top.includes(o));
       const count=(n:string)=>[...d.formations,...d.candlesticks].filter((z:Occ)=>z.name===n).length;
       return (<>
