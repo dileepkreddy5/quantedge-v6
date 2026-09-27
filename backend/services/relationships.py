@@ -77,7 +77,18 @@ class RelationshipExtractor:
     async def ensure_tables(self) -> None:
         async with self.pool.acquire() as conn:
             await conn.execute(CREATE_SQL)
-        logger.info("relationships table verified")
+            # Attempts: a 10-K that names no counterparty is a real answer, and
+            # without recording it the nightly job re-tried the same top-400
+            # zero-yield tickers forever (stalled Jul 22 -> Sep 27).
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS relationship_attempts (
+                    ticker       TEXT NOT NULL,
+                    accession    TEXT NOT NULL,
+                    found        INT NOT NULL DEFAULT 0,
+                    attempted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    PRIMARY KEY (ticker, accession)
+                )""")
+        logger.info("relationships + attempts tables verified")
 
     async def _load_name_index(self) -> None:
         """Map normalised company names back to tickers so a mention of
@@ -253,5 +264,10 @@ class RelationshipExtractor:
                       dst_ticker=EXCLUDED.dst_ticker, evidence=EXCLUDED.evidence,
                       filing_date=EXCLUDED.filing_date, updated_at=NOW()
                 """, rows)
+        async with self.pool.acquire() as conn:
+            await conn.execute("""
+                INSERT INTO relationship_attempts (ticker, accession, found)
+                VALUES ($1, $2, $3) ON CONFLICT (ticker, accession) DO NOTHING""",
+                ticker, acc, len(rows))
         return {"ticker": ticker, "found": len(rows), "filing_date": fdate,
                 "resolved": sum(1 for r in rows if r[2])}

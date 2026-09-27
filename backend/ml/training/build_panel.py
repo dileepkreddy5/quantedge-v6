@@ -79,6 +79,46 @@ async def _fetch_bars(client: httpx.AsyncClient, ticker: str, years: int) -> Opt
         logger.warning(f"[{ticker}] fetch failed: {e}")
         return None
 
+def _db_dsn() -> Optional[str]:
+    pw = os.environ.get("POSTGRES_PASSWORD")
+    return os.environ.get("DATABASE_URL") or (f"postgresql://quantedge:{pw}@postgres:5432/quantedge" if pw else None)
+
+
+async def _fetch_bars_db(pool, ticker: str, years: int) -> Optional[pd.DataFrame]:
+    """Same DataFrame shape as _fetch_bars, from daily_bars instead of Polygon.
+    daily_bars holds 5y for the whole universe (Aug 2026 backfill), so the
+    per-ticker API round-trip — the 4-hour part of the nightly build — is gone.
+    Returns None below 400 rows so the caller can fall back to Polygon."""
+    start = date.today() - timedelta(days=int(years * 365.25) + 10)
+    rows = await pool.fetch(
+        "SELECT d, o, h, l, c, v FROM daily_bars WHERE ticker=$1 AND d >= $2 ORDER BY d",
+        ticker, start)
+    if len(rows) < 400:
+        return None
+    df = pd.DataFrame([dict(r) for r in rows])
+    df["date"] = pd.to_datetime(df["d"])
+    df = df.rename(columns={"o": "open", "h": "high", "l": "low", "c": "close", "v": "volume"})
+    df["volume"] = df["volume"].astype(float)
+    return df.set_index("date")[["open", "high", "low", "close", "volume"]].sort_index()
+
+
+async def db_universe(top_n: int, min_bars: int) -> List[str]:
+    """The universe as a RULE, not a list: active US filers with a CIK and
+    enough history for the longest horizon plus feature lookback, ordered by
+    market cap. top_n=0 means all that qualify. New listings enter the night
+    they qualify; delistings drop out the same way."""
+    import asyncpg
+    pool = await asyncpg.create_pool(_db_dsn(), min_size=1, max_size=2)
+    rows = await pool.fetch("""
+        SELECT u.ticker FROM universe u
+        JOIN (SELECT ticker, count(*) n FROM daily_bars GROUP BY ticker) b USING (ticker)
+        WHERE u.cik IS NOT NULL AND u.active AND b.n >= $1
+        ORDER BY u.market_cap DESC NULLS LAST""" + (f" LIMIT {int(top_n)}" if top_n else ""),
+        min_bars)
+    await pool.close()
+    return [r["ticker"] for r in rows]
+
+
 HORIZONS = [5, 10, 21, 63, 126, 252]  # 1wk, 2wk, 1mo, 3mo, 6mo, 1yr — weeks to years
 
 def _multi_horizon_labels(close: pd.Series, dates: pd.DatetimeIndex,
@@ -152,10 +192,24 @@ async def build_panel(tickers: List[str], years: int, step: int, lookback: int) 
     cik_map = ticker_cik_map()
     rows = []
     ok = 0
+    pool = None
+    if _db_dsn():
+        try:
+            import asyncpg
+            pool = await asyncpg.create_pool(_db_dsn(), min_size=1, max_size=3)
+            logger.info("bars source: daily_bars (Postgres); Polygon only as fallback")
+        except Exception as e:
+            logger.warning(f"DB pool unavailable ({e}); falling back to Polygon for all tickers")
+    src = {"db": 0, "polygon": 0}
     async with httpx.AsyncClient() as client:
         for idx, tk in enumerate(tickers):
             t0 = time.time()
-            df = await _fetch_bars(client, tk, years)
+            df = await _fetch_bars_db(pool, tk, years) if pool else None
+            if df is not None:
+                src["db"] += 1
+            else:
+                df = await _fetch_bars(client, tk, years)
+                if df is not None: src["polygon"] += 1
             if df is None or len(df) < lookback + 40:
                 logger.info(f"[{idx+1}/{len(tickers)}] {tk}: insufficient data, skip")
                 continue
@@ -202,8 +256,11 @@ async def build_panel(tickers: List[str], years: int, step: int, lookback: int) 
             ok += 1
             logger.info(f"[{idx+1}/{len(tickers)}] {tk}: +{len(valid)} samples ({time.time()-t0:.1f}s) | panel={len(rows)}")
             await __import__("asyncio").sleep(0.05)  # gentle pacing
+    if pool:
+        await pool.close()
     panel = pd.DataFrame(rows)
-    logger.info(f"PANEL BUILT: {len(panel)} rows from {ok} tickers, {panel.shape[1]-3} features")
+    logger.info(f"PANEL BUILT: {len(panel)} rows from {ok} tickers, {panel.shape[1]-3} features "
+                f"| bars from db={src['db']} polygon={src['polygon']}")
     return panel
 
 def add_cross_sectional_ranks(panel: pd.DataFrame) -> pd.DataFrame:
@@ -232,13 +289,21 @@ def main():
     ap.add_argument("--years", type=int, default=5)
     ap.add_argument("--step", type=int, default=5, help="days between samples per ticker")
     ap.add_argument("--lookback", type=int, default=252)
-    ap.add_argument("--full", action="store_true", help="pull full liquid US universe dynamically")
+    ap.add_argument("--full", action="store_true", help="pull full liquid US universe dynamically (Polygon)")
+    ap.add_argument("--db-universe", action="store_true",
+                    help="universe as a rule from Postgres: active filers with enough history; --tickers 0 = all")
     args = ap.parse_args()
 
-    if not POLYGON_KEY:
-        logger.error("POLYGON_API_KEY not set. Export it first."); sys.exit(1)
+    if not POLYGON_KEY and not _db_dsn():
+        logger.error("Neither POLYGON_API_KEY nor a database is configured."); sys.exit(1)
 
-    if getattr(args, "full", False):
+    import asyncio
+    if getattr(args, "db_universe", False):
+        min_bars = args.lookback + max(HORIZONS) + 60
+        universe = asyncio.run(db_universe(args.tickers, min_bars))
+        logger.info(f"DB universe: {len(universe)} active filers with >= {min_bars} bars"
+                    + (f" (top {args.tickers} by market cap)" if args.tickers else " (all)"))
+    elif getattr(args, "full", False):
         from ml.training.select_universe import liquid_universe
         logger.info(f"Pulling liquid US universe (top {args.tickers} by dollar volume)...")
         universe = liquid_universe(top_n=args.tickers)
@@ -251,7 +316,6 @@ def main():
         universe = DEFAULT_UNIVERSE[:args.tickers]
     logger.info(f"Building panel: {len(universe)} tickers, {args.years}yr, step={args.step}, lookback={args.lookback}")
 
-    import asyncio
     panel = asyncio.run(build_panel(universe, args.years, args.step, args.lookback))
     if panel.empty:
         logger.error("Empty panel — aborting"); sys.exit(1)

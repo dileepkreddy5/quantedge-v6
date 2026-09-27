@@ -10,7 +10,7 @@ from __future__ import annotations
 import glob, importlib, json, os
 from datetime import datetime, timezone
 from pathlib import Path
-from fastapi import APIRouter
+from fastapi import Request, APIRouter
 from core.artifact_paths import artifact_read_path
 
 router = APIRouter()
@@ -66,8 +66,7 @@ def _scan_freshness() -> list:
     """Age of each board's artifact. A board older than ~48h is stale and the
     UI should say so rather than presenting frozen rows as current."""
     out = []
-    for label, name in (("multibagger", "scan_artifact.json"),
-                        ("relationships", "cf_artifact.json")):
+    for label, name in (("multibagger", "scan_artifact.json"),):
         p = artifact_read_path(name)
         entry = {"board": label, "available": p is not None,
                  "generated": None, "age_hours": None, "stale": True}
@@ -89,7 +88,7 @@ def _scan_freshness() -> list:
 
 
 @router.get("/system/stats")
-async def system_stats():
+async def system_stats(request: Request):
     cat = _catalog_counts()
     panel = _panel_info()
     import shutil
@@ -97,11 +96,26 @@ async def system_stats():
     disk = {"used_pct": round(_du.used / _du.total * 100, 1),
             "free_gb": round(_du.free / 1e9, 1),
             "warning": _du.used / _du.total > 0.85}
+    boards = _scan_freshness()
+    # Relationships live in a table, not a file: age = newest extraction attempt.
+    try:
+        pool = getattr(request.app.state, "db", None)
+        newest = await pool.fetchval("SELECT max(attempted_at) FROM relationship_attempts") if pool else None
+        if newest is None and pool:
+            newest = await pool.fetchval("SELECT max(updated_at) FROM relationships")
+        age = ((datetime.now(timezone.utc) - newest).total_seconds() / 3600) if newest else None
+        boards.append({"board": "relationships", "available": newest is not None,
+                       "generated": newest.isoformat() if newest else None,
+                       "age_hours": round(age, 1) if age is not None else None,
+                       "stale": (age is None or age > 48)})
+    except Exception:
+        boards.append({"board": "relationships", "available": False, "generated": None,
+                       "age_hours": None, "stale": True})
     return {
         "disk": disk,
         "signals": cat,
         "panel": panel,
-        "boards": _scan_freshness(),
+        "boards": boards,
         "tabs": 23,
         "universe_note": "~5,150 US names with both a live price and a CIK",
         "price_history_years": 5,

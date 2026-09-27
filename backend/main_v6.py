@@ -375,9 +375,10 @@ async def lifespan(app: FastAPI):
                 async with app.state.db.acquire() as conn:
                     rows = await conn.fetch("""
                         SELECT u.ticker, u.cik FROM universe u
-                        LEFT JOIN (SELECT DISTINCT src_ticker FROM relationships) r
-                          ON r.src_ticker = u.ticker
-                        WHERE u.cik IS NOT NULL AND u.active AND r.src_ticker IS NULL
+                        WHERE u.cik IS NOT NULL AND u.active
+                          AND NOT EXISTS (SELECT 1 FROM relationship_attempts a
+                                          WHERE a.ticker = u.ticker
+                                            AND a.attempted_at > NOW() - INTERVAL '300 days')
                         ORDER BY u.market_cap DESC NULLS LAST LIMIT 400
                     """)
                 ok = 0

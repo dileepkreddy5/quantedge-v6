@@ -107,8 +107,8 @@ class PanelRetrainJob:
 
         before = self._newest_panel()
         ok = await self._run(
-            ["python", "-m", "ml.training.build_panel", "--full",
-             "--tickers", str(self.tickers), "--years", str(self.years)],
+            ["python", "-m", "ml.training.build_panel", "--db-universe",
+             "--tickers", str(self.tickers), "--years", str(self.years)],   # bars from Postgres; universe as a rule
             {"MODEL_DIR": str(MODEL_DIR)}, self.build_timeout_s, "build_panel")
         if not ok:
             logger.error("[retrain] ABORT — panel build failed; live models untouched")
