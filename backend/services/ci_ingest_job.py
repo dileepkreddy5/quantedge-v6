@@ -20,3 +20,9 @@ class CIIngestJob:
             logger.info(f"✅ CI capital-allocation ingest complete: {stats}")
         except Exception as e:
             logger.error(f"❌ CI capital-allocation ingest FAILED: {e}")
+        try:
+            from quantedge.intel.f13_adapter import ingest_13f
+            stats = await ingest_13f(self.pool)
+            logger.info(f"✅ CI 13F ingest complete: {stats}")
+        except Exception as e:
+            logger.error(f"❌ CI 13F ingest FAILED: {e}")

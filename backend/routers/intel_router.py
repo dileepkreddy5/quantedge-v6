@@ -13,7 +13,7 @@ TIER = {"SEC": "PRIMARY"}
 FAMILIES = {   # evidence families → adapter status; UI renders NO_SOURCE honestly
     "sec_filings": "active", "insider_transactions": "active",
     "capital_allocation": "active",
-    "institutional_13f": "planned_session_2", "market_attention": "planned_session_2",
+    "institutional_13f": "active", "market_attention": "planned_session_2",
     "patents": "planned_session_3b", "research_papers": "planned_session_3b",
     "customers": "no_source", "government_contracts": "no_source",
     "capacity_utilization": "no_source", "job_postings": "no_source",

@@ -78,6 +78,14 @@ class SignalTracker:
             lgb = ml.get("lightgbm", ml.get("lgb", {}))
             ens = ml.get("ensemble", {})
             risk = analysis_result.get("risk_metrics", analysis_result.get("risk", {}))
+            # Position sizing and vol scaling live in portfolio_construction, not
+            # risk_metrics — the old lookup recorded NULL in every row since day one.
+            pc = analysis_result.get("portfolio_construction", {}) or {}
+            # XGBoost/LightGBM emit no per-model confidence (signal_strength,
+            # pred_*, ic_train only); confidence exists at ensemble level. Those
+            # columns stay NULL honestly; ensemble confidence gets its own columns.
+            ens_conf = ens.get("confidence")
+            ens_meta21 = ens.get("meta_confidence_21d")
 
             # Ensemble signal — try multiple key names for robustness
             ensemble_signal = float(
@@ -116,10 +124,12 @@ class SignalTracker:
                         xgb_signal, xgb_confidence, xgb_shap_values,
                         lgb_signal, lgb_confidence,
                         ensemble_signal, ensemble_direction, weights_used,
-                        cvar_95, vol_scale, recommended_position
+                        cvar_95, vol_scale, recommended_position,
+                        ensemble_confidence, meta_confidence_21d
                     ) VALUES (
                         $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
-                        $11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25
+                        $11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,
+                        $26,$27
                     )
                     """,
                     signal_id,
@@ -158,8 +168,10 @@ class SignalTracker:
                     json.dumps(weights_used),
                     # Risk
                     _f(risk.get("cvar_95", risk.get("cvar"))),
-                    _f(risk.get("vol_scale", risk.get("volatility_scale"))),
-                    _f(risk.get("recommended_position", risk.get("position_size"))),
+                    _f(pc.get("vol_scale_factor", risk.get("vol_scale"))),
+                    _f(pc.get("recommended_position_size", risk.get("recommended_position"))),
+                    _f(ens_conf),
+                    _f(ens_meta21),
                 )
 
             logger.info(f"signal_tracker: recorded {signal_id[:8]} {ticker} {ensemble_direction}")

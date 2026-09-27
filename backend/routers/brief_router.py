@@ -61,7 +61,7 @@ async def brief_today(request: Request):
         latest = await c.fetch(
             """SELECT DISTINCT ON (ticker)
                       ticker, generated_at, ensemble_signal, ensemble_direction,
-                      hmm_regime, xgb_confidence, lgb_confidence, cvar_95,
+                      hmm_regime, ensemble_confidence, meta_confidence_21d, cvar_95,
                       recommended_position
                FROM signals
                WHERE generated_at > now() - interval '36 hours'
