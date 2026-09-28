@@ -5,6 +5,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../auth/authStore';
 
 const TRACKERS = [
+  { id: 'worth', name: 'Worth a look', q: 'Our shortlist: great companies on a dip, early growth not yet priced, fresh breakthroughs.', api: 'worth-a-look' },
   { id: 'on-sale', name: 'Great companies on sale', q: 'The best companies trading far below their high — for reasons that will likely pass.', api: 'on-sale' },
   { id: 'quiet', name: 'Quiet climbers', q: 'Rising steadily, week after week, before everyone notices.', api: 'quiet-climbers' },
   { id: 'better', name: 'Getting better', q: 'Results improving quarter after quarter, straight from SEC filings.', api: 'getting-better' },
@@ -26,7 +27,7 @@ const CSS = `
 .t2 nav .links{margin-left:auto;display:flex;gap:26px;font-size:14.5px;color:var(--dust)}.t2 nav .links a.on{color:var(--cream)}
 .t2 .eyebrow{font-family:var(--mono);font-size:11.5px;letter-spacing:.26em;text-transform:uppercase;color:var(--gold)}
 .t2 .head{padding:40px 0 18px}.t2 h1{font-family:var(--serif);font-weight:300;font-size:44px;color:var(--cream);margin:10px 0 0;letter-spacing:-.015em}
-.t2 .trk{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-top:24px}
+.t2 .trk{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-top:24px}
 .t2 .srch{margin-left:auto;align-self:center;background:var(--panel);border:1px solid var(--line2);border-radius:8px;color:var(--cream);font-family:var(--mono);font-size:13px;padding:9px 14px;width:280px;outline:none}
 .t2 .tb{text-align:left;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px;color:var(--latte)}
 .t2 .tb .n{font-family:var(--serif);font-size:21px;color:var(--cream)}.t2 .tb .d{font-size:13px;color:var(--dust);margin-top:6px;line-height:1.5}
@@ -83,6 +84,21 @@ const CSS = `
 .t2 .wsg .dt{font-family:var(--mono);font-size:12px;color:var(--mute)}.t2 .wsg .sr{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;color:var(--dust)}
 .t2 .wsg small{display:block;color:var(--mute);font-size:12.5px;margin-top:2px}
 .t2 .wdot{width:9px;height:9px;border-radius:50%;display:inline-block}
+.t2 .feat{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:14px;margin-bottom:22px}
+.t2 .fc{background:linear-gradient(180deg,#221710,#1a110d);border:1px solid var(--line2);border-radius:16px;padding:20px;display:flex;flex-direction:column;gap:12px}
+.t2 .fc .rank{font-family:var(--serif);font-size:30px;color:var(--gold);line-height:1}
+.t2 .kd{display:inline-block;font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;border-radius:4px;padding:3px 7px;margin-right:5px}
+.t2 .kd.discount{color:#8fb8f0;border:1px solid #2c4a70}.t2 .kd.early{color:#3ec27a;border:1px solid #1f5c35}.t2 .kd.breakthrough{color:#f3cf7a;border:1px solid #6b5520}.t2 .kd.growth{color:#b8e0a0;border:1px solid #3a5a2a}.t2 .kd.pattern{color:#d9a7f0;border:1px solid #533a66}
+.t2 .fc ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:7px;font-size:13.5px;line-height:1.55;color:var(--latte)}
+.t2 .cat{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.t2 .cat div{background:var(--panel2);border-radius:8px;padding:10px 12px}.t2 .cat .k{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;color:var(--mute)}
+.t2 .cat .v{font-size:13px;color:var(--cream);margin-top:4px;line-height:1.45}
+.t2 .risk{background:rgba(224,173,58,.07);border:1px solid rgba(224,173,58,.25);border-radius:8px;padding:10px 12px;font-size:12.5px;color:var(--dust);line-height:1.5}
+.t2 .risk b{color:#e0ad3a;font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;font-weight:500;display:block;margin-bottom:4px}
+.t2 .acts{display:flex;gap:8px;margin-top:auto}.t2 .acts button{flex:1}
+.t2 .wr{display:grid;grid-template-columns:36px minmax(0,1.3fr) minmax(0,.9fr) minmax(0,2.6fr) 120px 150px;gap:16px;align-items:center;padding:13px 18px;background:var(--panel);border:1px solid var(--line);border-radius:12px;margin-bottom:8px;cursor:pointer}
+.t2 .wr:hover{border-color:var(--line2)}.t2 .wr .rk{font-family:var(--serif);font-size:20px;color:var(--cream)}
+@media (max-width:1100px){.t2 .wr{grid-template-columns:30px 1fr}.t2 .wr .hide{display:none}}
 .t2 .foot{font-size:13px;color:var(--mute);line-height:1.7;margin:18px 0 70px;max-width:980px}
 .t2 .empty{padding:30px;text-align:center;color:var(--mute);font-family:var(--mono);font-size:12.5px}
 @media (max-width:1100px){.t2 .rh{grid-template-columns:1fr 1fr}.t2 .lb{grid-template-columns:30px 1fr;}.t2 .lb .hide{display:none}.t2 .gc,.t2 .trk,.t2 .callout,.t2 .det{grid-template-columns:1fr}.t2 nav .links{display:none}.t2 h1{font-size:34px}}
@@ -100,6 +116,8 @@ const Rets: React.FC<{ r: any; vol?: any }> = ({ r, vol }) => (<div className="r
   <div style={{ background: '#1f1510', border: '1px solid #33241b' }}><small>VOLUME</small>{vol == null ? '—' : `${vol >= 1 ? '+' : ''}${Math.round((vol - 1) * 100)}%`}</div>
 </div>);
 
+const KIND: Record<string, string> = { discount: 'Discount', 'early growth': 'Early growth', breakthrough: 'Breakthrough', growth: 'Growth', pattern: 'Pattern' };
+const kcls = (k: string) => k === 'early growth' ? 'early' : k;
 const Bars: React.FC<{ v: number[] }> = ({ v }) => {
   const xs = (v || []).filter(x => x != null && x > 0); if (xs.length < 2) return <div className="mu" style={{ fontSize: 12 }}>no quarterly sales on file</div>;
   const mx = Math.max(...xs);
@@ -157,6 +175,43 @@ const TrackersV2: React.FC = () => {
         {q && data && rows.length === 0 && <div className="empty">{q.toUpperCase()} isn't on this tracker in this size group today.
           <br /><button className="open" onClick={() => go(q.trim().toUpperCase())}>Open its full analysis →</button></div>}
       </div>
+
+      {/* ── WORTH A LOOK ── */}
+      {tr.id === 'worth' && (<>
+        <div className="callout">
+          <div className="card"><div className="k">WHAT THIS IS</div>
+            <div className="v">Our shortlist for your research, rebuilt every night. It reads every tracker together — <b>great companies on a dip</b>, <b>growth the price hasn't caught up with</b>, and <b>breakthroughs</b> like a big, lasting jump on results — then drops anything with a serious warning sign or that has <b>already run</b>. Each company comes with its case, its next catalyst, what history says, and what could go wrong.</div></div>
+          <div className="card"><div className="k">WHAT IT'S BUILT ON — AND WHAT IT ISN'T</div>
+            <div className="v">SEC filings, prices, peer comparisons, measured chart-pattern odds and warning signs. <b>Not</b> the ML forecasts — none currently hold up on recent data, so they're left out. These are <b>candidates to research, not recommendations</b>; some will not work out.</div></div>
+        </div>
+        <div className="bar"><span className="meta" style={{ marginLeft: 0 }}>{data ? `${rows.length} companies · top 5 highlighted · as of ${data.as_of || ''}` : 'loading…'}</span></div>
+        {data && !q && rows.length === 0 && <div className="empty">nothing on the shortlist in this size tier today</div>}
+        <div className="feat">{rows.filter((p: any) => p.top5).map((p: any, i: number) => (<div className="fc" key={p.ticker}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}><span className="rank">{i + 1}</span>
+            <div><span className="tk">{p.ticker}</span><span className="nm">{nice(p.name)} · {bil(p.market_cap)} · {p.sector}</span></div></div>
+          <div>{p.kinds.map((k: string) => <span key={k} className={`kd ${kcls(k)}`}>{KIND[k] || k}</span>)}</div>
+          <ul>{p.case.map((c: string, j: number) => <li key={j}>{c}</li>)}</ul>
+          <div className="cat">
+            <div><div className="k">NEXT CATALYST</div><div className="v">Results ~{fmtDate(p.next_results_est)}{p.next_results_basis ? ' (est.)' : ''}</div></div>
+            <div><div className="k">WHAT HISTORY SAYS</div><div className="v">{p.history || '—'}</div></div>
+          </div>
+          <Rets r={p.returns} vol={p.vol_ratio_20_60} />
+          {p.sales_quarters && <Bars v={p.sales_quarters} />}
+          <div className="risk"><b>WHAT COULD GO WRONG</b>{p.risks.join(' · ')}</div>
+          <div className="acts"><button className="open" onClick={() => go(p.ticker)}>Full analysis →</button>
+            <button className="open" onClick={() => nav(`/dashboard?ticker=${p.ticker}&tab=pattern`)}>Pattern chart →</button></div>
+        </div>))}</div>
+        {rows.filter((p: any) => !p.top5).map((p: any, i: number) => (<div className="wr" key={p.ticker} onClick={() => go(p.ticker)}>
+          <span className="rk">{i + 6}</span>
+          <div><span className="tk">{p.ticker}</span><span className="nm">{nice(p.name)} · {bil(p.market_cap)}</span></div>
+          <div className="hide">{p.kinds.map((k: string) => <span key={k} className={`kd ${kcls(k)}`}>{KIND[k] || k}</span>)}</div>
+          <div className="hide" style={{ fontSize: 13, color: 'var(--latte)', lineHeight: 1.5 }}>{p.case[0]}</div>
+          <div className="hide num mu" style={{ fontSize: 11.5 }}>results ~{fmtDate(p.next_results_est)}</div>
+          <div className="hide num"><span className={((p.returns || {})['1m'] ?? 0) >= 0 ? 'up' : 'dn'}>1M {pct((p.returns || {})['1m'])}</span> · <span className={((p.returns || {})['1y'] ?? 0) >= 0 ? 'up' : 'dn'}>1Y {pct((p.returns || {})['1y'])}</span>
+            {p.risks[0] && !p.risks[0].startsWith('No warning') && <span className="sub" style={{ color: '#e0ad3a' }}>⚠ {p.risks[0].slice(0, 60)}</span>}</div>
+        </div>))}
+        <p className="foot">{data?.note} Research, not advice.</p>
+      </>)}
 
       {/* ── GREAT COMPANIES ON SALE ── */}
       {tr.id === 'on-sale' && (<>

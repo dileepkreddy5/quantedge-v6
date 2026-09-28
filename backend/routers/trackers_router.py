@@ -294,3 +294,187 @@ async def rising_stars(request: Request, tier: str = Query("mid")):
     return {"as_of": str(as_of), "tier": tier, "next_tier": nxt, "n": len(out), "companies": out,
             "note": ("Months to the next tier = if the company's market value grew at the same rate as its sales over the last year. "
                      "Arithmetic on the recent pace, not a forecast.")}
+
+
+MIN_Q_SALES = {"large": 250e6, "mid": 50e6, "small": 15e6}
+
+
+@router.get("/trackers/growth-leaders")
+async def growth_leaders(request: Request, tier: str = Query("large")):
+    """Companies growing sales 15%+ on a real sales base, checked against four stages:
+    improving (growth speeding up), scaling (sustained, margins widening), price confirming
+    (beating the market), under the radar (less coverage than peers). Ranked by growth,
+    stages passed and margin improvement. 'Early' = sales growing faster than the price."""
+    import math
+    if tier not in ("large", "mid", "small"): raise HTTPException(status_code=422, detail="tier must be large|mid|small")
+    pool = request.app.state.db
+    as_of = await pool.fetchval("SELECT max(as_of) FROM company_facts")
+    med = await pool.fetchval("""SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY news_180d) FROM company_facts
+                                 WHERE as_of=$1 AND tier=$2 AND primary_listing AND NOT is_spac""", as_of, tier) or 1
+    rows = await pool.fetch("""SELECT * FROM company_facts WHERE as_of=$1 AND tier=$2 AND primary_listing AND NOT is_spac
+        AND data_suspect IS NULL AND fundamentals IS NOT NULL""", as_of, tier)
+    inst = {}
+    for x in await pool.fetch("""SELECT DISTINCT ON (e.ticker, d.field) e.ticker, d.field, d.value FROM ci_derived d
+            JOIN ci_events e ON e.id = d.event_id WHERE e.event_type = 'institutional_snapshot'
+            AND d.field IN ('managers','new_managers','exited_managers') ORDER BY e.ticker, d.field, e.event_date DESC"""):
+        v = json.loads(x["value"]) if isinstance(x["value"], str) else x["value"]
+        inst.setdefault(x["ticker"], {})[x["field"]] = v.get("value")
+    nxt = {"mid": ("large", 10e9), "small": ("mid", 2e9)}.get(tier)
+    out = []
+    for r in rows:
+        f = _f(r)
+        if not f.get("available") or f.get("stale"): continue
+        qs = f.get("quarters") or []
+        if len(qs) < 5 or (qs[-1].get("sales") or 0) < MIN_Q_SALES[tier] or (qs[-5].get("sales") or 0) < 0.5 * MIN_Q_SALES[tier]: continue
+        sy = f.get("sales_yoy") or 0
+        if sy < 0.15: continue
+        ys = [q.get("sales_yoy") for q in qs[-4:] if q.get("sales_yoy") is not None]
+        omc = f.get("op_margin_change_1y"); om = f.get("op_margin")
+        rel_att = (r["news_180d"] + 5) / (med + 5)
+        stages = {
+            "improving": bool((f.get("acceleration_streak") or 0) >= 2 or f.get("accelerating")),
+            "scaling": bool(len(ys) >= 4 and sum(y >= 0.15 for y in ys) >= 3 and (omc or 0) >= 0 and (om or -1) > -0.10),
+            "confirming": bool((r["weeks_beat_mkt_26"] or 0) >= 15 and (r["ret_6m"] or 0) > 0 and (r["ret_1y"] or 0) > 0),
+            "under_radar": rel_att <= 1.0,
+        }
+        n_st = sum(stages.values())
+        score = 2 * min(1.0, sy) + 0.35 * n_st + 3 * max(-0.1, min(0.1, omc or 0)) + (0.15 if f.get("cash_backed") else 0)
+        early = bool(stages["scaling"] and r["ret_1y"] is not None and r["ret_1y"] < sy)
+        i = inst.get(r["ticker"], {})
+        mc = r["market_cap"] or 0
+        months = (round(12 * math.log(nxt[1] / mc) / math.log(1 + sy)) if nxt and mc and mc < nxt[1] else None)
+        out.append({"ticker": r["ticker"], "name": r["name"], "sector": r["sector"], "market_cap": mc, "price": r["price"],
+                    "returns": {"1d": r["ret_1d"], "1w": r["ret_1w"], "1m": r["ret_1m"], "3m": r["ret_3m"], "6m": r["ret_6m"], "1y": r["ret_1y"]},
+                    "vol_ratio_20_60": r["vol_ratio_20_60"], "sales_yoy": sy, "sales_yoy_4q": ys, "acceleration_streak": f.get("acceleration_streak"),
+                    "op_margin": om, "op_margin_year_ago": (qs[-5].get("op_margin") if len(qs) >= 5 else None), "cash_backed": f.get("cash_backed"),
+                    "sales_quarters": [q["sales"] for q in qs], "weeks_beat_mkt_26": r["weeks_beat_mkt_26"],
+                    "news_180d": r["news_180d"], "attention_vs_peers": round(rel_att, 2),
+                    "stages": stages, "stages_passed": n_st, "early": early, "pct_below_high": r["pct_below_high"],
+                    "funds": i or None, "funds_arriving": ((i.get("new_managers") or 0) > (i.get("exited_managers") or 0)) if i else None,
+                    "next_tier": nxt[0] if nxt else None, "months_to_next_tier_at_sales_pace": months, "score": round(score, 3)})
+    out.sort(key=lambda c: c["score"], reverse=True)
+    return {"as_of": str(as_of), "tier": tier, "n": len(out), "companies": out,
+            "counts": {"all_four": sum(c["stages_passed"] == 4 for c in out), "early": sum(c["early"] for c in out),
+                       "under_radar": sum(c["stages"]["under_radar"] for c in out)},
+            "note": ("Sales growth from SEC filings, each quarter dated to its first filing. 'Early' = sales grew faster than the share "
+                     "price over the last year. Months to the next tier = arithmetic on the sales pace, not a forecast.")}
+
+
+SHOCK = {"large": 0.06, "mid": 0.08, "small": 0.10}
+
+
+async def _earnings_reactions(pool, tickers, tier):
+    """Latest results (8-K 2.02) within 130 days: move from the close before to the second
+    session after, volume vs the prior 20 sessions, and whether the gain held 10 sessions on."""
+    ev = await pool.fetch("""SELECT DISTINCT ON (ticker) ticker, event_date FROM ci_events WHERE item_code='2.02'
+        AND ticker = ANY($1) AND event_date > CURRENT_DATE - 130 ORDER BY ticker, event_date DESC""", tickers)
+    if not ev: return {}
+    bars = {}
+    for b in await pool.fetch("""SELECT ticker, d, c, v FROM daily_bars WHERE ticker = ANY($1) AND d > CURRENT_DATE - 175 ORDER BY ticker, d""",
+                              [e["ticker"] for e in ev]):
+        bars.setdefault(b["ticker"], []).append(b)
+    out = {}
+    for e in ev:
+        bs = bars.get(e["ticker"], []); ds = [b["d"] for b in bs]
+        pre_i = max([i for i, d in enumerate(ds) if d < e["event_date"]], default=None)
+        if pre_i is None or pre_i + 2 >= len(bs) or pre_i < 20: continue
+        post_i = pre_i + 2
+        pre, post = float(bs[pre_i]["c"]), float(bs[post_i]["c"])
+        gap = post / pre - 1
+        base_v = sum(float(b["v"] or 0) for b in bs[pre_i - 20:pre_i]) / 20 or 1
+        vr = max(float(bs[pre_i + 1]["v"] or 0), float(bs[post_i]["v"] or 0)) / base_v
+        held = (post_i + 10 < len(bs)) and float(bs[post_i + 10]["c"]) >= post * 0.97 and float(bs[-1]["c"]) >= pre * (1 + gap / 2)
+        out[e["ticker"]] = {"date": str(e["event_date"]), "move": gap, "volume_x": vr, "held": held,
+                            "shock_up": gap >= SHOCK[tier] and vr >= 2 and held}
+    return out
+
+
+@router.get("/trackers/worth-a-look")
+async def worth_a_look(request: Request, tier: str = Query("large")):
+    """A shortlist that reads every verified tracker together: discounted quality, early growth
+    not yet priced, and breakthroughs (big, held reactions to results) — excluding serious warning
+    signs and anything already priced in — each with its case, next catalyst, history and risks.
+    Does NOT use ML forecasts (none validated on recent data)."""
+    if tier not in ("large", "mid", "small"): raise HTTPException(status_code=422, detail="tier must be large|mid|small")
+    pool = request.app.state.db
+    sale = await on_sale(request, tier=tier, min_drop=0.20, quality="strong", sort="size")
+    grow = await growth_leaders(request, tier=tier)
+    warn = await warning_signs(request, tier=tier, healthy_only=False)
+    W = {c["ticker"]: c for c in warn["companies"]}
+    S = {c["ticker"]: c for c in sale["companies"]}; G = {c["ticker"]: c for c in grow["companies"]}
+    tks = list(set(S) | set(G))
+    react = await _earnings_reactions(pool, tks, tier)
+    fp = artifact_read_path("fired_last_night.json"); fired = {}
+    if fp:
+        for x in json.loads(fp.read_text()).get("fired", []):
+            if x.get("direction") == "bullish" and x.get("odds_21d"): fired[x["ticker"]] = x
+    base = ((sale.get("history") or {}).get("buckets") or {})
+    picks = []
+    for t in tks:
+        s, g, w, rx = S.get(t), G.get(t), W.get(t), react.get(t)
+        if w and w["serious"] > 0: continue
+        c = s or g
+        r1, sy = (c["returns"] or {}).get("1y"), (g or {}).get("sales_yoy", s.get("sales_yoy") if s else None)
+        if r1 is not None and r1 > 2.0 and (sy is None or r1 > 2 * max(sy, 0.01)): continue       # already priced in
+        score, case, kinds = 0.0, [], []
+        old_high = False
+        if s and s["stage"] in ("basing", "turning", "recovering"):
+            depth = -s["pct_below_high"]
+            old_high = (__import__("datetime").date.today() - __import__("datetime").date.fromisoformat(s["high_date"])).days > 3 * 365
+            score += min(0.5, depth) * 2 * (0.5 if old_high else 1.0) + (0.3 if s["stage"] in ("turning", "recovering") else 0) \
+                     + (0.2 if s["drop_cause"] in ("market", "industry") else 0) + (0.2 if (s.get("sales_yoy") or 0) > 0.05 else 0)
+            res = [e for e in (s.get("around_the_drop") or []) if e.get("item") == "2.02"]
+            why = {"market": "a market-wide sell-off", "industry": "an industry-wide sell-off"}.get(s["drop_cause"]) or \
+                  (f"a drop around its {res[-1]['date']} results" if res else "company-specific selling (no SEC filing explains it — check the news)")
+            case.append(f"{depth*100:.0f}% below its 5-year high after {why}; the business is still growing sales {(s.get('sales_yoy') or 0)*100:+.0f}% with a {(s.get('op_margin') or 0)*100:.0f}% operating margin, and the price is {({'basing':'going sideways','turning':'turning up','recovering':'recovering'})[s['stage']]}.")
+            kinds.append("discount")
+        gap_pts = (g["sales_yoy"] - r1) if (g and r1 is not None) else None
+        if g and g["early"] and (g["stages"]["improving"] or g["stages"]["scaling"]) and gap_pts is not None and gap_pts >= 0.15:
+            score += 1.0 + 0.2 * g["stages_passed"]
+            case.append(f"Sales growing faster than the price: {g['sales_yoy']*100:+.0f}% vs {r1*100:+.0f}% over the last year" + (f", with growth speeding up for {g['acceleration_streak']} quarters" if (g.get('acceleration_streak') or 0) >= 2 else "") + ".")
+            kinds.append("early growth")
+        elif g and g["stages_passed"] >= 3 and r1 is not None and r1 < 1.5 * g["sales_yoy"]:
+            score += 0.6
+            case.append(f"Growth leader passing {g['stages_passed']} of 4 stages: sales {g['sales_yoy']*100:+.0f}%, price {r1*100:+.0f}% in a year.")
+            kinds.append("growth")
+        if rx and rx["shock_up"]:
+            score += 0.8
+            case.append(f"Jumped {rx['move']*100:+.0f}% on its {rx['date']} results, on {rx['volume_x']:.1f}× normal volume — and held the gain.")
+            kinds.append("breakthrough")
+        if not kinds: continue
+        risks = []
+        if old_high: risks.append(f"Its high was set {'during the 2021 boom' if s['high_date'][:4] == '2021' else 'in ' + s['high_date'][:4]}; prices then may not return.")
+        if w:
+            score -= 0.3 * w["watch"]; risks += [x["text"] for x in w["signs"][:2]]
+        if t in fired and (fired[t]["odds_21d"].get("positive_pct") or 0) >= 55:
+            score += 0.2
+            case.append(f"Just completed a {fired[t]['pattern'].replace('_',' ')} chart pattern — historically up {fired[t]['odds_21d']['positive_pct']}% of the time over the next month (n={fired[t]['odds_21d']['n']:,}).")
+        vol1y = abs((c["returns"] or {}).get("1m") or 0)
+        if vol1y > 0.25: risks.append(f"Volatile: moved {vol1y*100:.0f}% in the last month alone.")
+        hist = None
+        if s:
+            bk = "50" if s["pct_below_high"] <= -0.5 else "30" if s["pct_below_high"] <= -0.3 else "20"
+            if base.get(bk): hist = f"Of large US companies that fell {bk}%+ from a high, {base[bk]['recovered_pct']:.0f} in 100 got back — typically in ~{round(base[bk]['median_sessions_to_recover']/21)} months."
+        picks.append({"ticker": t, "name": c["name"], "sector": c["sector"], "market_cap": c["market_cap"], "price": c.get("price"),
+                      "returns": c["returns"], "vol_ratio_20_60": c.get("vol_ratio_20_60"), "kinds": kinds, "case": case[:3],
+                      "risks": risks[:3] or ["No warning signs in the last 30 days."], "history": hist,
+                      "next_results_est": (s or {}).get("next_results_est"), "last_results_reaction": rx,
+                      "pct_below_high": c.get("pct_below_high"), "sales_yoy": sy, "stages": (g or {}).get("stages"),
+                      "sales_quarters": (g or {}).get("sales_quarters") or (s or {}).get("sales_quarters"), "score": round(score, 3)})
+    picks.sort(key=lambda p: p["score"], reverse=True)
+    picks = picks[:30]
+    need = [p["ticker"] for p in picks if not p["next_results_est"]]
+    if need:
+        import datetime as _dt
+        as_of_d = await pool.fetchval("SELECT max(as_of) FROM company_facts")
+        for r in await pool.fetch("SELECT ticker, fundamentals FROM company_facts WHERE as_of=$1 AND ticker = ANY($2)", as_of_d, need):
+            q = (_f(r).get("quarters") or [])
+            if not q: continue
+            est = _dt.date.fromisoformat(q[-1]["end"]) + _dt.timedelta(days=91 + 35)
+            while est < _dt.date.today(): est += _dt.timedelta(days=91)
+            for p in picks:
+                if p["ticker"] == r["ticker"]: p["next_results_est"] = str(est); p["next_results_basis"] = "estimated from its last reported quarter"
+    for i, p in enumerate(picks): p["top5"] = i < 5
+    return {"as_of": sale["as_of"], "tier": tier, "n": len(picks), "companies": picks,
+            "note": ("Candidates for your research, not recommendations. Built from verified sources only — SEC filings, prices, "
+                     "measured pattern odds, warning signs. ML forecasts are not used while none validate on recent data.")}
