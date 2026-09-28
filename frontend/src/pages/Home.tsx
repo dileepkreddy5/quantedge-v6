@@ -128,7 +128,7 @@ const Home: React.FC = () => {
     <style>{CSS}</style>
     <nav><div className="wrap">
       <a className="logo" onClick={focusSearch}>QUANTEDGE</a>
-      <div className="links"><a href="#markets">Markets</a><a href="#ideas">Ideas</a><a href="#how">How it works</a></div>
+      <div className="links"><a href="#markets">Markets</a><a onClick={() => nav('/trackers')}>Trackers</a><a href="#how">How it works</a></div>
       <button className="btn ghost" onClick={() => nav('/login')}>Log in</button>
     </div></nav>
 
@@ -199,8 +199,8 @@ const Home: React.FC = () => {
         <a className="door" onClick={focusSearch}><div className="k">01 · A stock I'm curious about</div><h3>Check a stock you own or are thinking about.</h3>
           <p>Everything about one company, starting with a plain-English summary at the top.</p><div className="go">Search a stock →</div></a>
         <div className="door"><div className="k">02 · I'm looking for ideas</div><h3>Find companies worth a closer look.</h3>
-          <ul><li><a onClick={() => nav('/multibagger')}>Fast-growing, quality companies</a></li><li><a onClick={() => nav('/rebound')}>Beaten-down stocks that stopped falling</a></li>
-            <li><a onClick={() => nav('/ascent')}>Stocks climbing steadily</a></li><li><a onClick={() => nav('/screener')}>Build your own filter</a></li></ul></div>
+          <ul><li><a onClick={() => nav('/trackers/fast-growers')}>Fast-growing, quality companies</a></li><li><a onClick={() => nav('/trackers/comebacks')}>Beaten-down stocks that stopped falling</a></li>
+            <li><a onClick={() => nav('/trackers/climbers')}>Stocks climbing steadily</a></li><li><a onClick={() => nav('/trackers/filter')}>Build your own filter</a></li></ul></div>
         <a className="door" href="#markets"><div className="k">03 · How's the market?</div><h3>See the market's mood today.</h3>
           <p>Whether the market is calm or nervous, rising or falling — and what usually followed similar moments.</p><div className="go">Today's market →</div></a>
       </div>
@@ -230,7 +230,7 @@ const Home: React.FC = () => {
         <div className="brand"><div className="logo">QUANTEDGE</div>
           <p>Stock research for everyone — plain-English answers built on real market history and primary sources.</p>
           <div className="by">Designed &amp; built by <b>Dileep Kumar Reddy Kapu</b></div></div>
-        <div><h5>Explore</h5><ul><li><a onClick={focusSearch}>Search a stock</a></li><li><a href="#markets">Markets today</a></li><li><a href="#ideas">Ideas</a></li><li><a onClick={focusSearch}>Pattern Lab</a></li></ul></div>
+        <div><h5>Explore</h5><ul><li><a onClick={focusSearch}>Search a stock</a></li><li><a href="#markets">Markets today</a></li><li><a onClick={() => nav('/trackers')}>Trackers</a></li><li><a onClick={focusSearch}>Pattern Lab</a></li></ul></div>
         <div><h5>Learn</h5><ul><li><a href="#how">How it works</a></li><li><a onClick={() => nav('/methodology')}>How it's measured</a></li><li><a onClick={() => nav('/methodology')}>System status</a></li></ul></div>
         <div><h5>Legal</h5><ul><li><a onClick={() => nav('/terms')}>Terms of use</a></li><li><a onClick={() => nav('/privacy')}>Privacy policy</a></li><li><a onClick={() => nav('/disclaimer')}>Disclaimer</a></li><li><a onClick={() => nav('/data-sources')}>Data sources</a></li></ul></div>
         <div><h5>Contact</h5><ul><li><a href="mailto:dileepkreddy5@gmail.com">dileepkreddy5@gmail.com</a></li>
