@@ -188,6 +188,12 @@ async def warning_signs(request: Request, tier: str = Query("large"), healthy_on
                                  AND cik = ANY($1) AND filed_at > NOW() - INTERVAL '30 days'""", list(ciks)):
         add(ciks[e["cik"]], "serious", e["filed_at"], f"SEC {e['form_type']}",
             f"Told the SEC it can't file its {'quarterly' if 'Q' in e['form_type'] else 'annual'} report on time.")
+    for t_, fs in (await _press_findings(pool, tks, days=30)).items():
+        for f in fs:
+            if f["type"] == "trial_negative":
+                add(t_, "serious", f["date"], "PRESS RELEASE · 8-K", f"Trial failed: “{f['sentence'][:160]}”")
+            elif f["type"] == "guidance_cut":
+                add(t_, "watch", f["date"], "PRESS RELEASE · 8-K", f"Lowered its forecast: “{f['sentence'][:160]}”")
     ins: dict[str, dict] = {}
     for e in await pool.fetch("""SELECT cik, filed_at, raw_payload->'form4' f FROM ci_raw_evidence WHERE form_type='4'
                                  AND cik = ANY($1) AND filed_at > NOW() - INTERVAL '30 days'""", list(ciks)):
@@ -412,7 +418,11 @@ async def worth_a_look(request: Request, tier: str = Query("large")):
     warn = await warning_signs(request, tier=tier, healthy_only=False)
     W = {c["ticker"]: c for c in warn["companies"]}
     S = {c["ticker"]: c for c in sale["companies"]}; G = {c["ticker"]: c for c in grow["companies"]}
-    tks = list(set(S) | set(G))
+    tier_rows = {r["ticker"]: r for r in await pool.fetch("""SELECT * FROM company_facts WHERE as_of=(SELECT max(as_of) FROM company_facts)
+        AND tier=$1 AND primary_listing AND NOT is_spac AND data_suspect IS NULL""", tier)}
+    PF = await _press_findings(pool, list(tier_rows), days=60)
+    Bk = {t for t, fs in PF.items() if any(f["type"] in BT_STRONG and BT_STRONG[f["type"]] >= 0.5 for f in fs)}
+    tks = list(set(S) | set(G) | Bk)
     react = await _earnings_reactions(pool, tks, tier)
     fp = artifact_read_path("fired_last_night.json"); fired = {}
     if fp:
@@ -424,6 +434,12 @@ async def worth_a_look(request: Request, tier: str = Query("large")):
         s, g, w, rx = S.get(t), G.get(t), W.get(t), react.get(t)
         if w and w["serious"] > 0: continue
         c = s or g
+        if c is None and t in tier_rows:          # entered on a breakthrough alone
+            r_ = tier_rows[t]
+            c = {"name": r_["name"], "sector": r_["sector"], "market_cap": r_["market_cap"], "price": r_["price"], "pct_below_high": r_["pct_below_high"],
+                 "returns": {"1d": r_["ret_1d"], "1w": r_["ret_1w"], "1m": r_["ret_1m"], "3m": r_["ret_3m"], "6m": r_["ret_6m"], "1y": r_["ret_1y"]},
+                 "vol_ratio_20_60": r_["vol_ratio_20_60"]}
+        if c is None: continue
         r1, sy = (c["returns"] or {}).get("1y"), (g or {}).get("sales_yoy", s.get("sales_yoy") if s else None)
         if r1 is not None and r1 > 2.0 and (sy is None or r1 > 2 * max(sy, 0.01)): continue       # already priced in
         score, case, kinds = 0.0, [], []
@@ -451,8 +467,16 @@ async def worth_a_look(request: Request, tier: str = Query("large")):
             score += 0.8
             case.append(f"Jumped {rx['move']*100:+.0f}% on its {rx['date']} results, on {rx['volume_x']:.1f}× normal volume — and held the gain.")
             kinds.append("breakthrough")
+        pf = PF.get(t, [])
+        good = sorted([f for f in pf if f["type"] in BT_STRONG], key=lambda f: -BT_STRONG[f["type"]])
+        if good:
+            score += BT_STRONG[good[0]["type"]]
+            case.append(f"{good[0]['label']} ({good[0]['date']}): “{good[0]['sentence'][:150]}{'…' if len(good[0]['sentence']) > 150 else ''}”")
+            if "breakthrough" not in kinds: kinds.append("breakthrough")
         if not kinds: continue
         risks = []
+        for f in pf:
+            if f["direction"] == "negative": score -= 0.5; risks.append(f"{f['label']} ({f['date']}).")
         if old_high: risks.append(f"Its high was set {'during the 2021 boom' if s['high_date'][:4] == '2021' else 'in ' + s['high_date'][:4]}; prices then may not return.")
         if w:
             score -= 0.3 * w["watch"]; risks += [x["text"] for x in w["signs"][:2]]
@@ -560,3 +584,40 @@ async def membership(request: Request, tier: str = Query("large")):
         try: await rd.setex(key, 1800, json.dumps(res))
         except Exception: pass
     return res
+
+
+BT_LABEL = {"fda_approval": "FDA approval", "breakthrough_designation": "Breakthrough designation", "trial_positive": "Positive trial result",
+            "trial_negative": "Trial failed", "coverage": "Coverage / reimbursement", "guidance_raise": "Raised forecast",
+            "guidance_cut": "Lowered forecast", "major_contract": "Major contract", "record_results": "Record results",
+            "product_launch": "Product launch", "acquisition": "Acquisition"}
+BT_STRONG = {"fda_approval": 0.8, "coverage": 0.8, "trial_positive": 0.8, "breakthrough_designation": 0.6,
+             "guidance_raise": 0.6, "major_contract": 0.5, "product_launch": 0.3, "record_results": 0.3}
+
+
+async def _press_findings(pool, tickers, days=60):
+    rows = await pool.fetch("""SELECT e.ticker, e.available_at, d.value, d.citation FROM ci_derived d JOIN ci_events e ON e.id = d.event_id
+        WHERE d.extractor_version = 'press-release-v3' AND e.ticker = ANY($1) AND e.available_at > NOW() - ($2 || ' days')::interval
+        ORDER BY e.available_at DESC""", tickers, str(days))
+    out = {}
+    for r in rows:
+        v = json.loads(r["value"]) if isinstance(r["value"], str) else r["value"]
+        c = json.loads(r["citation"]) if isinstance(r["citation"], str) else r["citation"]
+        for f in v.get("findings", []):
+            out.setdefault(r["ticker"], []).append({**f, "label": BT_LABEL.get(f["type"], f["type"]), "date": str(r["available_at"])[:10], "url": c.get("url")})
+    return out
+
+
+@router.get("/intel/{ticker}/breakthroughs")
+async def company_breakthroughs(ticker: str, request: Request):
+    """Findings from a company's own press releases (last 180 days), with the price reaction."""
+    tk = ticker.upper().strip(); pool = request.app.state.db
+    fs = (await _press_findings(pool, [tk], days=180)).get(tk, [])
+    bars = await pool.fetch("SELECT d, c FROM daily_bars WHERE ticker=$1 AND d > CURRENT_DATE - 200 ORDER BY d", tk)
+    ds = [b["d"] for b in bars]; cs = [float(b["c"]) for b in bars]
+    import datetime as _dt
+    for f in fs:
+        d0 = _dt.date.fromisoformat(f["date"]); pre = max([i for i, d in enumerate(ds) if d < d0], default=None)
+        if pre is not None and pre + 1 < len(cs):
+            f["move_on_news"] = cs[min(pre + 2, len(cs) - 1)] / cs[pre] - 1; f["move_since"] = cs[-1] / cs[pre] - 1
+    return _clean({"ticker": tk, "n": len(fs), "findings": fs,
+                   "note": "Read from the press releases the company filed with the SEC. Each finding quotes the sentence it came from."})

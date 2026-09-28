@@ -1,3 +1,4 @@
+import BreakthroughsPanel from '../components/ui/BreakthroughsPanel';
 import LoadingSnapshot from '../components/ui/LoadingSnapshot';
 // ============================================================
 // QuantEdge v6.0 — Dashboard
@@ -369,7 +370,7 @@ export default function Dashboard() {
               {activeTab === 'overview'    && <OverviewV2 data={data} ticker={ticker} onAnalyze={runAnalysis} />}
               {activeTab === 'ml'          && <MLModelsPanel data={data} />}
               {activeTab === 'patterns'    && <PatternLab ticker={ticker} />}
-              {activeTab === 'intel'       && <CompanyIntel ticker={ticker} />}
+              {activeTab === 'intel'       && <><BreakthroughsPanel ticker={ticker} /><CompanyIntel ticker={ticker} /></>}
               {activeTab === 'volatility'  && <VolatilityPanel data={data} />}
               {activeTab === 'regime'      && <RegimePanel data={data} />}
               {activeTab === 'news'        && <NewsPanel ticker={ticker} data={data} />}
@@ -441,7 +442,7 @@ function TickerHeader({ data, ticker }: { data: any; ticker: string }) {
           <span style={{ fontFamily: "'Outfit',sans-serif", fontSize: 13, color: '#9d8b7a' }}>{data.name || ''}</span>
         </div>
         <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 9, color: '#8a7560', letterSpacing: 2 }}>
-          {data.exchange || ''} · {data.sector || ''} · {data.industry || ''}
+          {[data.exchange, data.sector, data.industry].filter((v: any, i: number, a: any[]) => v && a.indexOf(v) === i).join(' · ')}
         </div>
       </div>
 
@@ -463,11 +464,10 @@ function TickerHeader({ data, ticker }: { data: any; ticker: string }) {
       {/* Key stats */}
       <div style={{ display: 'flex', gap: 20, marginLeft: 'auto', flexWrap: 'wrap' }}>
         {[
-          { label: 'MKT CAP', value: formatLarge(data.market_cap) },
-          { label: 'VOL (Ann)', value: pct(data.annual_vol) },
-          { label: 'SHARPE', value: num2(data.sharpe_ratio) },
-          { label: 'REGIME', value: (data.current_regime || '—').replace('_', ' ') },
-          { label: '1Y PRED', value: pct((data.predicted_return_1y || 0) / 100) },
+          { label: 'MARKET VALUE', value: formatLarge(data.market_cap) },
+          { label: 'P/E', value: (data.pe_ratio ?? data.fundamentals?.pe_ratio) != null ? `${Number(data.pe_ratio ?? data.fundamentals?.pe_ratio).toFixed(1)}×` : '—' },
+          { label: 'VS 52W HIGH', value: (data.week_52_high && data.price) ? `${((data.price / data.week_52_high - 1) * 100).toFixed(1)}%` : '—' },
+          { label: 'VOLATILITY', value: pct(data.annual_vol) },
         ].map(s => (
           <div key={s.label} style={{ textAlign: 'center' }}>
             <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: '#8a7560', letterSpacing: 2, marginBottom: 2 }}>{s.label}</div>
@@ -476,10 +476,7 @@ function TickerHeader({ data, ticker }: { data: any; ticker: string }) {
         ))}
       </div>
 
-      {/* Data quality */}
-      <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 9, color: '#8a7560', letterSpacing: 1 }}>
-        DATA {data.data_quality?.score || 0}% · {data.analysis_duration_seconds || 0}s
-      </div>
+
     </div>
   );
 }
@@ -502,7 +499,7 @@ function StockSnapshot({ data }: { data: any }) {
   const Cell = ({label, value, color}:{label:string; value:string; color?:string}) => (
     <div style={{ display:'flex', justifyContent:'space-between', padding:'3px 0', fontSize:11 }}>
       <span style={{ fontFamily:"'Outfit',sans-serif", color:'#8a7560' }}>{label}</span>
-      <span style={{ fontFamily:"'Fira Code',monospace", color: color||'#d4c4b0', fontWeight:600 }}>{value}</span>
+      <span style={{ fontFamily:"'Fira Code',monospace", color: value === '—' ? '#8a7560' : (color||'#d4c4b0'), fontWeight:600 }}>{value}</span>
     </div>
   );
   const ColHead = ({t}:{t:string}) => (
@@ -515,19 +512,17 @@ function StockSnapshot({ data }: { data: any }) {
       <div>
         <ColHead t="FUNDAMENTALS" />
         <Cell label="Revenue TTM" value={fmtBig(f.revenue_ttm)} />
-        <Cell label="Rev Growth" value={fmtPct(f.revenue_growth)} color={col(f.revenue_growth>0.1)} />
+        <Cell label="Rev Growth" value={fmtPct(f.revenue_growth)} color={f.revenue_growth == null ? undefined : col(f.revenue_growth > 0)} />
         <Cell label="Gross Margin" value={fmtPct(f.gross_margin)} color={col(f.gross_margin>0.4)} />
         <Cell label="Net Margin" value={fmtPct(f.net_margin)} color={col(f.net_margin>0.1)} />
         <Cell label="ROE" value={fmtPct(f.roe)} color={col(f.roe>0.15)} />
-        <Cell label="Debt/Equity" value={f.debt_to_equity != null ? Number(f.debt_to_equity).toFixed(2) : '—'} color={col(f.debt_to_equity != null ? f.debt_to_equity < 1.5 : null)} />
+        <Cell label="Liabilities / Equity" value={f.debt_to_equity != null ? Number(f.debt_to_equity).toFixed(2) : '—'} color={col(f.debt_to_equity != null ? f.debt_to_equity < 1.5 : null)} />
       </div>
       <div>
         <ColHead t="VALUATION" />
         <Cell label="P/E" value={fmtX(f.pe_ratio ?? data.pe_ratio)} />
-        <Cell label="Forward P/E" value={fmtX(data.forward_pe ?? f.eps_forward)} />
         <Cell label="P/S" value={fmtX(f.price_to_sales)} />
         <Cell label="EV/EBITDA" value={fmtX(f.ev_ebitda)} />
-        <Cell label="PEG" value={data.peg_ratio != null ? Number(data.peg_ratio).toFixed(2) : '—'} />
         <Cell label="FCF Yield" value={fmtPct(data.fcf_yield)} color={col(data.fcf_yield>0.04)} />
       </div>
       <div>
@@ -540,18 +535,15 @@ function StockSnapshot({ data }: { data: any }) {
             <div style={{ height:'100%', width:`${rangePos}%`, background:'linear-gradient(90deg,#8a7560,#daa520)', borderRadius:3 }} />
           </div>
         )}
-        <Cell label="Sharpe" value={data.sharpe_ratio != null ? Number(data.sharpe_ratio).toFixed(2) : '—'} color={col(data.sharpe_ratio>0.6)} />
-        <Cell label="Ann Vol" value={fmtPct(data.annual_vol)} />
       </div>
       <div>
-        <ColHead t="THE STREET" />
+        <ColHead t={`THE STREET · FINNHUB${(ar.period || cons.period) ? ' · ' + (ar.period || cons.period) : ''}`} />
         {cons && cons.n_analysts ? (
           <>
             <Cell label={`Buy (${cons.n_analysts} analysts)`} value={`${cons.buy_count ?? '—'}`} color="#22c55e" />
             <Cell label="Hold" value={`${cons.hold_count ?? '—'}`} color="#f59e0b" />
             <Cell label="Sell" value={`${cons.sell_count ?? '—'}`} color="#ef4444" />
             <Cell label="Consensus" value={cons.label || '—'} color={cons.label?.includes('BUY') ? '#22c55e' : cons.label?.includes('SELL') ? '#ef4444' : '#f59e0b'} />
-            <Cell label="Avg Target" value={cons.avg_target != null ? `$${Number(cons.avg_target).toFixed(0)}` : 'n/a'} />
             {(cons.upgrades_30d || cons.downgrades_30d) ? (
               <Cell label="30d Revisions" value={`+${cons.upgrades_30d||0} / -${cons.downgrades_30d||0}`} />
             ) : null}

@@ -37,3 +37,8 @@ class CIIngestJob:
             logger.info(f"✅ CI 5.02 officer changes classified: {await classify_502(self.pool, days=10)}")
         except Exception as e:
             logger.error(f"❌ CI 5.02 classification FAILED: {e}")
+        try:
+            from quantedge.intel.press_releases import read_press_releases
+            logger.info(f"✅ CI press releases read: {await read_press_releases(self.pool, days=5)}")
+        except Exception as e:
+            logger.error(f"❌ CI press-release reading FAILED: {e}")
