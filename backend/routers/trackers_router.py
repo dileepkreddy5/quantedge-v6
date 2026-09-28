@@ -7,6 +7,15 @@ from fastapi import APIRouter, Query, Request, HTTPException
 from core.artifact_paths import artifact_read_path
 
 router = APIRouter()
+
+
+def _clean(o):
+    """Replace NaN/inf anywhere in a response with None: one bad number in one company
+    must never take down a whole tracker (it did, for Large and Small movers)."""
+    if isinstance(o, float): return o if math.isfinite(o) else None
+    if isinstance(o, dict): return {k: _clean(v) for k, v in o.items()}
+    if isinstance(o, (list, tuple)): return [_clean(v) for v in o]
+    return o
 BUCKETS = ((-0.50, "50"), (-0.30, "30"), (-0.20, "20"))
 
 
@@ -68,9 +77,9 @@ async def on_sale(request: Request, tier: str = Query("large"), min_drop: float 
     if sort == "discount": out.sort(key=lambda c: c["pct_below_high"])
     elif sort == "business": out.sort(key=biz, reverse=True)
     else: out.sort(key=lambda c: c["market_cap"] or 0, reverse=True)
-    return {"as_of": str(as_of), "tier": tier, "n": len(out), "quality_filter": quality, "sort": sort, "counts": counts, "companies": out,
+    return _clean({"as_of": str(as_of), "tier": tier, "n": len(out), "quality_filter": quality, "sort": sort, "counts": counts, "companies": out,
             "history": base, "high_note": "“High” means the highest closing price in the last 5 years (our data starts September 2021).",
-            "note": "Next results dates are estimates: the last reported results date plus about three months."}
+            "note": "Next results dates are estimates: the last reported results date plus about three months."})
 
 
 
@@ -104,8 +113,8 @@ async def quiet_climbers(request: Request, tier: str = Query("large")):
                     "quiet": rel_att <= 1.0, "pct_below_high": r["pct_below_high"], "vol_ratio_20_60": r["vol_ratio_20_60"],
                     "sales_yoy": f.get("sales_yoy"), "score": score})
     out.sort(key=lambda c: c["score"], reverse=True)
-    return {"as_of": str(as_of), "tier": tier, "n": len(out), "tier_median_news_180d": med, "companies": out,
-            "note": "Attention = news articles in 180 days (Polygon's feed), compared with the median company in the same size tier."}
+    return _clean({"as_of": str(as_of), "tier": tier, "n": len(out), "tier_median_news_180d": med, "companies": out,
+            "note": "Attention = news articles in 180 days (Polygon's feed), compared with the median company in the same size tier."})
 
 
 @router.get("/trackers/getting-better")
@@ -138,8 +147,8 @@ async def getting_better(request: Request, tier: str = Query("large")):
                     "quarters": [{"end": q["end"], "sales": q["sales"], "sales_yoy": q["sales_yoy"], "op_margin": q["op_margin"]} for q in qs],
                     "last_quarter": qs[-1]["end"] if qs else None, "ret_6m": r["ret_6m"], "pct_below_high": r["pct_below_high"], "score": score})
     out.sort(key=lambda c: c["score"], reverse=True)
-    return {"as_of": str(as_of), "tier": tier, "n": len(out), "companies": out,
-            "note": "From SEC 10-Q/10-K filings, each quarter dated to its first filing."}
+    return _clean({"as_of": str(as_of), "tier": tier, "n": len(out), "companies": out,
+            "note": "From SEC 10-Q/10-K filings, each quarter dated to its first filing."})
 
 
 FIN = ("Financials", "Real Estate")
@@ -239,9 +248,9 @@ async def warning_signs(request: Request, tier: str = Query("large"), healthy_on
                     "first_sign": first[t], "days_since_first": (as_of - __import__("datetime").date.fromisoformat(first[t])).days,
                     "healthy_6m_ago": healthy_then.get(t)})
     out.sort(key=lambda c: (-c["serious"], -len(c["signs"]), -(c["market_cap"] or 0)))
-    return {"as_of": str(as_of), "tier": tier, "n": len(out), "healthy_only": healthy_only, "companies": out,
+    return _clean({"as_of": str(as_of), "tier": tier, "n": len(out), "healthy_only": healthy_only, "companies": out,
             "note": "Signs from the last 30 days. Serious: SEC items 4.02, 4.01, 2.06, abrupt CEO/CFO exits, late-filing notices. "
-                    "Financials and real estate skip the margin and cash tests. Signs are reasons to look closer, not predictions."}
+                    "Financials and real estate skip the margin and cash tests. Signs are reasons to look closer, not predictions."})
 
 
 NEXT_TIER = {"mid": ("large", 10e9), "small": ("mid", 2e9)}
@@ -292,9 +301,9 @@ async def rising_stars(request: Request, tier: str = Query("mid")):
                     "funds": i or None, "funds_arriving": funds_arriving,
                     "next_tier": nxt, "next_tier_threshold": thr, "months_to_next_tier_at_sales_pace": months, "score": score})
     out.sort(key=lambda c: c["score"], reverse=True)
-    return {"as_of": str(as_of), "tier": tier, "next_tier": nxt, "n": len(out), "companies": out,
+    return _clean({"as_of": str(as_of), "tier": tier, "next_tier": nxt, "n": len(out), "companies": out,
             "note": ("Months to the next tier = if the company's market value grew at the same rate as its sales over the last year. "
-                     "Arithmetic on the recent pace, not a forecast.")}
+                     "Arithmetic on the recent pace, not a forecast.")})
 
 
 MIN_Q_SALES = {"large": 250e6, "mid": 50e6, "small": 15e6}
@@ -354,11 +363,11 @@ async def growth_leaders(request: Request, tier: str = Query("large")):
                     "funds": i or None, "funds_arriving": ((i.get("new_managers") or 0) > (i.get("exited_managers") or 0)) if i else None,
                     "next_tier": nxt[0] if nxt else None, "months_to_next_tier_at_sales_pace": months, "score": round(score, 3)})
     out.sort(key=lambda c: c["score"], reverse=True)
-    return {"as_of": str(as_of), "tier": tier, "n": len(out), "companies": out,
+    return _clean({"as_of": str(as_of), "tier": tier, "n": len(out), "companies": out,
             "counts": {"all_four": sum(c["stages_passed"] == 4 for c in out), "early": sum(c["early"] for c in out),
                        "under_radar": sum(c["stages"]["under_radar"] for c in out)},
             "note": ("Sales growth from SEC filings, each quarter dated to its first filing. 'Early' = sales grew faster than the share "
-                     "price over the last year. Months to the next tier = arithmetic on the sales pace, not a forecast.")}
+                     "price over the last year. Months to the next tier = arithmetic on the sales pace, not a forecast.")})
 
 
 SHOCK = {"large": 0.06, "mid": 0.08, "small": 0.10}
@@ -476,9 +485,9 @@ async def worth_a_look(request: Request, tier: str = Query("large")):
             for p in picks:
                 if p["ticker"] == r["ticker"]: p["next_results_est"] = str(est); p["next_results_basis"] = "estimated from its last reported quarter"
     for i, p in enumerate(picks): p["top5"] = i < 8          # featured (field name kept for the page)
-    return {"as_of": sale["as_of"], "tier": tier, "n": len(picks), "companies": picks,
+    return _clean({"as_of": sale["as_of"], "tier": tier, "n": len(picks), "companies": picks,
             "note": ("Candidates for your research, not recommendations. Built from verified sources only — SEC filings, prices, "
-                     "measured pattern odds, warning signs. ML forecasts are not used while none validate on recent data.")}
+                     "measured pattern odds, warning signs. ML forecasts are not used while none validate on recent data.")})
 
 
 
@@ -508,7 +517,7 @@ async def movers(request: Request, tier: str = Query("large"), period: str = Que
     else:
         move = {t: r[col] for t, r in by.items() if r[col] is not None and math.isfinite(r[col])}
         vol_today = {}
-    res = {t: e["event_date"] for e in await pool.fetch("""SELECT DISTINCT ON (ticker) ticker, event_date FROM ci_events
+    res = {e["ticker"]: e["event_date"] for e in await pool.fetch("""SELECT DISTINCT ON (ticker) ticker, event_date FROM ci_events
         WHERE item_code='2.02' AND ticker = ANY($1) AND event_date > CURRENT_DATE - 7 ORDER BY ticker, event_date DESC""", list(by))}
     def card(t, m):
         r = by[t]; tags = []
@@ -521,11 +530,11 @@ async def movers(request: Request, tier: str = Query("large"), period: str = Que
                             {"1d": r["ret_1d"], "1w": r["ret_1w"], "2w": r["ret_2w"], "1m": r["ret_1m"], "3m": r["ret_3m"], "6m": r["ret_6m"], "1y": r["ret_1y"]}.items()},
                 "vol_ratio_20_60": r["vol_ratio_20_60"] if r["vol_ratio_20_60"] is not None and math.isfinite(r["vol_ratio_20_60"]) else None, "tags": tags}
     ranked = sorted(move.items(), key=lambda kv: kv[1])
-    return {"as_of": str(as_of), "tier": tier, "period": period, "quote_time": quote_time, "universe": len(move),
+    return _clean({"as_of": str(as_of), "tier": tier, "period": period, "quote_time": quote_time, "universe": len(move),
             "gainers": [card(t, m) for t, m in reversed(ranked[-limit:]) if m > 0],
             "losers": [card(t, m) for t, m in ranked[:limit] if m < 0],
             "note": ("1-day moves use the live quote (15-minute delayed); longer periods use the last close. "
-                     "Companies trading under a minimum dollar volume are left out.")}
+                     "Companies trading under a minimum dollar volume are left out.")})
 
 
 @router.get("/trackers/membership")
