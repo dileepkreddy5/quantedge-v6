@@ -5,13 +5,13 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../auth/authStore';
 
 const TRACKERS = [
+  { id: 'movers', name: 'Gainers & losers', q: 'The biggest gainers and losers — from today to a full year.', api: 'movers' },
   { id: 'worth', name: 'Worth a look', q: 'Our shortlist: great companies on a dip, early growth not yet priced, fresh breakthroughs.', api: 'worth-a-look' },
   { id: 'on-sale', name: 'Great companies on sale', q: 'The best companies trading far below their high — for reasons that will likely pass.', api: 'on-sale' },
   { id: 'better', name: 'Getting better', q: 'Results improving quarter after quarter, straight from SEC filings.', api: 'getting-better' },
   { id: 'rising', name: 'Rising stars', q: 'Growing fast enough to move up a size tier — tomorrow\'s bigger companies.', api: 'rising-stars' },
   { id: 'quiet', name: 'Quiet climbers', q: 'Rising steadily, week after week, before everyone notices.', api: 'quiet-climbers' },
   { id: 'warn', name: 'Warning signs', q: 'Good companies showing early cracks — before the price fully reflects it.', api: 'warning-signs' },
-  { id: 'movers', name: 'Gainers & losers', q: 'The biggest gainers and losers — from today to a full year.', api: 'movers' },
 ];
 const TIERS = [['large', 'Large', 'over $10B'], ['mid', 'Mid', '$2B–$10B'], ['small', 'Small', '$300M–$2B']];
 const STAGE: Record<string, [string, string]> = { falling: ['Still falling', '#ef7d5a'], basing: ['Going sideways', '#e0ad3a'], turning: ['Turning up', '#8fd19e'], recovering: ['Recovering', '#3ec27a'], near_high: ['Near its high', '#b09c86'] };
@@ -28,10 +28,10 @@ const CSS = `
 .t2 nav .links{margin-left:auto;display:flex;gap:26px;font-size:14.5px;color:var(--dust)}.t2 nav .links a.on{color:var(--cream)}
 .t2 .eyebrow{font-family:var(--mono);font-size:11.5px;letter-spacing:.26em;text-transform:uppercase;color:var(--gold)}
 .t2 .head{padding:40px 0 18px}.t2 h1{font-family:var(--serif);font-weight:300;font-size:44px;color:var(--cream);margin:10px 0 0;letter-spacing:-.015em}
-.t2 .trk{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-top:24px}
+.t2 .trk{display:grid;grid-template-columns:repeat(7,minmax(170px,1fr));gap:10px;margin-top:24px;overflow-x:auto;padding-bottom:4px}
 .t2 .srch{margin-left:auto;align-self:center;background:var(--panel);border:1px solid var(--line2);border-radius:8px;color:var(--cream);font-family:var(--mono);font-size:13px;padding:9px 14px;width:280px;outline:none}
-.t2 .tb{text-align:left;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px;color:var(--latte)}
-.t2 .tb .n{font-family:var(--serif);font-size:21px;color:var(--cream)}.t2 .tb .d{font-size:13px;color:var(--dust);margin-top:6px;line-height:1.5}
+.t2 .tb{text-align:left;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;color:var(--latte)}
+.t2 .tb .n{font-family:var(--serif);font-size:18px;color:var(--cream)}.t2 .tb .d{font-size:12px;color:var(--dust);margin-top:5px;line-height:1.45}
 .t2 .tb.on{border-color:var(--gold);background:var(--panel2)}
 .t2 .tiers{display:flex;gap:0;margin-top:22px;border-bottom:1px solid var(--line)}
 .t2 .tier{background:none;border:none;border-bottom:2px solid transparent;padding:12px 22px;color:var(--dust);font-size:15px}
@@ -104,7 +104,7 @@ const CSS = `
 @media (max-width:1100px){.t2 .wr{grid-template-columns:30px 1fr}.t2 .wr .hide{display:none}}
 .t2 .foot{font-size:13px;color:var(--mute);line-height:1.7;margin:18px 0 70px;max-width:980px}
 .t2 .empty{padding:30px;text-align:center;color:var(--mute);font-family:var(--mono);font-size:12.5px}
-@media (max-width:1100px){.t2 .rh{grid-template-columns:1fr 1fr}.t2 .lb{grid-template-columns:30px 1fr;}.t2 .lb .hide{display:none}.t2 .gc,.t2 .trk,.t2 .callout,.t2 .det{grid-template-columns:1fr}.t2 nav .links{display:none}.t2 h1{font-size:34px}}
+@media (max-width:1100px){.t2 .rh{grid-template-columns:1fr 1fr}.t2 .lb{grid-template-columns:30px 1fr;}.t2 .lb .hide{display:none}.t2 .gc,.t2 .callout,.t2 .det{grid-template-columns:1fr}.t2 nav .links{display:none}.t2 h1{font-size:34px}}
 `;
 
 const pct = (v: any, d = 0) => v == null ? '—' : `${v >= 0 ? '+' : ''}${(v * 100).toFixed(d)}%`;
