@@ -147,5 +147,13 @@ async def get_conviction(ticker: str, http_request: Request,
     }
     result = await aggregate_conviction(ticker, scorers)
     result = _san(result)
+    # Record every computed score so its track record can be measured later (it has none yet).
+    try:
+        _pool = http_request.app.state.db
+        await _pool.execute("CREATE TABLE IF NOT EXISTS conviction_log (ticker TEXT, computed_at TIMESTAMPTZ DEFAULT NOW(), score DOUBLE PRECISION, result JSONB)")
+        _sc = next((result.get(k) for k in ("score", "conviction_score", "overall_score", "composite") if isinstance(result.get(k), (int, float))), None)
+        await _pool.execute("INSERT INTO conviction_log (ticker, score, result) VALUES ($1,$2,$3::jsonb)", ticker, _sc, __import__("json").dumps(result, default=str))
+    except Exception:
+        pass
     _CACHE[ticker] = {"t": now, "v": result}
     return {"data": result, "cached": False}

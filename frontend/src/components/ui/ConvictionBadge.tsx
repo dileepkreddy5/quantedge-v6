@@ -7,6 +7,8 @@ interface Conv { conviction_score: number | null; verdict: string;
   modules: Mod[]; }
 
 function vColor(v: string): string {
+  return '#9d8b7a';   // neutral until the score has a measured track record
+
   if (v.includes('STRONG_BUY')) return '#0f9d6e';
   if (v.includes('BUY')) return '#1d9e75';
   if (v.includes('NEUTRAL')) return '#c9a227';
@@ -33,7 +35,7 @@ export default function ConvictionBadge({ ticker }: { ticker: string }) {
         padding: '6px 14px', cursor: 'help', textAlign: 'center' }}>
         <div style={{ fontSize: 9, color: '#9d8b7a', letterSpacing: 2 }}>QUANTEDGE CONVICTION</div>
         <div style={{ fontSize: 18, fontWeight: 700, color: col, letterSpacing: 1 }}>
-          {c.verdict.replace('_', ' ')} · {c.conviction_score}</div>
+          QuantEdge score {c.conviction_score} · not yet validated</div>
         <div style={{ fontSize: 8, color: '#7a7266', letterSpacing: 1 }}>
           {(c.coverage.pct * 100).toFixed(0)}% coverage · {c.coverage.modules_live}/{c.coverage.modules_total} modules live</div>
       </div>

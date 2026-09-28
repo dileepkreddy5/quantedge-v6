@@ -79,6 +79,7 @@ from routers.agent_router import router as agent_router
 from routers.wire_router import router as wire_router
 from routers.home_router import router as home_router
 from routers.trackers_router import router as trackers_router
+from routers.summary_router import router as summary_router
 from ml.price_oracle.router import router as oracle_router
 from services.signal_tracker import SignalTracker, OutcomeFillerJob
 
@@ -736,6 +737,7 @@ app.include_router(agent_router,         prefix="/api/v6",             tags=["Ag
 app.include_router(wire_router,          prefix="/api/v6",             tags=["Wire"])
 app.include_router(home_router,          prefix="/api/v6",             tags=["Home"])
 app.include_router(trackers_router,      prefix="/api/v6",             tags=["Trackers"])
+app.include_router(summary_router,       prefix="/api/v6",             tags=["Summary"])
 app.include_router(peers_router,         prefix="/api/v6",             tags=["Peers"])
 app.include_router(ecosystem_router,     prefix="/api/v6",             tags=["Ecosystem"])
 app.include_router(news_router,          prefix="/api/v6",             tags=["News"])

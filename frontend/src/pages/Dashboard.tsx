@@ -1,3 +1,4 @@
+import SummaryTab from '../components/ui/SummaryTab';
 import BreakthroughsPanel from '../components/ui/BreakthroughsPanel';
 import LoadingSnapshot from '../components/ui/LoadingSnapshot';
 // ============================================================
@@ -48,7 +49,7 @@ import MarketPanel from '../components/ui/MarketPanel';
 import BusinessPanel from '../components/ui/BusinessPanel';
 
 const TABS = [
-  { id: 'overview',     label: '⬡ OVERVIEW' },
+  { id: 'overview',     label: '⬡ SUMMARY' },
   { id: 'ml',          label: '🧠 ML MODELS' },
   { id: 'patterns',    label: '🧬 PATTERN LAB' },
   { id: 'intel',       label: '🔎 COMPANY INTEL' },
@@ -367,7 +368,7 @@ export default function Dashboard() {
 
             {/* ── Tab content ── */}
             <div style={{ animation: 'fadeIn 0.3s ease' }}>
-              {activeTab === 'overview'    && <OverviewV2 data={data} ticker={ticker} onAnalyze={runAnalysis} />}
+              {activeTab === 'overview'    && <SummaryTab ticker={ticker} data={data} macro={<MacroPanel ticker={ticker} />} classic={<OverviewV2 data={data} ticker={ticker} onAnalyze={runAnalysis} />} />}
               {activeTab === 'ml'          && <MLModelsPanel data={data} />}
               {activeTab === 'patterns'    && <PatternLab ticker={ticker} />}
               {activeTab === 'intel'       && <><BreakthroughsPanel ticker={ticker} /><CompanyIntel ticker={ticker} /></>}
