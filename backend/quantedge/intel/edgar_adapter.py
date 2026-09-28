@@ -57,7 +57,11 @@ def _parse_form4(xml_text: str) -> dict | None:
                      "acquired_disposed": ad, "shares": shares, "price": price,
                      "value": round(shares * price, 2),
                      "open_market": code in ("P", "S")})
-    return {"owners": owners, "transactions": txns}
+    # 10b5-1: a sale scheduled months ahead under a trading plan (checkbox on the form since 2023)
+    import re as _re
+    planned = bool(_re.search(r"<aff10b5One>\s*(1|true)\s*</aff10b5One>", xml_text or "", _re.I))
+    for t_ in txns: t_["planned_10b5_1"] = planned
+    return {"owners": owners, "transactions": txns, "planned_10b5_1": planned}
 
 
 async def ensure_tables(pool):
@@ -111,7 +115,7 @@ async def ingest(pool, limit: int | None = None, concurrency: int = 2) -> dict:
                         fdate = date.fromisoformat(rec["filingDate"][i])
                         if form == "8-K" and fdate < cut8k: continue
                         if form == "4" and (fdate < cutf4 or f4_done >= FORM4_MAX_PER_COMPANY_PER_RUN): continue
-                        if form not in ("8-K", "4"): continue
+                        if form not in ("8-K", "4", "NT 10-Q", "NT 10-K"): continue   # NT = late-filing notice
                         acc = rec["accessionNumber"][i]
                         if acc in known: continue
                         acc_dt = rec.get("acceptanceDateTime", [None] * n)[i]

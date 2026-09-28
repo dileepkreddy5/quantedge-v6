@@ -33,6 +33,10 @@ ALTER TABLE company_facts ADD COLUMN IF NOT EXISTS dollar_vol_20 DOUBLE PRECISIO
 ALTER TABLE company_facts ADD COLUMN IF NOT EXISTS peer_group TEXT;
 ALTER TABLE company_facts ADD COLUMN IF NOT EXISTS data_suspect TEXT;
 ALTER TABLE company_facts ADD COLUMN IF NOT EXISTS history_note TEXT;
+ALTER TABLE company_facts ADD COLUMN IF NOT EXISTS below_200d BOOLEAN;
+ALTER TABLE company_facts ADD COLUMN IF NOT EXISTS cross_200d_date DATE;
+ALTER TABLE company_facts ADD COLUMN IF NOT EXISTS cross_200d_vol DOUBLE PRECISION;
+ALTER TABLE company_facts ADD COLUMN IF NOT EXISTS peer_ret_1m DOUBLE PRECISION;
 """
 
 OVERRIDE = {"GOOGL": "Communication", "GOOG": "Communication", "META": "Communication", "NFLX": "Communication",
@@ -151,6 +155,18 @@ async def build_price_facts(pool, as_of: date | None = None) -> dict:
         v20 = v[-20:].mean() if n >= 20 else v.mean(); v60 = v[-60:].mean() if n >= 60 else v.mean()
         upv = v[-20:][c[-20:] >= o[-20:]].sum() / max(1.0, v[-20:].sum())
         a30, a180 = att.get(tk, (0, 0))
+        # A real trend break, not a stock hovering around its average: above the 200-day
+        # average on 80%+ of the 60 sessions before the cross, and still 2%+ below it today.
+        below200 = bool(n >= 200 and c[-1] < c[-200:].mean()); cross_i = None
+        if below200 and n >= 290:
+            cs_ = np.concatenate([[0.0], np.cumsum(c)]); sma = np.full(n, np.nan)
+            sma[199:] = (cs_[200:] - cs_[:-200]) / 200.0
+            if c[-1] <= 0.98 * sma[-1]:
+                for i in range(n - 1, n - 21, -1):
+                    if c[i] < sma[i] and c[i - 1] >= sma[i - 1]:
+                        if np.mean(c[i - 60:i] > sma[i - 60:i]) >= 0.8: cross_i = i
+                        break
+        cross_vol = float(v[cross_i] / max(1.0, v[cross_i - 20:cross_i].mean())) if cross_i else None
         mc = u["market_cap"]
         facts.append({"ticker": tk, "name": u["name"], "tier": tier_of(mc), "sector": sector_of(tk, u["sic_code"]),
                       "is_spac": str(u["sic_code"] or "").startswith("6770"), "market_cap": mc, "price": float(c[-1]),
@@ -163,7 +179,8 @@ async def build_price_facts(pool, as_of: date | None = None) -> dict:
                       "vol_ratio_20_60": float(v20 / v60) if v60 > 0 else None, "up_vol_share_20": float(upv),
                       "news_30d": int(a30), "news_180d": int(a180), "cik": str(u["cik"]) if u["cik"] else None,
                       "dollar_vol_20": float((c[-20:] * v[-20:]).mean()), "sic": str(u["sic_code"] or ""),
-                      "data_suspect": None, "history_note": history_note})
+                      "data_suspect": None, "history_note": history_note,
+                      "below_200d": below200, "cross_200d_date": ds[cross_i] if cross_i else None, "cross_200d_vol": cross_vol})
         meta.append(k)
         if len(facts) % 1000 == 0: logger.info(f"[facts] {len(facts)} companies…")
 
@@ -203,6 +220,12 @@ async def build_price_facts(pool, as_of: date | None = None) -> dict:
             mv = M[rs, now_j] / M[rs, j] - 1 if rs else np.array([])
             cache[key] = float(np.nanmedian(mv)) if np.isfinite(mv).sum() >= 5 else None
         f["sector_move_since_high"] = cache[key]
+        k1 = (pk, "1m")
+        if k1 not in cache:
+            rs1 = sect_rows.get(pk, [])
+            m1 = M[rs1, now_j] / M[rs1, now_j - 21] - 1 if rs1 and now_j >= 21 else np.array([])
+            cache[k1] = float(np.nanmedian(m1)) if np.isfinite(m1).sum() >= 5 else None
+        f["peer_ret_1m"] = cache[k1]
         drop = f["pct_below_high"]
         if drop > -0.10: f["drop_cause"] = None
         elif f["mkt_move_since_high"] is not None and f["mkt_move_since_high"] <= 0.6 * drop: f["drop_cause"] = "market"
@@ -213,7 +236,8 @@ async def build_price_facts(pool, as_of: date | None = None) -> dict:
             "sessions_since_high", "low_since_high", "low_date", "sessions_since_low", "pct_off_low", "stage",
             "ret_1d", "ret_1w", "ret_1m", "ret_3m", "ret_6m", "ret_1y", "weeks_beat_mkt_26", "up_weeks_26",
             "vol_ratio_20_60", "up_vol_share_20", "mkt_move_since_high", "sector_move_since_high", "drop_cause",
-            "news_30d", "news_180d", "cik", "primary_listing", "dollar_vol_20", "peer_group", "data_suspect", "history_note"]
+            "news_30d", "news_180d", "cik", "primary_listing", "dollar_vol_20", "peer_group", "data_suspect", "history_note",
+            "below_200d", "cross_200d_date", "cross_200d_vol", "peer_ret_1m"]
     ph = ",".join(f"${i + 2}" for i in range(len(cols)))
     upd = ",".join(f"{c}=EXCLUDED.{c}" for c in cols[1:])
     async with pool.acquire() as con:

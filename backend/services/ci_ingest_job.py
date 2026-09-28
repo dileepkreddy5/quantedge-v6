@@ -32,3 +32,8 @@ class CIIngestJob:
             logger.info(f"✅ CI attention ingest complete: {stats}")
         except Exception as e:
             logger.error(f"❌ CI attention ingest FAILED: {e}")
+        try:
+            from quantedge.intel.officer_change import classify_502
+            logger.info(f"✅ CI 5.02 officer changes classified: {await classify_502(self.pool, days=10)}")
+        except Exception as e:
+            logger.error(f"❌ CI 5.02 classification FAILED: {e}")

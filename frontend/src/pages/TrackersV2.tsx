@@ -8,6 +8,7 @@ const TRACKERS = [
   { id: 'on-sale', name: 'Great companies on sale', q: 'The best companies trading far below their high — for reasons that will likely pass.', api: 'on-sale' },
   { id: 'quiet', name: 'Quiet climbers', q: 'Rising steadily, week after week, before everyone notices.', api: 'quiet-climbers' },
   { id: 'better', name: 'Getting better', q: 'Results improving quarter after quarter, straight from SEC filings.', api: 'getting-better' },
+  { id: 'warn', name: 'Warning signs', q: 'Good companies showing early cracks — before the price fully reflects it.', api: 'warning-signs' },
 ];
 const TIERS = [['large', 'Large', 'over $10B'], ['mid', 'Mid', '$2B–$10B'], ['small', 'Small', '$300M–$2B']];
 const STAGE: Record<string, [string, string]> = { falling: ['Still falling', '#ef7d5a'], basing: ['Going sideways', '#e0ad3a'], turning: ['Turning up', '#8fd19e'], recovering: ['Recovering', '#3ec27a'], near_high: ['Near its high', '#b09c86'] };
@@ -24,7 +25,7 @@ const CSS = `
 .t2 nav .links{margin-left:auto;display:flex;gap:26px;font-size:14.5px;color:var(--dust)}.t2 nav .links a.on{color:var(--cream)}
 .t2 .eyebrow{font-family:var(--mono);font-size:11.5px;letter-spacing:.26em;text-transform:uppercase;color:var(--gold)}
 .t2 .head{padding:40px 0 18px}.t2 h1{font-family:var(--serif);font-weight:300;font-size:44px;color:var(--cream);margin:10px 0 0;letter-spacing:-.015em}
-.t2 .trk{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:24px}
+.t2 .trk{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:24px}
 .t2 .tb{text-align:left;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px;color:var(--latte)}
 .t2 .tb .n{font-family:var(--serif);font-size:21px;color:var(--cream)}.t2 .tb .d{font-size:13px;color:var(--dust);margin-top:6px;line-height:1.5}
 .t2 .tb.on{border-color:var(--gold);background:var(--panel2)}
@@ -72,6 +73,14 @@ const CSS = `
 .t2 .kv{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .t2 .kv div{background:var(--panel2);border-radius:8px;padding:10px 12px}.t2 .kv .k{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;color:var(--mute)}
 .t2 .kv .v{font-family:var(--mono);font-size:15px;color:var(--cream);margin-top:4px}
+.t2 .wco{background:var(--panel);border:1px solid var(--line);border-radius:14px;margin-bottom:12px;overflow:hidden}
+.t2 .wco.serious{border-left:3px solid #e5484d}.t2 .wco.watch{border-left:3px solid #e0ad3a}
+.t2 .wtop{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,2.4fr) minmax(0,.8fr);gap:20px;align-items:center;padding:16px 20px;cursor:pointer}
+.t2 .wsev{text-align:right}.t2 .wsev b{display:block;font-family:var(--serif);font-weight:400;font-size:22px}
+.t2 .wsg{display:grid;grid-template-columns:14px 104px 160px minmax(0,1fr);gap:14px;align-items:baseline;padding:9px 20px;border-top:1px solid rgba(51,36,27,.55);font-size:14px}
+.t2 .wsg .dt{font-family:var(--mono);font-size:12px;color:var(--mute)}.t2 .wsg .sr{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;color:var(--dust)}
+.t2 .wsg small{display:block;color:var(--mute);font-size:12.5px;margin-top:2px}
+.t2 .wdot{width:9px;height:9px;border-radius:50%;display:inline-block}
 .t2 .foot{font-size:13px;color:var(--mute);line-height:1.7;margin:18px 0 70px;max-width:980px}
 .t2 .empty{padding:30px;text-align:center;color:var(--mute);font-family:var(--mono);font-size:12.5px}
 @media (max-width:1100px){.t2 .rh{grid-template-columns:1fr 1fr}.t2 .lb{grid-template-columns:30px 1fr;}.t2 .lb .hide{display:none}.t2 .gc,.t2 .trk,.t2 .callout,.t2 .det{grid-template-columns:1fr}.t2 nav .links{display:none}.t2 h1{font-size:34px}}
@@ -107,17 +116,19 @@ const TrackersV2: React.FC = () => {
   const [sort, setSort] = useState('size'); const [weak, setWeak] = useState(false);
   const [depth, setDepth] = useState('all'); const [stage, setStage] = useState('all'); const [cause, setCause] = useState('all');
   useEffect(() => { setData(null); setOpen(null);
-    const qs = tr.id === 'on-sale' ? `?tier=${tier}&sort=${sort}&quality=${weak ? 'all' : 'strong'}` : `?tier=${tier}`;
+    const qs = tr.id === 'on-sale' ? `?tier=${tier}&sort=${sort}&quality=${weak ? 'all' : 'strong'}` : tr.id === 'warn' ? `?tier=${tier}&healthy_only=${!weak}` : `?tier=${tier}`;
     api.get(`/api/v6/trackers/${tr.api}${qs}`).then(r => setData(r.data)).catch(() => setData({ error: true, companies: [] }));
   }, [tr.id, tier, sort, weak]); // eslint-disable-line
+  const [sev, setSev] = useState('all');
   const go = (t: string) => nav(`/dashboard?ticker=${t}`);
 
   const rows = useMemo(() => {
     const cs = data?.companies || [];
+    if (tr.id === 'warn') return cs.filter((c: any) => sev === 'all' || (sev === 'serious' && c.serious > 0) || (sev === 'multi' && c.signs.length >= 2));
     if (tr.id !== 'on-sale') return cs;
     return cs.filter((c: any) => (depth === 'all' || (depth === '20' && c.pct_below_high > -0.30) || (depth === '30' && c.pct_below_high <= -0.30 && c.pct_below_high > -0.50) || (depth === '50' && c.pct_below_high <= -0.50))
       && (stage === 'all' || c.stage === stage) && (cause === 'all' || c.drop_cause === cause));
-  }, [data, tr.id, depth, stage, cause]);
+  }, [data, tr.id, depth, stage, cause, sev]);
 
   const hist = data?.history?.buckets || {};
   const hb = depth === '50' ? hist['50'] : depth === '30' ? hist['30'] : hist['20'];
@@ -231,6 +242,36 @@ const TrackersV2: React.FC = () => {
           <span className="sub">{c.cash_backed ? '✓ profits backed by cash' : ''}{c.one_off_suspected ? ' · year-ago margin distorted by a one-off loss' : ''} · last quarter {fmtDate(c.last_quarter)}</span>
         </div>))}</div>
         <p className="foot">Improving results can reverse, and the price may already reflect them. Research, not advice.</p>
+      </>)}
+      {/* ── WARNING SIGNS ── */}
+      {tr.id === 'warn' && (<>
+        <div className="callout">
+          <div className="card"><div className="k">WHAT IT'S FOR</div>
+            <div className="v">Catching a <b>good company that's starting to go wrong</b>, before the price fully reflects it. Every sign comes from the company's <b>own SEC filings</b> or its trading, dated to when it became public. By default only companies that were <b>healthy six months ago</b> are shown — the point is to spot cracks early, not to list companies already broken.</div></div>
+          <div className="card"><div className="k">HOW SERIOUS</div>
+            <div className="v"><span className="wdot" style={{ background: '#e5484d' }} /> <b>Serious</b> — rare events that usually matter: past financials can't be relied on, auditor change, impairment, a sudden CEO/CFO exit, a late filing.<br />
+              <span className="wdot" style={{ background: '#e0ad3a' }} /> <b>Watch</b> — early cracks: sales slowing, margins shrinking, profits outrunning cash, several insiders selling, a trend break, lagging peers.<br />One sign is a question; several deserve attention. <span className="mu">Track record: measuring — five years of filings are being loaded.</span></div></div>
+        </div>
+        <div className="bar">
+          <span className="lbl">SHOW</span>{[['all', 'All signs'], ['serious', 'Serious only'], ['multi', '2+ signs']].map(([k, l]) => <button key={k} className={`pill ${sev === k ? 'on' : ''}`} onClick={() => setSev(k)}>{l}</button>)}
+          <button className={`pill ${!weak ? 'on' : ''}`} onClick={() => setWeak(w => !w)} style={{ marginLeft: 8 }}>{!weak ? '✓ ' : ''}Only companies healthy 6 months ago</button>
+          <span className="meta">{data ? `${rows.length} companies · signs from the last 30 days · as of ${data.as_of || ''}` : 'loading…'}</span>
+        </div>
+        {data && rows.length === 0 && <div className="empty">no warning signs in this size tier in the last 30 days</div>}
+        {rows.map((c: any) => (<div className={`wco ${c.serious ? 'serious' : 'watch'}`} key={c.ticker}>
+          <div className="wtop" onClick={() => go(c.ticker)}>
+            <div><span className="tk">{c.ticker}</span><span className="nm">{nice(c.name)}</span>
+              <span className="sub">{c.sector} · {bil(c.market_cap)} · first sign {c.days_since_first} days ago</span></div>
+            <Rets r={c.returns} vol={c.vol_ratio_20_60} />
+            <div className="wsev"><b style={{ color: c.serious ? '#e5484d' : '#e0ad3a' }}>{c.signs.length} sign{c.signs.length > 1 ? 's' : ''}</b>
+              <span className="sub">{c.serious ? `${c.serious} serious · ` : ''}{c.watch} watch</span></div>
+          </div>
+          {c.signs.map((s: any, i: number) => (<div className="wsg" key={i}>
+            <span className="wdot" style={{ background: s.severity === 'serious' ? '#e5484d' : '#e0ad3a' }} />
+            <span className="dt">{fmtDate(s.date)}</span><span className="sr">{s.source}</span>
+            <span>{s.text}{s.note && <small>{s.note}</small>}</span></div>))}
+        </div>))}
+        <p className="foot">{data?.note} Research, not advice.</p>
       </>)}
     </div></div>);
 };
