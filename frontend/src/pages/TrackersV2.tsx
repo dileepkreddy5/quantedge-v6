@@ -1,0 +1,227 @@
+// Trackers v2 — Great companies on sale · Quiet climbers · Getting better.
+// Reads /api/v6/trackers/* (nightly facts sheet). Large · Mid · Small are separate lists.
+import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { api } from '../auth/authStore';
+
+const TRACKERS = [
+  { id: 'on-sale', name: 'Great companies on sale', q: 'The best companies trading far below their high — for reasons that will likely pass.', api: 'on-sale' },
+  { id: 'quiet', name: 'Quiet climbers', q: 'Rising steadily, week after week, before everyone notices.', api: 'quiet-climbers' },
+  { id: 'better', name: 'Getting better', q: 'Results improving quarter after quarter, straight from SEC filings.', api: 'getting-better' },
+];
+const TIERS = [['large', 'Large', 'over $10B'], ['mid', 'Mid', '$2B–$10B'], ['small', 'Small', '$300M–$2B']];
+const STAGE: Record<string, [string, string]> = { falling: ['Still falling', '#ef7d5a'], basing: ['Going sideways', '#e0ad3a'], turning: ['Turning up', '#8fd19e'], recovering: ['Recovering', '#3ec27a'], near_high: ['Near its high', '#b09c86'] };
+const CAUSE: Record<string, string> = { market: 'Whole market fell', industry: 'Its industry fell', company: 'Company-specific' };
+
+const CSS = `
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+.t2{--ink:#0d0806;--ink2:#130c09;--panel:#1a110d;--panel2:#21160f;--line:#33241b;--line2:#46321f;--gold:#e0ad3a;--gold2:#f3cf7a;--cream:#f6ecdd;--latte:#d9c9b4;--dust:#b09c86;--mute:#8a7762;--up:#3ec27a;--down:#ef7d5a;
+ --serif:'Fraunces',Georgia,serif;--sans:'IBM Plex Sans',system-ui,sans-serif;--mono:'IBM Plex Mono',ui-monospace,monospace;background:var(--ink);color:var(--latte);font-family:var(--sans);min-height:100vh;-webkit-font-smoothing:antialiased}
+.t2 *{box-sizing:border-box}.t2 button{font:inherit;cursor:pointer}.t2 a{cursor:pointer;color:inherit;text-decoration:none}
+.t2 .wrap{max-width:1280px;margin:0 auto;padding:0 32px}
+.t2 nav{border-bottom:1px solid var(--line)}.t2 nav .wrap{display:flex;align-items:center;gap:30px;height:64px}
+.t2 .logo{font-family:var(--mono);font-weight:600;letter-spacing:.4em;color:var(--gold);font-size:15px}
+.t2 nav .links{margin-left:auto;display:flex;gap:26px;font-size:14.5px;color:var(--dust)}.t2 nav .links a.on{color:var(--cream)}
+.t2 .eyebrow{font-family:var(--mono);font-size:11.5px;letter-spacing:.26em;text-transform:uppercase;color:var(--gold)}
+.t2 .head{padding:40px 0 18px}.t2 h1{font-family:var(--serif);font-weight:300;font-size:44px;color:var(--cream);margin:10px 0 0;letter-spacing:-.015em}
+.t2 .trk{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:24px}
+.t2 .tb{text-align:left;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px;color:var(--latte)}
+.t2 .tb .n{font-family:var(--serif);font-size:21px;color:var(--cream)}.t2 .tb .d{font-size:13px;color:var(--dust);margin-top:6px;line-height:1.5}
+.t2 .tb.on{border-color:var(--gold);background:var(--panel2)}
+.t2 .tiers{display:flex;gap:0;margin-top:22px;border-bottom:1px solid var(--line)}
+.t2 .tier{background:none;border:none;border-bottom:2px solid transparent;padding:12px 22px;color:var(--dust);font-size:15px}
+.t2 .tier small{display:block;font-family:var(--mono);font-size:10.5px;color:var(--mute);margin-top:2px}
+.t2 .tier.on{color:var(--cream);border-bottom-color:var(--gold)}
+.t2 .callout{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:14px;margin:20px 0 14px}
+.t2 .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px 20px}
+.t2 .card .k{font-family:var(--mono);font-size:10px;letter-spacing:.2em;color:var(--mute)}
+.t2 .card .v{font-size:14.5px;line-height:1.65;color:var(--dust);margin-top:8px}.t2 .card .v b{color:var(--latte);font-weight:500}
+.t2 .card .big{font-family:var(--serif);font-size:24px;color:var(--cream);margin-top:6px}
+.t2 .bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:10px 0 12px}
+.t2 .bar .lbl{font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;color:var(--mute);margin:0 2px 0 8px}
+.t2 .pill{background:none;border:1px solid var(--line);border-radius:999px;padding:6px 12px;font-family:var(--mono);font-size:11.5px;color:var(--dust)}
+.t2 .pill.on{border-color:var(--gold);color:var(--gold)}.t2 .bar .meta{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--mute)}
+.t2 .row{background:var(--panel);border:1px solid var(--line);border-radius:12px;margin-bottom:8px}
+.t2 .row:hover{border-color:var(--line2)}
+.t2 .rh{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1.5fr) 128px 150px minmax(0,1.3fr) 110px;gap:16px;align-items:center;padding:14px 18px;cursor:pointer}
+.t2 .tk{font-family:var(--mono);font-weight:500;color:var(--gold);font-size:15px}.t2 .nm{display:block;font-size:12.5px;color:var(--dust);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.t2 .sub{display:block;font-family:var(--mono);font-size:10.5px;color:var(--mute);margin-top:3px}
+.t2 .gauge{position:relative;height:8px;background:var(--ink2);border-radius:4px;margin-top:6px}
+.t2 .gauge .fill{position:absolute;top:0;bottom:0;border-radius:4px;background:linear-gradient(90deg,#ef7d5a,#8a3f28)}
+.t2 .gauge .now{position:absolute;top:-4px;width:3px;height:16px;background:var(--cream);border-radius:2px}
+.t2 .gl{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10.5px;color:var(--mute);margin-top:4px}
+.t2 .chip{display:inline-block;font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;border:1px solid var(--line2);border-radius:5px;padding:3px 8px}
+.t2 .num{font-family:var(--mono);font-size:13px}.t2 .up{color:var(--up)}.t2 .dn{color:var(--down)}.t2 .mu{color:var(--mute)}
+.t2 .det{border-top:1px solid var(--line);padding:16px 18px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:24px}
+.t2 .det h5{font-family:var(--mono);font-size:10px;letter-spacing:.2em;color:var(--mute);margin:0 0 10px;font-weight:500}
+.t2 .qb{display:flex;align-items:flex-end;gap:5px;height:70px}.t2 .qb i{flex:1;background:linear-gradient(180deg,#3ec27a,#1f6b43);border-radius:3px 3px 0 0}
+.t2 .ev{display:flex;gap:12px;padding:6px 0;border-bottom:1px solid var(--line);font-size:13px}.t2 .ev:last-child{border-bottom:none}
+.t2 .ev span:first-child{font-family:var(--mono);color:var(--mute);width:92px;flex-shrink:0}
+.t2 .open{font-family:var(--mono);font-size:12px;color:var(--gold);background:none;border:1px solid var(--line2);border-radius:6px;padding:8px 12px;margin-top:12px}
+.t2 .lb{display:grid;grid-template-columns:36px minmax(0,1.4fr) minmax(0,2.4fr) 150px 150px;gap:16px;align-items:center;padding:13px 18px;background:var(--panel);border:1px solid var(--line);border-radius:12px;margin-bottom:8px;cursor:pointer}
+.t2 .lb:hover{border-color:var(--line2)}.t2 .lb .rk{font-family:var(--serif);font-size:22px;color:var(--cream)}
+.t2 .rets{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:4px}
+.t2 .rets div{border-radius:6px;padding:6px 4px;text-align:center;font-family:var(--mono);font-size:11.5px}
+.t2 .rets small{display:block;font-size:9.5px;color:var(--mute);margin-bottom:2px;letter-spacing:.08em}
+.t2 .meter{height:6px;background:var(--ink2);border-radius:3px;margin-top:6px;overflow:hidden}.t2 .meter i{display:block;height:100%;border-radius:3px}
+.t2 .gc{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.t2 .gcard{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;display:flex;flex-direction:column;gap:12px;cursor:pointer}
+.t2 .gcard:hover{border-color:var(--gold)}
+.t2 .streak{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--gold);border:1px solid var(--line2);border-radius:5px;padding:3px 8px}
+.t2 .kv{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.t2 .kv div{background:var(--panel2);border-radius:8px;padding:10px 12px}.t2 .kv .k{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;color:var(--mute)}
+.t2 .kv .v{font-family:var(--mono);font-size:15px;color:var(--cream);margin-top:4px}
+.t2 .foot{font-size:13px;color:var(--mute);line-height:1.7;margin:18px 0 70px;max-width:980px}
+.t2 .empty{padding:30px;text-align:center;color:var(--mute);font-family:var(--mono);font-size:12.5px}
+@media (max-width:1100px){.t2 .rh{grid-template-columns:1fr 1fr}.t2 .lb{grid-template-columns:30px 1fr;}.t2 .lb .hide{display:none}.t2 .gc,.t2 .trk,.t2 .callout,.t2 .det{grid-template-columns:1fr}.t2 nav .links{display:none}.t2 h1{font-size:34px}}
+`;
+
+const pct = (v: any, d = 0) => v == null ? '—' : `${v >= 0 ? '+' : ''}${(v * 100).toFixed(d)}%`;
+const bil = (v: any) => v == null ? '—' : v >= 1e12 ? `$${(v / 1e12).toFixed(2)}T` : v >= 1e9 ? `$${(v / 1e9).toFixed(1)}B` : `$${(v / 1e6).toFixed(0)}M`;
+const nice = (n: string) => (n || '').replace(/ Class [A-Z] (Common|Ordinary) (Stock|Shares)| Common Stock| Ordinary Shares/g, '');
+const cellBg = (v: any) => v == null ? '#1f1510' : v > 0 ? `rgba(62,194,122,${Math.min(0.55, 0.12 + Math.abs(v) * 0.9)})` : `rgba(239,125,90,${Math.min(0.55, 0.12 + Math.abs(v) * 0.9)})`;
+const fmtDate = (s: any) => s ? new Date(s + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : '—';
+
+const Bars: React.FC<{ v: number[] }> = ({ v }) => {
+  const xs = (v || []).filter(x => x != null && x > 0); if (xs.length < 2) return <div className="mu" style={{ fontSize: 12 }}>no quarterly sales on file</div>;
+  const mx = Math.max(...xs);
+  return (<><div className="qb">{xs.map((x, i) => <i key={i} style={{ height: `${Math.max(6, x / mx * 100)}%` }} />)}</div>
+    <div className="gl"><span>{xs.length} quarters ago</span><span>latest</span></div></>);
+};
+
+const TrackersV2: React.FC = () => {
+  const nav = useNavigate(); const [sp, setSp] = useSearchParams();
+  const tr = TRACKERS.find(t => t.id === sp.get('t')) || TRACKERS[0];
+  const tier = (TIERS.find(x => x[0] === sp.get('tier')) || TIERS[0])[0];
+  const set = (k: string, v: string) => { const n = new URLSearchParams(sp); n.set(k, v); setSp(n, { replace: false }); };
+  const [data, setData] = useState<any>(null); const [open, setOpen] = useState<string | null>(null);
+  const [sort, setSort] = useState('size'); const [weak, setWeak] = useState(false);
+  const [depth, setDepth] = useState('all'); const [stage, setStage] = useState('all'); const [cause, setCause] = useState('all');
+  useEffect(() => { setData(null); setOpen(null);
+    const qs = tr.id === 'on-sale' ? `?tier=${tier}&sort=${sort}&quality=${weak ? 'all' : 'strong'}` : `?tier=${tier}`;
+    api.get(`/api/v6/trackers/${tr.api}${qs}`).then(r => setData(r.data)).catch(() => setData({ error: true, companies: [] }));
+  }, [tr.id, tier, sort, weak]); // eslint-disable-line
+  const go = (t: string) => nav(`/dashboard?ticker=${t}`);
+
+  const rows = useMemo(() => {
+    const cs = data?.companies || [];
+    if (tr.id !== 'on-sale') return cs;
+    return cs.filter((c: any) => (depth === 'all' || (depth === '20' && c.pct_below_high > -0.30) || (depth === '30' && c.pct_below_high <= -0.30 && c.pct_below_high > -0.50) || (depth === '50' && c.pct_below_high <= -0.50))
+      && (stage === 'all' || c.stage === stage) && (cause === 'all' || c.drop_cause === cause));
+  }, [data, tr.id, depth, stage, cause]);
+
+  const hist = data?.history?.buckets || {};
+  const hb = depth === '50' ? hist['50'] : depth === '30' ? hist['30'] : hist['20'];
+  const hbLabel = depth === '50' ? '50%' : depth === '30' ? '30%' : '20%';
+
+  return (<div className="t2"><style>{CSS}</style>
+    <nav><div className="wrap"><a className="logo" onClick={() => nav('/')}>QUANTEDGE</a>
+      <div className="links"><a onClick={() => nav('/')}>Markets</a><a className="on">Trackers</a><a onClick={() => nav('/methodology')}>How it works</a></div></div></nav>
+    <div className="wrap">
+      <div className="head"><div className="eyebrow">Trackers · rebuilt every night</div><h1>Find the companies worth your attention.</h1>
+        <div className="trk">{TRACKERS.map(t => (<button key={t.id} className={`tb ${t.id === tr.id ? 'on' : ''}`} onClick={() => set('t', t.id)}>
+          <div className="n">{t.name}</div><div className="d">{t.q}</div></button>))}</div>
+        <div className="tiers">{TIERS.map(([k, l, s]) => (<button key={k} className={`tier ${tier === k ? 'on' : ''}`} onClick={() => set('tier', k)}>{l}<small>{s}</small></button>))}</div>
+      </div>
+
+      {/* ── GREAT COMPANIES ON SALE ── */}
+      {tr.id === 'on-sale' && (<>
+        <div className="callout">
+          <div className="card"><div className="k">HOW THIS LIST IS BUILT</div>
+            <div className="v">Companies at least <b>20% below their highest price of the last 5 years</b>, whose business is still <b>healthy, profitable and backed by cash</b> — the difference between a dip and a broken company. Each shows <b>why it fell</b>: the whole market, its industry, or something specific to the company.</div></div>
+          <div className="card"><div className="k">WHAT HISTORY SAYS · LARGE US COMPANIES DOWN {hbLabel}+</div>
+            {hb ? <><div className="big">{Math.round(hb.recovered_pct)} in 100 got back to their high</div>
+              <div className="v">about {Math.round(hb.recovered_within_1y_pct)} in 100 within a year · typically after <b>{Math.round(hb.median_sessions_to_recover / 21)} months</b> · {hb.episodes.toLocaleString()} past cases since 2021. Companies that went bankrupt or were delisted aren't in this data, so real odds are somewhat lower.</div></>
+              : <div className="v">measuring…</div>}</div>
+        </div>
+        <div className="bar">
+          <span className="lbl">DEPTH</span>{[['all', 'All'], ['20', '20–30%'], ['30', '30–50%'], ['50', '50%+']].map(([k, l]) => <button key={k} className={`pill ${depth === k ? 'on' : ''}`} onClick={() => setDepth(k)}>{l}</button>)}
+          <span className="lbl">NOW</span>{[['all', 'Any'], ['falling', 'Still falling'], ['basing', 'Sideways'], ['turning', 'Turning up'], ['recovering', 'Recovering']].map(([k, l]) => <button key={k} className={`pill ${stage === k ? 'on' : ''}`} onClick={() => setStage(k)}>{l}</button>)}
+        </div>
+        <div className="bar">
+          <span className="lbl">WHY IT FELL</span>{[['all', 'Any'], ['market', 'Whole market'], ['industry', 'Its industry'], ['company', 'Company-specific']].map(([k, l]) => <button key={k} className={`pill ${cause === k ? 'on' : ''}`} onClick={() => setCause(k)}>{l}</button>)}
+          <span className="lbl">SORT</span>{[['size', 'Biggest'], ['discount', 'Deepest discount'], ['business', 'Strongest business']].map(([k, l]) => <button key={k} className={`pill ${sort === k ? 'on' : ''}`} onClick={() => setSort(k)}>{l}</button>)}
+          <button className={`pill ${weak ? 'on' : ''}`} onClick={() => setWeak(w => !w)} style={{ marginLeft: 8 }}>{weak ? '✓ ' : ''}Include weaker businesses</button>
+          <span className="meta">{data ? `${rows.length} companies${data.counts ? ` · ${data.counts.weakening} weaker set aside` : ''} · as of ${data.as_of || ''}` : 'loading…'}</span>
+        </div>
+        {data && rows.length === 0 && <div className="empty">no companies match these filters</div>}
+        {rows.map((c: any) => { const st = STAGE[c.stage] || [c.stage, '#b09c86']; const lowPct = c.low_date && c.pct_off_low != null ? (1 + c.pct_below_high) / (1 + c.pct_off_low) - 1 : null;
+          const isOpen = open === c.ticker;
+          return (<div className="row" key={c.ticker}>
+            <div className="rh" onClick={() => setOpen(isOpen ? null : c.ticker)}>
+              <div><span className="tk">{c.ticker}</span><span className="nm">{nice(c.name)}</span><span className="sub">{c.sector} · {bil(c.market_cap)}</span></div>
+              <div><span className="num dn" style={{ fontSize: 17 }}>{pct(c.pct_below_high)}</span> <span className="mu num" style={{ fontSize: 11 }}>from {fmtDate(c.high_date)} high · {c.months_since_high} mo</span>
+                <div className="gauge">{lowPct != null && <div className="fill" style={{ left: 0, width: `${Math.min(100, -lowPct * 100)}%` }} />}
+                  <div className="now" style={{ left: `calc(${Math.min(100, -c.pct_below_high * 100)}% - 1px)` }} /></div>
+                <div className="gl"><span>high</span><span>{lowPct != null ? `low ${pct(lowPct)}` : ''} · now {pct(c.pct_below_high)}</span></div></div>
+              <div><span className="chip" style={{ color: st[1], borderColor: st[1] + '66' }}>{st[0]}</span>{c.pct_off_low != null && <span className="sub">{pct(c.pct_off_low)} off the low</span>}</div>
+              <div><span className="chip">{CAUSE[c.drop_cause] || '—'}</span>
+                <span className="sub">market {pct(c.mkt_move_since_high)} · peers {pct(c.sector_move_since_high)}</span></div>
+              <div className="num"><span className={(c.sales_yoy ?? 0) >= 0 ? 'up' : 'dn'}>sales {pct(c.sales_yoy)}</span> · margin {c.op_margin != null ? `${Math.round(c.op_margin * 100)}%` : '—'}
+                <span className="sub">{c.cash_backed ? '✓ profits backed by cash' : 'cash backing weak'}{c.quality === 'weakening' ? ' · weaker business' : ''}</span></div>
+              <div className="num mu" style={{ fontSize: 11.5 }}>next results<br /><span style={{ color: 'var(--latte)' }}>~{fmtDate(c.next_results_est)}</span><span className="sub">estimate</span></div>
+            </div>
+            {isOpen && (<div className="det">
+              <div><h5>SALES · LAST 8 QUARTERS (SEC FILINGS)</h5><Bars v={c.sales_quarters} />
+                {c.history_note && <div className="sub" style={{ marginTop: 10 }}>Price {c.history_note}.</div>}</div>
+              <div><h5>FILED AROUND THE DROP</h5>
+                {(c.around_the_drop || []).length === 0 ? <div className="mu" style={{ fontSize: 13 }}>no material SEC filings between the high and a month after the low</div> :
+                  c.around_the_drop.map((e: any, i: number) => <div className="ev" key={i}><span>{fmtDate(e.date)}</span><span>{e.item === '2.02' ? 'Results released' : e.title}</span></div>)}
+                <button className="open" onClick={() => go(c.ticker)}>Open full analysis →</button></div>
+            </div>)}
+          </div>); })}
+        <p className="foot">“High” = the highest closing price in the last 5 years (our price history starts September 2021). “Why it fell” compares the company's fall since its high with the S&amp;P 500 and with its closest industry peers over the same dates. Next results dates are estimates from the last report. A company on sale can keep falling — this is a list to research, not advice.</p>
+      </>)}
+
+      {/* ── QUIET CLIMBERS ── */}
+      {tr.id === 'quiet' && (<>
+        <div className="callout">
+          <div className="card"><div className="k">HOW THIS LIST IS BUILT</div>
+            <div className="v">Companies <b>up over the past year, 6 months and 3 months</b> — rising in both halves of the year, not bouncing back from a fall — that <b>beat the market in at least 15 of the last 26 weeks</b>, while getting <b>no more news coverage than similar-sized companies</b>. Ranked by how steady and how far, against how little attention.</div></div>
+          <div className="card"><div className="k">HOW TO READ IT</div>
+            <div className="v">The six cells show the move over each period — green up, orange down. <b>Coverage vs peers</b> below 1.0× means fewer news articles than a typical company this size. Our news feed is thin for many companies, so treat coverage as a hint, not a measurement.</div></div>
+        </div>
+        <div className="bar"><span className="meta" style={{ marginLeft: 0 }}>{data ? `${rows.length} companies · as of ${data.as_of || ''}` : 'loading…'}</span></div>
+        {data && rows.length === 0 && <div className="empty">no quiet climbers in this size tier today</div>}
+        {rows.map((c: any, i: number) => (<div className="lb" key={c.ticker} onClick={() => go(c.ticker)}>
+          <span className="rk">{i + 1}</span>
+          <div><span className="tk">{c.ticker}</span><span className="nm">{nice(c.name)}</span><span className="sub">{c.sector} · {bil(c.market_cap)}</span></div>
+          <div className="rets">{[['1D', '1d'], ['1W', '1w'], ['1M', '1m'], ['3M', '3m'], ['6M', '6m'], ['1Y', '1y']].map(([l, k]) => (
+            <div key={k} style={{ background: cellBg(c.returns[k]) }}><small>{l}</small>{pct(c.returns[k])}</div>))}</div>
+          <div className="hide"><span className="num">beat market {c.weeks_beat_mkt_26}/26 wks</span>
+            <div className="meter"><i style={{ width: `${c.weeks_beat_mkt_26 / 26 * 100}%`, background: 'var(--up)' }} /></div></div>
+          <div className="hide"><span className="num">coverage {c.attention_vs_peers.toFixed(1)}× peers</span>
+            <div className="meter"><i style={{ width: `${Math.min(100, c.attention_vs_peers / 1.25 * 100)}%`, background: c.attention_vs_peers <= 1 ? 'var(--gold)' : 'var(--dust)' }} /></div>
+            <span className="sub">{c.news_180d} articles in 6 months</span></div>
+        </div>))}
+        <p className="foot">Steady climbs can stop. A stock that has risen a lot has more room to fall, too. Research, not advice.</p>
+      </>)}
+
+      {/* ── GETTING BETTER ── */}
+      {tr.id === 'better' && (<>
+        <div className="callout">
+          <div className="card"><div className="k">HOW THIS LIST IS BUILT</div>
+            <div className="v">From each company's SEC filings: <b>sales growth speeding up for at least two quarters in a row</b>, <b>operating margin wider than a year ago</b>, sales growing at least 5%, and <b>profits backed by real cash</b>. Each quarter is dated to when it was first filed — nothing from the future.</div></div>
+          <div className="card"><div className="k">WHY IT MATTERS</div>
+            <div className="v">Improvement often shows up in the numbers before the price fully reflects it. The aim is to catch it <b>while it's happening</b> — check each company's price move to see how much is already priced in.</div></div>
+        </div>
+        <div className="bar"><span className="meta" style={{ marginLeft: 0 }}>{data ? `${rows.length} companies · as of ${data.as_of || ''}` : 'loading…'}</span></div>
+        {data && rows.length === 0 && <div className="empty">no companies in this size tier meet all the conditions today</div>}
+        <div className="gc">{rows.map((c: any) => (<div className="gcard" key={c.ticker} onClick={() => go(c.ticker)}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}><span className="tk">{c.ticker}</span>
+            <span className="streak">{c.acceleration_streak >= 7 ? '7+' : c.acceleration_streak} QTRS SPEEDING UP</span></div>
+          <span className="nm" style={{ marginTop: -8 }}>{nice(c.name)} · {bil(c.market_cap)}</span>
+          <Bars v={(c.quarters || []).map((q: any) => q.sales)} />
+          <div className="kv">
+            <div><div className="k">SALES GROWTH</div><div className="v"><span className="mu">{pct(c.sales_yoy_prev)}</span> → <span className="up">{pct(c.sales_yoy)}</span></div></div>
+            <div><div className="k">OPERATING MARGIN</div><div className="v"><span className="mu">{c.op_margin_year_ago != null ? `${Math.round(c.op_margin_year_ago * 100)}%` : '—'}</span> → <span className="up">{c.op_margin != null ? `${Math.round(c.op_margin * 100)}%` : '—'}</span></div></div>
+            <div><div className="k">PRICE · 6 MONTHS</div><div className={`v ${(c.ret_6m ?? 0) >= 0 ? 'up' : 'dn'}`}>{pct(c.ret_6m)}</div></div>
+            <div><div className="k">BELOW 5Y HIGH</div><div className="v">{pct(c.pct_below_high)}</div></div>
+          </div>
+          <span className="sub">{c.cash_backed ? '✓ profits backed by cash' : ''}{c.one_off_suspected ? ' · year-ago margin distorted by a one-off loss' : ''} · last quarter {fmtDate(c.last_quarter)}</span>
+        </div>))}</div>
+        <p className="foot">Improving results can reverse, and the price may already reflect them. Research, not advice.</p>
+      </>)}
+    </div></div>);
+};
+export default TrackersV2;

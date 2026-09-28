@@ -8,6 +8,7 @@ import { Toaster } from 'react-hot-toast';
 import Landing from './pages/Landing';
 import Home from './pages/Home';
 import Trackers from './pages/Trackers';
+import TrackersV2 from './pages/TrackersV2';
 import Legal from './pages/Legal';
 import LandingWire from './pages/LandingWire';
 import Dashboard from './pages/Dashboard';
@@ -38,6 +39,7 @@ export default function App() {
       <Routes>
         {/* Public */}
         <Route path="/"          element={<Home />} />
+        <Route path="/trackers-new" element={<TrackersV2 />} />
         <Route path="/trackers" element={<Trackers />} />
         <Route path="/trackers/:tab" element={<Trackers />} />
         <Route path="/terms"     element={<Legal page="terms" />} />
