@@ -90,6 +90,7 @@ const PatternChart:React.FC<{ticker:string}>=({ticker})=>{
           {d.forecast&&!d.forecast.error&&cell(`ML FORECAST · ${d.forecast.horizon_label.toUpperCase()}`,
             d.forecast.produced?(d.forecast.pred_pct!=null?pf(d.forecast.pred_pct,2):'—'):'not produced',
             d.forecast.validated?C.gold:C.cocoa,
+            d.forecast.degenerate?'NOT MEASURABLE — validation window shorter than two horizons':
             d.forecast.validated?`VALIDATED · IC ${d.forecast.ic?.toFixed(3)} · t ${d.forecast.t_stat?.toFixed(2)}`:'NOT VALIDATED — shown for transparency, not as a signal')}
         </div></div>);})()}
     {/* chart — canvas engine */}

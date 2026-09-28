@@ -70,6 +70,7 @@ def _validation() -> dict:
         r = json.load(open("/app/models/panel/training_report.json"))
         return {"trained_at": r.get("trained_at"),
                 "horizons": {v.get("horizon_label", h): {"reliable": bool(v.get("reliable")),
+                                                         "not_measurable": bool(v.get("validation_degenerate")),
                                                          "ic": round(v.get("ic_all_dates", {}).get("ensemble") or 0, 4),
                                                          "t_stat": round(v.get("ic_t_stat") or 0, 2)}
                              for h, v in r.get("horizons", {}).items()}}

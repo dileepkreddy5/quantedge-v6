@@ -428,6 +428,7 @@ async def pattern_chart(ticker: str, request: Request, horizon: str = Query("3m"
         hv = next((v for v in rep.get("horizons", {}).values() if v.get("horizon_label") == lab), {})
         forecast = {"horizon_label": lab, "pred_pct": (round(float(ens[pk]), 2) if pk and ens.get(pk) is not None else None),
                     "produced": bool(pk), "validated": bool(hv.get("reliable")),
+                    "degenerate": bool(hv.get("validation_degenerate")),
                     "ic": (hv.get("ic_all_dates") or {}).get("ensemble"), "t_stat": hv.get("ic_t_stat"),
                     "confidence": ens.get("confidence"), "note": hv.get("confidence_note")}
     except Exception as e:

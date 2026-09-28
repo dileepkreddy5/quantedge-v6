@@ -315,8 +315,14 @@ def main():
         MIN_T = 2.0
         # A skill claim needs three things: a HAC t past 2, enough dates for the
         # HAC correction itself to be stable (n >= 4*lag), and a positive IC.
-        reliable = bool(_hac_ok and abs(t_stat) >= MIN_T and ens_ic > 0)
+        # A validation window that cannot hold two independent horizon windows
+        # yields a degenerate IC: on the first un-truncated panel the 1-year
+        # model validated on 667 rows past the split and printed IC +0.83 with
+        # t = 0.00. That number is not evidence and must not be presented as any.
+        degenerate = bool(ens_nd < 2)
+        reliable = bool(_hac_ok and abs(t_stat) >= MIN_T and ens_ic > 0 and not degenerate)
         horizon_reports[str(h)] = {
+            "validation_degenerate": degenerate,
             "horizon_label": HORIZON_LABELS[h],
             "ic_all_dates": {"xgboost": round(xgb_ic_s,4), "lightgbm": round(lgb_ic_s,4), "ensemble": round(ens_ic,4)},
             "ic_independent": ic_independent,
@@ -336,6 +342,10 @@ def main():
             "n_train": int(train_mask.sum()), "n_val": int(val_mask.sum()),
             "reliable": reliable,
             "confidence_note": (
+                f"Not measurable: only {ens_nd} independent {h}-day window(s) fit in the {n_dates_used}-date validation period "
+                f"(n_val={int(val_mask.sum())}). The IC computed here is degenerate and is not reported as evidence; "
+                f"this horizon needs a validation period of at least two horizons."
+                if degenerate else
                 f"Validated: held-out rank-IC {ens_ic:+.3f}, Newey-West t={t_stat:+.2f} across all {n_dates_used} scoring dates (overlap lag {_lag}); "
                 f"{ens_nd} of those windows are non-overlapping."
                 if reliable else

@@ -45,4 +45,9 @@ class PatternLibJob:
             logger.info(f"✅ Candlesticks rescanned: {sum(counts.values())} occurrences")
         except Exception as e:
             logger.error(f"Candlestick scan failed: {e}")
+        try:
+            from quantedge.patterns.fired import scan_fired
+            logger.info(f"✅ Fired-last-night: {await scan_fired(self.pool, str(artifact_write_path('fired_last_night.json')))}")
+        except Exception as e:
+            logger.error(f"Fired scan failed: {e}")
         logger.info("🧬 Pattern nightly rebuild complete")

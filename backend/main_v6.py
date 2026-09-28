@@ -76,6 +76,8 @@ from routers.brief_router import router as brief_router
 from routers.patterns_router import router as patterns_router
 from routers.intel_router import router as intel_router
 from routers.agent_router import router as agent_router
+from routers.wire_router import router as wire_router
+from routers.home_router import router as home_router
 from ml.price_oracle.router import router as oracle_router
 from services.signal_tracker import SignalTracker, OutcomeFillerJob
 
@@ -518,6 +520,17 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning(f"CI ingest not scheduled: {e}")
 
+        # Board cohorts — 03:15 ET, after multibagger (02:00) and rebound (02:30): snapshot
+        # tonight's boards and fill outcomes for older cohorts. The boards' track record.
+        try:
+            from services.board_cohort_job import BoardCohortJob
+            scheduler.add_job(BoardCohortJob(app.state.db).run, trigger=CronTrigger(hour=3, minute=15, timezone=et),
+                              id="board_cohorts", name="Nightly board cohort snapshot + outcome fill",
+                              replace_existing=True, max_instances=1, coalesce=True)
+            logger.info("✅ Board cohorts scheduled (03:15 ET nightly)")
+        except Exception as e:
+            logger.warning(f"Board cohorts not scheduled: {e}")
+
         # Nightly full-universe panel rebuild + multi-horizon retrain.
         # 02:15 America/Denver — after the 02:00/02:30 ET scans have finished and
         # clear of the 08:00 UTC pg_dumpall. Runs as subprocesses and promotes
@@ -701,6 +714,8 @@ app.include_router(brief_router,         prefix="/api/v6",             tags=["Br
 app.include_router(patterns_router,      prefix="/api/v6",             tags=["Patterns"])
 app.include_router(intel_router,         prefix="/api/v6",             tags=["Intel"])
 app.include_router(agent_router,         prefix="/api/v6",             tags=["Agent"])
+app.include_router(wire_router,          prefix="/api/v6",             tags=["Wire"])
+app.include_router(home_router,          prefix="/api/v6",             tags=["Home"])
 app.include_router(peers_router,         prefix="/api/v6",             tags=["Peers"])
 app.include_router(ecosystem_router,     prefix="/api/v6",             tags=["Ecosystem"])
 app.include_router(news_router,          prefix="/api/v6",             tags=["News"])

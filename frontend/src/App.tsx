@@ -6,6 +6,9 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import Landing from './pages/Landing';
+import Home from './pages/Home';
+import Legal from './pages/Legal';
+import LandingWire from './pages/LandingWire';
 import Dashboard from './pages/Dashboard';
 import Screener from './pages/Screener';
 import AscentRadar from './pages/AscentRadar';
@@ -33,7 +36,12 @@ export default function App() {
       />
       <Routes>
         {/* Public */}
-        <Route path="/"          element={<Landing />} />
+        <Route path="/"          element={<Home />} />
+        <Route path="/terms"     element={<Legal page="terms" />} />
+        <Route path="/privacy"   element={<Legal page="privacy" />} />
+        <Route path="/disclaimer" element={<Legal page="disclaimer" />} />
+        <Route path="/data-sources" element={<Legal page="data-sources" />} />
+        <Route path="/classic"   element={<Landing />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/screener"  element={<Screener />} />
         <Route path="/ascent"    element={<AscentRadar />} />
