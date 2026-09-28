@@ -37,6 +37,9 @@ ALTER TABLE company_facts ADD COLUMN IF NOT EXISTS below_200d BOOLEAN;
 ALTER TABLE company_facts ADD COLUMN IF NOT EXISTS cross_200d_date DATE;
 ALTER TABLE company_facts ADD COLUMN IF NOT EXISTS cross_200d_vol DOUBLE PRECISION;
 ALTER TABLE company_facts ADD COLUMN IF NOT EXISTS peer_ret_1m DOUBLE PRECISION;
+ALTER TABLE company_facts ADD COLUMN IF NOT EXISTS ret_2w DOUBLE PRECISION;
+ALTER TABLE company_facts ADD COLUMN IF NOT EXISTS at_52w_high BOOLEAN;
+ALTER TABLE company_facts ADD COLUMN IF NOT EXISTS at_52w_low BOOLEAN;
 """
 
 OVERRIDE = {"GOOGL": "Communication", "GOOG": "Communication", "META": "Communication", "NFLX": "Communication",
@@ -180,7 +183,9 @@ async def build_price_facts(pool, as_of: date | None = None) -> dict:
                       "news_30d": int(a30), "news_180d": int(a180), "cik": str(u["cik"]) if u["cik"] else None,
                       "dollar_vol_20": float((c[-20:] * v[-20:]).mean()), "sic": str(u["sic_code"] or ""),
                       "data_suspect": None, "history_note": history_note,
-                      "below_200d": below200, "cross_200d_date": ds[cross_i] if cross_i else None, "cross_200d_vol": cross_vol})
+                      "below_200d": below200, "cross_200d_date": ds[cross_i] if cross_i else None, "cross_200d_vol": cross_vol,
+                      "ret_2w": ret(10), "at_52w_high": bool(n >= 250 and c[-1] >= c[-252:].max() * 0.995),
+                      "at_52w_low": bool(n >= 250 and c[-1] <= c[-252:].min() * 1.005)})
         meta.append(k)
         if len(facts) % 1000 == 0: logger.info(f"[facts] {len(facts)} companies…")
 
@@ -237,7 +242,7 @@ async def build_price_facts(pool, as_of: date | None = None) -> dict:
             "ret_1d", "ret_1w", "ret_1m", "ret_3m", "ret_6m", "ret_1y", "weeks_beat_mkt_26", "up_weeks_26",
             "vol_ratio_20_60", "up_vol_share_20", "mkt_move_since_high", "sector_move_since_high", "drop_cause",
             "news_30d", "news_180d", "cik", "primary_listing", "dollar_vol_20", "peer_group", "data_suspect", "history_note",
-            "below_200d", "cross_200d_date", "cross_200d_vol", "peer_ret_1m"]
+            "below_200d", "cross_200d_date", "cross_200d_vol", "peer_ret_1m", "ret_2w", "at_52w_high", "at_52w_low"]
     ph = ",".join(f"${i + 2}" for i in range(len(cols)))
     upd = ",".join(f"{c}=EXCLUDED.{c}" for c in cols[1:])
     async with pool.acquire() as con:
@@ -246,29 +251,33 @@ async def build_price_facts(pool, as_of: date | None = None) -> dict:
                               [(as_of, *[f.get(c) for c in cols]) for f in facts])
 
     # history: large companies that fell 20/30/50% from a high — how often, and how fast, they got back
-    base = {}
-    large_rows = [row_of[f["ticker"]] for f in facts if f["tier"] == "large" and not f["is_spac"] and f["primary_listing"] and not f["data_suspect"]]
-    for T in (0.20, 0.30, 0.50):
-        eps = []
-        for r in large_rows:
-            s = M[r]; s = s[np.isfinite(s)]
-            if len(s) < 260: continue
-            peak, crossed = s[0], False
-            for i in range(1, len(s)):
-                if s[i] >= peak:
-                    peak, crossed = s[i], False; continue
-                if not crossed and s[i] <= peak * (1 - T):
-                    crossed = True; tgt = peak
-                    rec = np.where(s[i:] >= tgt)[0]
-                    eps.append({"rec": bool(len(rec)), "days": int(rec[0]) if len(rec) else None, "follow": len(s) - 1 - i})
-        full = [e for e in eps if e["follow"] >= 252]
-        days = [e["days"] for e in eps if e["rec"]]
-        base[f"{int(T * 100)}"] = {"episodes": len(eps), "recovered_pct": round(100 * np.mean([e["rec"] for e in eps]), 1) if eps else None,
-                                   "recovered_within_1y_pct": round(100 * np.mean([e["rec"] and e["days"] <= 252 for e in full]), 1) if full else None,
-                                   "median_sessions_to_recover": int(np.median(days)) if days else None,
-                                   "episodes_with_1y_followup": len(full)}
+    by_tier = {}
+    for TIER in ("large", "mid", "small"):
+      base = {}
+      large_rows = [row_of[f["ticker"]] for f in facts if f["tier"] == TIER and not f["is_spac"] and f["primary_listing"] and not f["data_suspect"]]
+      for T in (0.20, 0.30, 0.50):
+          eps = []
+          for r in large_rows:
+              s = M[r]; s = s[np.isfinite(s)]
+              if len(s) < 260: continue
+              peak, crossed = s[0], False
+              for i in range(1, len(s)):
+                  if s[i] >= peak:
+                      peak, crossed = s[i], False; continue
+                  if not crossed and s[i] <= peak * (1 - T):
+                      crossed = True; tgt = peak
+                      rec = np.where(s[i:] >= tgt)[0]
+                      eps.append({"rec": bool(len(rec)), "days": int(rec[0]) if len(rec) else None, "follow": len(s) - 1 - i})
+          full = [e for e in eps if e["follow"] >= 252]
+          days = [e["days"] for e in eps if e["rec"]]
+          base[f"{int(T * 100)}"] = {"episodes": len(eps), "recovered_pct": round(100 * np.mean([e["rec"] for e in eps]), 1) if eps else None,
+                                     "recovered_within_1y_pct": round(100 * np.mean([e["rec"] and e["days"] <= 252 for e in full]), 1) if full else None,
+                                     "median_sessions_to_recover": int(np.median(days)) if days else None,
+                                     "episodes_with_1y_followup": len(full)}
+      by_tier[TIER] = base
+    base = by_tier["large"]
     from core.artifact_paths import artifact_write_path
-    art = {"generated": str(as_of), "window": f"{dates[0]} to {dates[-1]}", "universe": "large companies (over $10B)",
+    art = {"generated": str(as_of), "window": f"{dates[0]} to {dates[-1]}", "universe": "large companies (over $10B)", "by_tier": by_tier,
            "note": "An episode starts when a stock first closes the given % below its prior high; recovered = closed back at that high within the data.",
            "buckets": base}
     artifact_write_path("great_on_sale_base.json").write_text(json.dumps(art))

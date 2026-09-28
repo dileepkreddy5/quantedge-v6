@@ -6,6 +6,7 @@ import { api } from '../auth/authStore';
 
 const TRACKERS = [
   { id: 'worth', name: 'Worth a look', q: 'Our shortlist: great companies on a dip, early growth not yet priced, fresh breakthroughs.', api: 'worth-a-look' },
+  { id: 'movers', name: 'Top movers', q: 'Biggest gainers and losers — from today to a full year.', api: 'movers' },
   { id: 'on-sale', name: 'Great companies on sale', q: 'The best companies trading far below their high — for reasons that will likely pass.', api: 'on-sale' },
   { id: 'quiet', name: 'Quiet climbers', q: 'Rising steadily, week after week, before everyone notices.', api: 'quiet-climbers' },
   { id: 'better', name: 'Getting better', q: 'Results improving quarter after quarter, straight from SEC filings.', api: 'getting-better' },
@@ -84,7 +85,9 @@ const CSS = `
 .t2 .wsg .dt{font-family:var(--mono);font-size:12px;color:var(--mute)}.t2 .wsg .sr{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;color:var(--dust)}
 .t2 .wsg small{display:block;color:var(--mute);font-size:12.5px;margin-top:2px}
 .t2 .wdot{width:9px;height:9px;border-radius:50%;display:inline-block}
-.t2 .feat{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:14px;margin-bottom:22px}
+.t2 .feat{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:22px}
+@media (max-width:1500px){.t2 .feat{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:800px){.t2 .feat{grid-template-columns:1fr}}
 .t2 .fc{background:linear-gradient(180deg,#221710,#1a110d);border:1px solid var(--line2);border-radius:16px;padding:20px;display:flex;flex-direction:column;gap:12px}
 .t2 .fc .rank{font-family:var(--serif);font-size:30px;color:var(--gold);line-height:1}
 .t2 .kd{display:inline-block;font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;border-radius:4px;padding:3px 7px;margin-right:5px}
@@ -133,17 +136,18 @@ const TrackersV2: React.FC = () => {
   const tier = (TIERS.find(x => x[0] === sp.get('tier')) || TIERS[0])[0];
   const etier = tr.id === 'rising' && tier === 'large' ? 'mid' : tier;     // rising stars: mid→large, small→mid
   const [q, setQ] = useState('');
+  const [period, setPeriod] = useState('1d');
   const set = (k: string, v: string) => { const n = new URLSearchParams(sp); n.set(k, v); setSp(n, { replace: false }); };
   const [raw, setData] = useState<any>(null); const [open, setOpen] = useState<string | null>(null);
   const [sort, setSort] = useState('size'); const [weak, setWeak] = useState(false);
   const [depth, setDepth] = useState('all'); const [stage, setStage] = useState('all'); const [cause, setCause] = useState('all');
   // Each response is labelled with the view it belongs to; a tracker only ever draws its own
   // data. Before this, switching tabs briefly drew the new tracker with the previous one's rows.
-  const key = `${tr.id}|${etier}|${sort}|${weak}`;
+  const key = `${tr.id}|${etier}|${sort}|${weak}|${tr.id === 'movers' ? period : ''}`;
   useEffect(() => { setData(null); setOpen(null); setQ('');
-    const qs = tr.id === 'on-sale' ? `?tier=${etier}&sort=${sort}&quality=${weak ? 'all' : 'strong'}` : tr.id === 'warn' ? `?tier=${etier}&healthy_only=${!weak}` : `?tier=${etier}`;
+    const qs = tr.id === 'on-sale' ? `?tier=${etier}&sort=${sort}&quality=${weak ? 'all' : 'strong'}` : tr.id === 'warn' ? `?tier=${etier}&healthy_only=${!weak}` : tr.id === 'movers' ? `?tier=${etier}&period=${period}&limit=25` : `?tier=${etier}`;
     api.get(`/api/v6/trackers/${tr.api}${qs}`).then(r => setData({ ...r.data, __key: key })).catch(() => setData({ error: true, companies: [], __key: key }));
-  }, [tr.id, etier, sort, weak]); // eslint-disable-line
+  }, [tr.id, etier, sort, weak, period]); // eslint-disable-line
   const data = raw && raw.__key === key ? raw : null;
   const [sev, setSev] = useState('all');
   const go = (t: string) => nav(`/dashboard?ticker=${t}`);
@@ -157,7 +161,7 @@ const TrackersV2: React.FC = () => {
       && (stage === 'all' || c.stage === stage) && (cause === 'all' || c.drop_cause === cause));
   }, [data, tr.id, depth, stage, cause, sev, q]);
 
-  const hist = data?.history?.buckets || {};
+  const hist = data?.history?.by_tier?.[etier] || data?.history?.buckets || {};
   const hb = depth === '50' ? hist['50'] : depth === '30' ? hist['30'] : hist['20'];
   const hbLabel = depth === '50' ? '50%' : depth === '30' ? '30%' : '20%';
 
@@ -184,7 +188,7 @@ const TrackersV2: React.FC = () => {
           <div className="card"><div className="k">WHAT IT'S BUILT ON — AND WHAT IT ISN'T</div>
             <div className="v">SEC filings, prices, peer comparisons, measured chart-pattern odds and warning signs. <b>Not</b> the ML forecasts — none currently hold up on recent data, so they're left out. These are <b>candidates to research, not recommendations</b>; some will not work out.</div></div>
         </div>
-        <div className="bar"><span className="meta" style={{ marginLeft: 0 }}>{data ? `${rows.length} companies · top 5 highlighted · as of ${data.as_of || ''}` : 'loading…'}</span></div>
+        <div className="bar"><span className="meta" style={{ marginLeft: 0 }}>{data ? `${rows.length} companies · top 8 featured · as of ${data.as_of || ''}` : 'loading…'}</span></div>
         {data && !q && rows.length === 0 && <div className="empty">nothing on the shortlist in this size tier today</div>}
         <div className="feat">{rows.filter((p: any) => p.top5).map((p: any, i: number) => (<div className="fc" key={p.ticker}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}><span className="rank">{i + 1}</span>
@@ -202,7 +206,7 @@ const TrackersV2: React.FC = () => {
             <button className="open" onClick={() => nav(`/dashboard?ticker=${p.ticker}&tab=pattern`)}>Pattern chart →</button></div>
         </div>))}</div>
         {rows.filter((p: any) => !p.top5).map((p: any, i: number) => (<div className="wr" key={p.ticker} onClick={() => go(p.ticker)}>
-          <span className="rk">{i + 6}</span>
+          <span className="rk">{i + 9}</span>
           <div><span className="tk">{p.ticker}</span><span className="nm">{nice(p.name)} · {bil(p.market_cap)}</span></div>
           <div className="hide">{p.kinds.map((k: string) => <span key={k} className={`kd ${kcls(k)}`}>{KIND[k] || k}</span>)}</div>
           <div className="hide" style={{ fontSize: 13, color: 'var(--latte)', lineHeight: 1.5 }}>{p.case[0]}</div>
@@ -213,12 +217,37 @@ const TrackersV2: React.FC = () => {
         <p className="foot">{data?.note} Research, not advice.</p>
       </>)}
 
+      {/* ── TOP MOVERS ── */}
+      {tr.id === 'movers' && (<>
+        <div className="bar" style={{ marginTop: 20 }}>
+          <span className="lbl">PERIOD</span>{[['1d', '1 day'], ['1w', '1 week'], ['2w', '2 weeks'], ['1m', '1 month'], ['3m', '3 months'], ['6m', '6 months'], ['1y', '1 year']].map(([k, l]) =>
+            <button key={k} className={`pill ${period === k ? 'on' : ''}`} onClick={() => setPeriod(k)}>{l}</button>)}
+          <span className="meta">{data ? `${data.universe} companies ranked · ${data.quote_time ? 'live quote as of ' + new Date(data.quote_time).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }) + ' ET (15-min delayed)' : 'as of the ' + data.as_of + ' close'}` : 'loading…'}</span>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(560px,1fr))', gap: 18 }}>
+          {(['gainers', 'losers'] as const).map(side => { const needle = q.trim().toLowerCase();
+            const list = ((data && data[side]) || []).filter((c: any) => !needle || c.ticker.toLowerCase().includes(needle) || (c.name || '').toLowerCase().includes(needle));
+            return (<div key={side}>
+              <div className="eyebrow" style={{ color: side === 'gainers' ? 'var(--up)' : 'var(--down)', margin: '6px 0 10px' }}>{side === 'gainers' ? 'Biggest gainers' : 'Biggest losers'}</div>
+              {data && list.length === 0 && <div className="empty">{needle ? `${q.toUpperCase()} isn't among them` : 'none'}</div>}
+              {list.map((c: any, i: number) => (<div className="lb" key={c.ticker} onClick={() => go(c.ticker)} style={{ gridTemplateColumns: '32px minmax(0,1.2fr) 96px minmax(0,2.2fr)' }}>
+                <span className="rk" style={{ fontSize: 18 }}>{i + 1}</span>
+                <div><span className="tk">{c.ticker}</span><span className="nm">{nice(c.name)} · {bil(c.market_cap)}</span>
+                  {c.tags.length > 0 && <span className="sub" style={{ color: 'var(--gold)' }}>{c.tags.join(' · ')}</span>}</div>
+                <span className={`num ${c.move >= 0 ? 'up' : 'dn'}`} style={{ fontSize: 18 }}>{pct(c.move, 1)}</span>
+                <div className="hide"><Rets r={c.returns} vol={c.vol_ratio_20_60} /></div>
+              </div>))}
+            </div>); })}
+        </div>
+        <p className="foot">{data?.note} A big move is a reason to look, not a reason to act.</p>
+      </>)}
+
       {/* ── GREAT COMPANIES ON SALE ── */}
       {tr.id === 'on-sale' && (<>
         <div className="callout">
           <div className="card"><div className="k">HOW THIS LIST IS BUILT</div>
             <div className="v">Companies at least <b>20% below their highest price of the last 5 years</b>, whose business is still <b>healthy, profitable and backed by cash</b> — the difference between a dip and a broken company. Each shows <b>why it fell</b>: the whole market, its industry, or something specific to the company.</div></div>
-          <div className="card"><div className="k">WHAT HISTORY SAYS · LARGE US COMPANIES DOWN {hbLabel}+</div>
+          <div className="card"><div className="k">WHAT HISTORY SAYS · {etier.toUpperCase()} US COMPANIES DOWN {hbLabel}+</div>
             {hb ? <><div className="big">{Math.round(hb.recovered_pct)} in 100 got back to their high</div>
               <div className="v">about {Math.round(hb.recovered_within_1y_pct)} in 100 within a year · typically after <b>{Math.round(hb.median_sessions_to_recover / 21)} months</b> · {hb.episodes.toLocaleString()} past cases since 2021. Companies that went bankrupt or were delisted aren't in this data, so real odds are somewhat lower.</div></>
               : <div className="v">measuring…</div>}</div>

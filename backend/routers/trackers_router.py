@@ -62,7 +62,7 @@ async def on_sale(request: Request, tier: str = Query("large"), min_drop: float 
                     "around_the_drop": [{"date": str(e["event_date"]), "title": e["title"], "item": e["item_code"]} for e in around[-4:]],
                     "last_results": str(results[-1]["event_date"]) if results else None,
                     "next_results_est": str(nxt) if nxt else None,
-                    "history": (base.get("buckets") or {}).get(_bucket(r["pct_below_high"]))})
+                    "history": ((base.get("by_tier") or {}).get(tier) or base.get("buckets") or {}).get(_bucket(r["pct_below_high"]))})
     def biz(c): return (c["op_margin"] or 0) + 0.5 * max(-0.5, min(1.0, c["sales_yoy"] or 0)) + (0.05 if c["cash_backed"] else 0)
     if sort == "discount": out.sort(key=lambda c: c["pct_below_high"])
     elif sort == "business": out.sort(key=biz, reverse=True)
@@ -408,7 +408,7 @@ async def worth_a_look(request: Request, tier: str = Query("large")):
     if fp:
         for x in json.loads(fp.read_text()).get("fired", []):
             if x.get("direction") == "bullish" and x.get("odds_21d"): fired[x["ticker"]] = x
-    base = ((sale.get("history") or {}).get("buckets") or {})
+    base = (((sale.get("history") or {}).get("by_tier") or {}).get(tier) or (sale.get("history") or {}).get("buckets") or {})
     picks = []
     for t in tks:
         s, g, w, rx = S.get(t), G.get(t), W.get(t), react.get(t)
@@ -454,7 +454,7 @@ async def worth_a_look(request: Request, tier: str = Query("large")):
         hist = None
         if s:
             bk = "50" if s["pct_below_high"] <= -0.5 else "30" if s["pct_below_high"] <= -0.3 else "20"
-            if base.get(bk): hist = f"Of large US companies that fell {bk}%+ from a high, {base[bk]['recovered_pct']:.0f} in 100 got back — typically in ~{round(base[bk]['median_sessions_to_recover']/21)} months."
+            if base.get(bk): hist = f"Of {tier} US companies that fell {bk}%+ from a high, {base[bk]['recovered_pct']:.0f} in 100 got back — typically in ~{round(base[bk]['median_sessions_to_recover']/21)} months."
         picks.append({"ticker": t, "name": c["name"], "sector": c["sector"], "market_cap": c["market_cap"], "price": c.get("price"),
                       "returns": c["returns"], "vol_ratio_20_60": c.get("vol_ratio_20_60"), "kinds": kinds, "case": case[:3],
                       "risks": risks[:3] or ["No warning signs in the last 30 days."], "history": hist,
@@ -474,7 +474,53 @@ async def worth_a_look(request: Request, tier: str = Query("large")):
             while est < _dt.date.today(): est += _dt.timedelta(days=91)
             for p in picks:
                 if p["ticker"] == r["ticker"]: p["next_results_est"] = str(est); p["next_results_basis"] = "estimated from its last reported quarter"
-    for i, p in enumerate(picks): p["top5"] = i < 5
+    for i, p in enumerate(picks): p["top5"] = i < 8          # featured (field name kept for the page)
     return {"as_of": sale["as_of"], "tier": tier, "n": len(picks), "companies": picks,
             "note": ("Candidates for your research, not recommendations. Built from verified sources only — SEC filings, prices, "
                      "measured pattern odds, warning signs. ML forecasts are not used while none validate on recent data.")}
+
+
+
+MOVER_MIN_DV = {"large": 0, "mid": 5e6, "small": 1e6}
+
+
+@router.get("/trackers/movers")
+async def movers(request: Request, tier: str = Query("large"), period: str = Query("1d"), limit: int = Query(25, ge=5, le=50)):
+    """Biggest gainers and losers in one size tier over a period. 1d uses the live (delayed)
+    quote; longer periods use the last close. Illiquid names are left out."""
+    if tier not in ("large", "mid", "small"): raise HTTPException(status_code=422, detail="tier must be large|mid|small")
+    col = {"1w": "ret_1w", "2w": "ret_2w", "1m": "ret_1m", "3m": "ret_3m", "6m": "ret_6m", "1y": "ret_1y"}.get(period)
+    if period != "1d" and not col: raise HTTPException(status_code=422, detail="period must be 1d|1w|2w|1m|3m|6m|1y")
+    pool = request.app.state.db
+    as_of = await pool.fetchval("SELECT max(as_of) FROM company_facts")
+    rows = await pool.fetch("""SELECT * FROM company_facts WHERE as_of=$1 AND tier=$2 AND primary_listing AND NOT is_spac
+                               AND data_suspect IS NULL AND coalesce(dollar_vol_20,0) >= $3""", as_of, tier, MOVER_MIN_DV[tier])
+    by = {r["ticker"]: r for r in rows}
+    quote_time = None
+    if period == "1d":
+        from routers.home_router import _snap
+        snap = await _snap(list(by))
+        move = {t: (v["chg_pct"] / 100.0) for t, v in snap.items() if v.get("chg_pct") is not None and v.get("price")}
+        upd = max([v.get("updated_ns") or 0 for v in snap.values()] or [0])
+        quote_time = __import__("datetime").datetime.fromtimestamp(upd / 1e9, tz=__import__("datetime").timezone.utc).isoformat() if upd else None
+        vol_today = {t: v.get("volume") or 0 for t, v in snap.items()}
+    else:
+        move = {t: r[col] for t, r in by.items() if r[col] is not None}
+        vol_today = {}
+    res = {t: e["event_date"] for e in await pool.fetch("""SELECT DISTINCT ON (ticker) ticker, event_date FROM ci_events
+        WHERE item_code='2.02' AND ticker = ANY($1) AND event_date > CURRENT_DATE - 7 ORDER BY ticker, event_date DESC""", list(by))}
+    def card(t, m):
+        r = by[t]; tags = []
+        if r["at_52w_high"]: tags.append("new 52-week high")
+        if r["at_52w_low"]: tags.append("new 52-week low")
+        if t in res: tags.append(f"results {res[t]}")
+        if (r["vol_ratio_20_60"] or 0) >= 1.8: tags.append(f"volume {r['vol_ratio_20_60']:.1f}× its usual")
+        return {"ticker": t, "name": r["name"], "sector": r["sector"], "market_cap": r["market_cap"], "price": r["price"], "move": m,
+                "returns": {"1d": r["ret_1d"], "1w": r["ret_1w"], "2w": r["ret_2w"], "1m": r["ret_1m"], "3m": r["ret_3m"], "6m": r["ret_6m"], "1y": r["ret_1y"]},
+                "vol_ratio_20_60": r["vol_ratio_20_60"], "tags": tags}
+    ranked = sorted(move.items(), key=lambda kv: kv[1])
+    return {"as_of": str(as_of), "tier": tier, "period": period, "quote_time": quote_time, "universe": len(move),
+            "gainers": [card(t, m) for t, m in reversed(ranked[-limit:]) if m > 0],
+            "losers": [card(t, m) for t, m in ranked[:limit] if m < 0],
+            "note": ("1-day moves use the live quote (15-minute delayed); longer periods use the last close. "
+                     "Companies trading under a minimum dollar volume are left out.")}
