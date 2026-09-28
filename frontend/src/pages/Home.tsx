@@ -8,7 +8,7 @@ const CSS = `
 .qh{--ink:#0d0806;--ink2:#130c09;--panel:#1a110d;--panel2:#21160f;--line:#33241b;--line2:#46321f;--gold:#e0ad3a;--gold2:#f3cf7a;--cream:#f6ecdd;--latte:#d9c9b4;--dust:#b09c86;--mute:#8a7762;--up:#3ec27a;--down:#ef7d5a;
   --serif:'Fraunces',Georgia,serif;--sans:'IBM Plex Sans',system-ui,sans-serif;--mono:'IBM Plex Mono',ui-monospace,monospace;background:var(--ink);color:var(--latte);font-family:var(--sans);min-height:100vh;-webkit-font-smoothing:antialiased}
 .qh *{box-sizing:border-box}.qh a{color:inherit;text-decoration:none;cursor:pointer}.qh button{font:inherit;cursor:pointer}
-.qh .wrap{max-width:1240px;margin:0 auto;padding:0 36px}
+.qh .wrap{max-width:1720px;margin:0 auto;padding:0 clamp(20px,3vw,56px)}
 .qh nav{border-bottom:1px solid var(--line)}.qh nav .wrap{display:flex;align-items:center;gap:30px;height:66px}
 .qh .logo{font-family:var(--mono);font-weight:600;letter-spacing:.4em;color:var(--gold);font-size:15px}
 .qh nav .links{margin-left:auto;display:flex;gap:26px;font-size:14.5px;color:var(--dust)}.qh nav .links a:hover{color:var(--cream)}
@@ -199,8 +199,8 @@ const Home: React.FC = () => {
         <a className="door" onClick={focusSearch}><div className="k">01 · A stock I'm curious about</div><h3>Check a stock you own or are thinking about.</h3>
           <p>Everything about one company, starting with a plain-English summary at the top.</p><div className="go">Search a stock →</div></a>
         <div className="door"><div className="k">02 · I'm looking for ideas</div><h3>Find companies worth a closer look.</h3>
-          <ul><li><a onClick={() => nav('/trackers/fast-growers')}>Fast-growing, quality companies</a></li><li><a onClick={() => nav('/trackers/comebacks')}>Beaten-down stocks that stopped falling</a></li>
-            <li><a onClick={() => nav('/trackers/climbers')}>Stocks climbing steadily</a></li><li><a onClick={() => nav('/trackers/filter')}>Build your own filter</a></li></ul></div>
+          <ul><li><a onClick={() => nav('/trackers?t=on-sale')}>Great companies on sale</a></li><li><a onClick={() => nav('/trackers?t=quiet')}>Quiet climbers — rising before anyone notices</a></li>
+            <li><a onClick={() => nav('/trackers?t=better')}>Getting better — results improving every quarter</a></li></ul></div>
         <a className="door" href="#markets"><div className="k">03 · How's the market?</div><h3>See the market's mood today.</h3>
           <p>Whether the market is calm or nervous, rising or falling — and what usually followed similar moments.</p><div className="go">Today's market →</div></a>
       </div>

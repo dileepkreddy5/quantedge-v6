@@ -51,6 +51,7 @@ async def on_sale(request: Request, tier: str = Query("large"), min_drop: float 
         nxt = (results[-1]["event_date"] + timedelta(days=91)) if results else None
         health = ("healthy" if f.get("healthy") else "weakening") if f.get("available") else "unknown"
         out.append({"ticker": r["ticker"], "name": r["name"], "sector": r["sector"], "market_cap": r["market_cap"], "price": r["price"],
+                    "returns": {"1d": r["ret_1d"], "1w": r["ret_1w"], "1m": r["ret_1m"], "3m": r["ret_3m"], "6m": r["ret_6m"], "1y": r["ret_1y"]}, "vol_ratio_20_60": r["vol_ratio_20_60"],
                     "high_5y": r["high_5y"], "high_date": str(r["high_date"]), "pct_below_high": r["pct_below_high"],
                     "months_since_high": round(r["sessions_since_high"] / 21, 1), "low_date": str(r["low_date"]),
                     "pct_off_low": r["pct_off_low"], "stage": r["stage"], "drop_cause": r["drop_cause"],
@@ -128,6 +129,7 @@ async def getting_better(request: Request, tier: str = Query("large")):
         score = streak + 10 * min(0.15, max(0, omc or 0)) + min(1.0, f.get("sales_yoy") or 0)
         om_then = qs[-5]["op_margin"] if len(qs) >= 5 else None
         out.append({"ticker": r["ticker"], "name": r["name"], "sector": r["sector"], "market_cap": r["market_cap"], "price": r["price"],
+                    "returns": {"1d": r["ret_1d"], "1w": r["ret_1w"], "1m": r["ret_1m"], "3m": r["ret_3m"], "6m": r["ret_6m"], "1y": r["ret_1y"]}, "vol_ratio_20_60": r["vol_ratio_20_60"],
                     "sales_yoy": f.get("sales_yoy"), "sales_yoy_prev": f.get("sales_yoy_prev"), "acceleration_streak": streak,
                     "gross_margin": f.get("gross_margin"), "gross_margin_change_1y": f.get("gross_margin_change_1y"),
                     "op_margin": f.get("op_margin"), "op_margin_year_ago": om_then, "op_margin_change_1y": omc,

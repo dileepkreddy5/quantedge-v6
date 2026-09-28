@@ -1,7 +1,7 @@
 // Trackers v2 — Great companies on sale · Quiet climbers · Getting better.
 // Reads /api/v6/trackers/* (nightly facts sheet). Large · Mid · Small are separate lists.
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../auth/authStore';
 
 const TRACKERS = [
@@ -18,7 +18,7 @@ const CSS = `
 .t2{--ink:#0d0806;--ink2:#130c09;--panel:#1a110d;--panel2:#21160f;--line:#33241b;--line2:#46321f;--gold:#e0ad3a;--gold2:#f3cf7a;--cream:#f6ecdd;--latte:#d9c9b4;--dust:#b09c86;--mute:#8a7762;--up:#3ec27a;--down:#ef7d5a;
  --serif:'Fraunces',Georgia,serif;--sans:'IBM Plex Sans',system-ui,sans-serif;--mono:'IBM Plex Mono',ui-monospace,monospace;background:var(--ink);color:var(--latte);font-family:var(--sans);min-height:100vh;-webkit-font-smoothing:antialiased}
 .t2 *{box-sizing:border-box}.t2 button{font:inherit;cursor:pointer}.t2 a{cursor:pointer;color:inherit;text-decoration:none}
-.t2 .wrap{max-width:1280px;margin:0 auto;padding:0 32px}
+.t2 .wrap{max-width:1720px;margin:0 auto;padding:0 clamp(20px,3vw,56px)}
 .t2 nav{border-bottom:1px solid var(--line)}.t2 nav .wrap{display:flex;align-items:center;gap:30px;height:64px}
 .t2 .logo{font-family:var(--mono);font-weight:600;letter-spacing:.4em;color:var(--gold);font-size:15px}
 .t2 nav .links{margin-left:auto;display:flex;gap:26px;font-size:14.5px;color:var(--dust)}.t2 nav .links a.on{color:var(--cream)}
@@ -60,7 +60,8 @@ const CSS = `
 .t2 .open{font-family:var(--mono);font-size:12px;color:var(--gold);background:none;border:1px solid var(--line2);border-radius:6px;padding:8px 12px;margin-top:12px}
 .t2 .lb{display:grid;grid-template-columns:36px minmax(0,1.4fr) minmax(0,2.4fr) 150px 150px;gap:16px;align-items:center;padding:13px 18px;background:var(--panel);border:1px solid var(--line);border-radius:12px;margin-bottom:8px;cursor:pointer}
 .t2 .lb:hover{border-color:var(--line2)}.t2 .lb .rk{font-family:var(--serif);font-size:22px;color:var(--cream)}
-.t2 .rets{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:4px}
+.t2 .rets{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
+.t2 .rline{padding:0 18px 14px}
 .t2 .rets div{border-radius:6px;padding:6px 4px;text-align:center;font-family:var(--mono);font-size:11.5px}
 .t2 .rets small{display:block;font-size:9.5px;color:var(--mute);margin-bottom:2px;letter-spacing:.08em}
 .t2 .meter{height:6px;background:var(--ink2);border-radius:3px;margin-top:6px;overflow:hidden}.t2 .meter i{display:block;height:100%;border-radius:3px}
@@ -82,6 +83,12 @@ const nice = (n: string) => (n || '').replace(/ Class [A-Z] (Common|Ordinary) (S
 const cellBg = (v: any) => v == null ? '#1f1510' : v > 0 ? `rgba(62,194,122,${Math.min(0.55, 0.12 + Math.abs(v) * 0.9)})` : `rgba(239,125,90,${Math.min(0.55, 0.12 + Math.abs(v) * 0.9)})`;
 const fmtDate = (s: any) => s ? new Date(s + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : '—';
 
+const Rets: React.FC<{ r: any; vol?: any }> = ({ r, vol }) => (<div className="rets">
+  {[['1D', '1d'], ['1W', '1w'], ['1M', '1m'], ['3M', '3m'], ['6M', '6m'], ['1Y', '1y']].map(([l, k]) => (
+    <div key={k} style={{ background: cellBg(r?.[k]) }}><small>{l}</small>{pct(r?.[k])}</div>))}
+  <div style={{ background: '#1f1510', border: '1px solid #33241b' }}><small>VOLUME</small>{vol == null ? '—' : `${vol >= 1 ? '+' : ''}${Math.round((vol - 1) * 100)}%`}</div>
+</div>);
+
 const Bars: React.FC<{ v: number[] }> = ({ v }) => {
   const xs = (v || []).filter(x => x != null && x > 0); if (xs.length < 2) return <div className="mu" style={{ fontSize: 12 }}>no quarterly sales on file</div>;
   const mx = Math.max(...xs);
@@ -91,7 +98,9 @@ const Bars: React.FC<{ v: number[] }> = ({ v }) => {
 
 const TrackersV2: React.FC = () => {
   const nav = useNavigate(); const [sp, setSp] = useSearchParams();
-  const tr = TRACKERS.find(t => t.id === sp.get('t')) || TRACKERS[0];
+  const { tab } = useParams();
+  const LEGACY: Record<string, string> = { 'fast-growers': 'better', comebacks: 'on-sale', climbers: 'quiet', filter: 'on-sale' };
+  const tr = TRACKERS.find(t => t.id === (sp.get('t') || LEGACY[tab || ''])) || TRACKERS[0];
   const tier = (TIERS.find(x => x[0] === sp.get('tier')) || TIERS[0])[0];
   const set = (k: string, v: string) => { const n = new URLSearchParams(sp); n.set(k, v); setSp(n, { replace: false }); };
   const [data, setData] = useState<any>(null); const [open, setOpen] = useState<string | null>(null);
@@ -161,6 +170,7 @@ const TrackersV2: React.FC = () => {
                 <span className="sub">{c.cash_backed ? '✓ profits backed by cash' : 'cash backing weak'}{c.quality === 'weakening' ? ' · weaker business' : ''}</span></div>
               <div className="num mu" style={{ fontSize: 11.5 }}>next results<br /><span style={{ color: 'var(--latte)' }}>~{fmtDate(c.next_results_est)}</span><span className="sub">estimate</span></div>
             </div>
+            <div className="rline"><Rets r={c.returns} vol={c.vol_ratio_20_60} /></div>
             {isOpen && (<div className="det">
               <div><h5>SALES · LAST 8 QUARTERS (SEC FILINGS)</h5><Bars v={c.sales_quarters} />
                 {c.history_note && <div className="sub" style={{ marginTop: 10 }}>Price {c.history_note}.</div>}</div>
@@ -186,8 +196,7 @@ const TrackersV2: React.FC = () => {
         {rows.map((c: any, i: number) => (<div className="lb" key={c.ticker} onClick={() => go(c.ticker)}>
           <span className="rk">{i + 1}</span>
           <div><span className="tk">{c.ticker}</span><span className="nm">{nice(c.name)}</span><span className="sub">{c.sector} · {bil(c.market_cap)}</span></div>
-          <div className="rets">{[['1D', '1d'], ['1W', '1w'], ['1M', '1m'], ['3M', '3m'], ['6M', '6m'], ['1Y', '1y']].map(([l, k]) => (
-            <div key={k} style={{ background: cellBg(c.returns[k]) }}><small>{l}</small>{pct(c.returns[k])}</div>))}</div>
+          <Rets r={c.returns} vol={c.vol_ratio_20_60} />
           <div className="hide"><span className="num">beat market {c.weeks_beat_mkt_26}/26 wks</span>
             <div className="meter"><i style={{ width: `${c.weeks_beat_mkt_26 / 26 * 100}%`, background: 'var(--up)' }} /></div></div>
           <div className="hide"><span className="num">coverage {c.attention_vs_peers.toFixed(1)}× peers</span>
@@ -212,10 +221,11 @@ const TrackersV2: React.FC = () => {
             <span className="streak">{c.acceleration_streak >= 7 ? '7+' : c.acceleration_streak} QTRS SPEEDING UP</span></div>
           <span className="nm" style={{ marginTop: -8 }}>{nice(c.name)} · {bil(c.market_cap)}</span>
           <Bars v={(c.quarters || []).map((q: any) => q.sales)} />
+          <Rets r={c.returns} vol={c.vol_ratio_20_60} />
           <div className="kv">
             <div><div className="k">SALES GROWTH</div><div className="v"><span className="mu">{pct(c.sales_yoy_prev)}</span> → <span className="up">{pct(c.sales_yoy)}</span></div></div>
             <div><div className="k">OPERATING MARGIN</div><div className="v"><span className="mu">{c.op_margin_year_ago != null ? `${Math.round(c.op_margin_year_ago * 100)}%` : '—'}</span> → <span className="up">{c.op_margin != null ? `${Math.round(c.op_margin * 100)}%` : '—'}</span></div></div>
-            <div><div className="k">PRICE · 6 MONTHS</div><div className={`v ${(c.ret_6m ?? 0) >= 0 ? 'up' : 'dn'}`}>{pct(c.ret_6m)}</div></div>
+            <div><div className="k">SALES GROWTH · 2 QTRS AGO</div><div className="v mu">{pct((c.quarters || []).slice(-3)[0]?.sales_yoy)}</div></div>
             <div><div className="k">BELOW 5Y HIGH</div><div className="v">{pct(c.pct_below_high)}</div></div>
           </div>
           <span className="sub">{c.cash_backed ? '✓ profits backed by cash' : ''}{c.one_off_suspected ? ' · year-ago margin distorted by a one-off loss' : ''} · last quarter {fmtDate(c.last_quarter)}</span>

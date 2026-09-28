@@ -39,22 +39,23 @@ export default function App() {
       <Routes>
         {/* Public */}
         <Route path="/"          element={<Home />} />
-        <Route path="/trackers-new" element={<TrackersV2 />} />
-        <Route path="/trackers" element={<Trackers />} />
-        <Route path="/trackers/:tab" element={<Trackers />} />
+        <Route path="/trackers" element={<TrackersV2 />} />
+        <Route path="/trackers/:tab" element={<TrackersV2 />} />
+        <Route path="/trackers-new" element={<Navigate to="/trackers" replace />} />
+        <Route path="/trackers-old" element={<Trackers />} />
         <Route path="/terms"     element={<Legal page="terms" />} />
         <Route path="/privacy"   element={<Legal page="privacy" />} />
         <Route path="/disclaimer" element={<Legal page="disclaimer" />} />
         <Route path="/data-sources" element={<Legal page="data-sources" />} />
         <Route path="/classic"   element={<Landing />} />
         <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/screener" element={<Navigate to="/trackers/filter" replace />} />
-        <Route path="/ascent" element={<Navigate to="/trackers/climbers" replace />} />
+        <Route path="/screener" element={<Navigate to="/trackers" replace />} />
+        <Route path="/ascent" element={<Navigate to="/trackers?t=quiet" replace />} />
         <Route path="/methodology" element={<Methodology />} />
         <Route path="/login"     element={<Login />} />
         <Route path="/research"  element={<Research />} />
-        <Route path="/multibagger" element={<Navigate to="/trackers/fast-growers" replace />} />
-        <Route path="/rebound" element={<Navigate to="/trackers/comebacks" replace />} />
+        <Route path="/multibagger" element={<Navigate to="/trackers?t=better" replace />} />
+        <Route path="/rebound" element={<Navigate to="/trackers?t=on-sale" replace />} />
         {/* Catch-all → landing */}
         <Route path="*"          element={<Navigate to="/" replace />} />
       </Routes>
