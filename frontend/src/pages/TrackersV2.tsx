@@ -116,13 +116,17 @@ const TrackersV2: React.FC = () => {
   const etier = tr.id === 'rising' && tier === 'large' ? 'mid' : tier;     // rising stars: mid→large, small→mid
   const [q, setQ] = useState('');
   const set = (k: string, v: string) => { const n = new URLSearchParams(sp); n.set(k, v); setSp(n, { replace: false }); };
-  const [data, setData] = useState<any>(null); const [open, setOpen] = useState<string | null>(null);
+  const [raw, setData] = useState<any>(null); const [open, setOpen] = useState<string | null>(null);
   const [sort, setSort] = useState('size'); const [weak, setWeak] = useState(false);
   const [depth, setDepth] = useState('all'); const [stage, setStage] = useState('all'); const [cause, setCause] = useState('all');
+  // Each response is labelled with the view it belongs to; a tracker only ever draws its own
+  // data. Before this, switching tabs briefly drew the new tracker with the previous one's rows.
+  const key = `${tr.id}|${etier}|${sort}|${weak}`;
   useEffect(() => { setData(null); setOpen(null); setQ('');
     const qs = tr.id === 'on-sale' ? `?tier=${etier}&sort=${sort}&quality=${weak ? 'all' : 'strong'}` : tr.id === 'warn' ? `?tier=${etier}&healthy_only=${!weak}` : `?tier=${etier}`;
-    api.get(`/api/v6/trackers/${tr.api}${qs}`).then(r => setData(r.data)).catch(() => setData({ error: true, companies: [] }));
+    api.get(`/api/v6/trackers/${tr.api}${qs}`).then(r => setData({ ...r.data, __key: key })).catch(() => setData({ error: true, companies: [], __key: key }));
   }, [tr.id, etier, sort, weak]); // eslint-disable-line
+  const data = raw && raw.__key === key ? raw : null;
   const [sev, setSev] = useState('all');
   const go = (t: string) => nav(`/dashboard?ticker=${t}`);
 
