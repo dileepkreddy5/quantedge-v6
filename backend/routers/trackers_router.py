@@ -170,7 +170,8 @@ async def warning_signs(request: Request, tier: str = Query("large"), healthy_on
                                    AND e.available_at > NOW() - INTERVAL '30 days'""", tks):
         v = json.loads(e["value"]) if isinstance(e["value"], str) else e["value"]
         if v.get("class") == "abrupt_exec_exit":
-            add(e["ticker"], "serious", e["available_at"], "SEC 8-K · ITEM 5.02",
+            # serious only when effective immediately; a departure with notice is a watch sign
+            add(e["ticker"], "serious" if v.get("immediate") else "watch", e["available_at"], "SEC 8-K · ITEM 5.02",
                 f"The {v.get('role') or 'a senior officer'} is leaving{', effective immediately' if v.get('immediate') else ''}.",
                 "A sudden exit of a finance or top executive has often come before restatements or guidance cuts.")
     for e in await pool.fetch("""SELECT cik, form_type, filed_at FROM ci_raw_evidence WHERE form_type IN ('NT 10-Q','NT 10-K')
@@ -216,6 +217,9 @@ async def warning_signs(request: Request, tier: str = Query("large"), healthy_on
             add(t, "watch", r["cross_200d_date"], "PRICE & VOLUME", f"Broke below its 200-day average after a steady uptrend, on {r['cross_200d_vol']:.1f}× normal volume.")
         if r["ret_1m"] is not None and r["peer_ret_1m"] is not None and r["ret_1m"] - r["peer_ret_1m"] <= -LAG[tier]:
             add(t, "watch", as_of, "PRICE · VS PEERS", f"Lagged its industry by {(r['peer_ret_1m'] - r['ret_1m'])*100:.0f} points over the last month ({r['ret_1m']*100:+.0f}% vs peers {r['peer_ret_1m']*100:+.0f}%).")
+    # one bad month against peers is noise on its own: it only supports other evidence
+    for t in tks:
+        if signs[t] and all(x["source"] == "PRICE · VS PEERS" for x in signs[t]): signs[t] = []
     flagged = [t for t in tks if signs[t]]
     first = {t: min(s["date"] for s in signs[t]) for t in flagged}
     px = {}
