@@ -78,6 +78,7 @@ from routers.intel_router import router as intel_router
 from routers.agent_router import router as agent_router
 from routers.wire_router import router as wire_router
 from routers.home_router import router as home_router
+from routers.trackers_router import router as trackers_router
 from ml.price_oracle.router import router as oracle_router
 from services.signal_tracker import SignalTracker, OutcomeFillerJob
 
@@ -530,6 +531,14 @@ async def lifespan(app: FastAPI):
             logger.info("✅ Board cohorts scheduled (03:15 ET nightly)")
         except Exception as e:
             logger.warning(f"Board cohorts not scheduled: {e}")
+        try:
+            from services.facts_job import FactsJob
+            scheduler.add_job(FactsJob(app.state.db).run, trigger=CronTrigger(hour=20, minute=0, timezone=et),
+                              id="facts_sheet", name="Nightly facts sheet (price + business facts)",
+                              replace_existing=True, max_instances=1, coalesce=True)
+            logger.info("✅ Facts sheet scheduled (20:00 ET nightly)")
+        except Exception as e:
+            logger.warning(f"Facts sheet not scheduled: {e}")
 
         # Nightly full-universe panel rebuild + multi-horizon retrain.
         # 02:15 America/Denver — after the 02:00/02:30 ET scans have finished and
@@ -726,6 +735,7 @@ app.include_router(intel_router,         prefix="/api/v6",             tags=["In
 app.include_router(agent_router,         prefix="/api/v6",             tags=["Agent"])
 app.include_router(wire_router,          prefix="/api/v6",             tags=["Wire"])
 app.include_router(home_router,          prefix="/api/v6",             tags=["Home"])
+app.include_router(trackers_router,      prefix="/api/v6",             tags=["Trackers"])
 app.include_router(peers_router,         prefix="/api/v6",             tags=["Peers"])
 app.include_router(ecosystem_router,     prefix="/api/v6",             tags=["Ecosystem"])
 app.include_router(news_router,          prefix="/api/v6",             tags=["News"])
