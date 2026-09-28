@@ -142,3 +142,47 @@ async def segments(ticker: str, request: Request):
         raise HTTPException(status_code=502, detail=f"could not read the 10-K: {type(e).__name__}")
     if not d: return {"ticker": tk, "available": False, "note": "This company's latest 10-K doesn't break revenue down by product, segment or region in a readable form."}
     return {"ticker": tk, "available": True, **d}
+
+
+@router.get("/price-stats/{ticker}")
+async def price_stats(ticker: str, request: Request):
+    """One source for price statistics everywhere on the page (header, Summary, Price & patterns),
+    computed from stored daily closes, with the window stated for every number."""
+    import numpy as np
+    tk = ticker.upper().strip(); pool = request.app.state.db
+    rows = await pool.fetch("SELECT d, c FROM daily_bars WHERE ticker=$1 AND c > 0 ORDER BY d", tk)
+    if len(rows) < 30: raise HTTPException(status_code=404, detail=f"not enough price history for {tk}")
+    spy = {r["d"]: float(r["c"]) for r in await pool.fetch("SELECT d, c FROM daily_bars WHERE ticker='SPY' AND c > 0 ORDER BY d")}
+    d = [r["d"] for r in rows]; c = np.array([float(r["c"]) for r in rows]); n = len(c)
+    lr = np.diff(np.log(c))
+    vol = lambda k: float(np.std(lr[-k:], ddof=1) * np.sqrt(252)) if len(lr) >= k else None
+    def ret(k): return float(c[-1] / c[-1 - k] - 1) if n > k else None
+    def spy_ret(k):
+        if n <= k or d[-1] not in spy or d[-1 - k] not in spy: return None
+        return spy[d[-1]] / spy[d[-1 - k]] - 1
+    def dd(arr): return float(np.min(arr / np.maximum.accumulate(arr) - 1)) if len(arr) else None
+    beta = None
+    common = [i for i in range(max(1, n - 252), n) if d[i] in spy and d[i - 1] in spy]
+    if len(common) >= 120:
+        a = np.array([c[i] / c[i - 1] - 1 for i in common]); b = np.array([spy[d[i]] / spy[d[i - 1]] - 1 for i in common])
+        beta = float(np.cov(a, b)[0, 1] / np.var(b, ddof=1)) if np.var(b) > 0 else None
+    sma = lambda k: float(c[-k:].mean()) if n >= k else None
+    s50, s200 = sma(50), sma(200); w = c[-252:]
+    out = {"ticker": tk, "as_of": str(d[-1]), "history_start": str(d[0]), "price": float(c[-1]),
+           "vol_1m": vol(21), "vol_1y": vol(252), "daily_move_typical": (vol(252) / np.sqrt(252)) if vol(252) else None,
+           "beta_1y": beta, "max_drawdown_1y": dd(w), "max_drawdown_all": dd(c),
+           "sma50": s50, "sma200": s200, "above_50d": bool(c[-1] > s50) if s50 else None, "above_200d": bool(c[-1] > s200) if s200 else None,
+           "high_52w": float(w.max()), "low_52w": float(w.min()), "pct_from_52w_high": float(c[-1] / w.max() - 1),
+           "returns": {}}
+    for lab, k in (("1m", 21), ("3m", 63), ("6m", 126), ("1y", 252)):
+        r_, s_ = ret(k), spy_ret(k)
+        out["returns"][lab] = {"stock": r_, "sp500": s_, "vs_sp500": (r_ - s_) if (r_ is not None and s_ is not None) else None}
+    # plain Python types only (numpy values can't be sent as JSON), and no NaN/inf
+    import math
+    def clean(o):
+        if isinstance(o, dict): return {k: clean(v) for k, v in o.items()}
+        if isinstance(o, (np.bool_,)): return bool(o)
+        if isinstance(o, (np.floating, float)): return float(o) if math.isfinite(float(o)) else None
+        if isinstance(o, (np.integer,)): return int(o)
+        return o
+    return clean(out)

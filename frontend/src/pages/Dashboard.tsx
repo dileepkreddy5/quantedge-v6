@@ -1,3 +1,4 @@
+import PriceTab from '../components/ui/PriceTab';
 import SummaryTab from '../components/ui/SummaryTab';
 import BreakthroughsPanel from '../components/ui/BreakthroughsPanel';
 import LoadingSnapshot from '../components/ui/LoadingSnapshot';
@@ -51,13 +52,12 @@ import BusinessPanel from '../components/ui/BusinessPanel';
 const TABS = [
   { id: 'overview',     label: '⬡ SUMMARY' },
   { id: 'ml',          label: '🧠 ML MODELS' },
-  { id: 'patterns',    label: '🧬 PATTERN LAB' },
+  { id: 'patterns',    label: '📈 PRICE & PATTERNS' },
   { id: 'intel',       label: '🔎 COMPANY INTEL' },
   { id: 'forecast',    label: '🔮 FORECAST' },
   { id: 'financial',   label: '💎 FINANCIAL' },
   { id: 'valuation',   label: '⚖️ VALUATION' },
   { id: 'business',    label: '🏰 BUSINESS' },
-  { id: 'market',      label: '📈 MARKET' },
   { id: 'altdata',     label: '📡 ALT-DATA' },
   { id: 'iflow',       label: '💸 INST FLOW' },
   { id: 'ownership',   label: '🏦 OWNERSHIP' },
@@ -68,8 +68,6 @@ const TABS = [
   { id: 'industry',    label: '🏭 INDUSTRY' },
   { id: 'management',  label: '👔 MANAGEMENT' },
   { id: 'macro',       label: '🌐 MACRO' },
-  { id: 'regime',      label: '🌡 REGIME' },
-  { id: 'volatility',  label: '📊 VOLATILITY' },
   { id: 'risk',        label: '🛡 RISK' },
   { id: 'portfolio',   label: '⚖ PORTFOLIO' },
   { id: 'performance', label: '📈 PERFORMANCE' },
@@ -370,10 +368,10 @@ export default function Dashboard() {
             <div style={{ animation: 'fadeIn 0.3s ease' }}>
               {activeTab === 'overview'    && <SummaryTab ticker={ticker} data={data} macro={<MacroPanel ticker={ticker} />} />}
               {activeTab === 'ml'          && <MLModelsPanel data={data} />}
-              {activeTab === 'patterns'    && <PatternLab ticker={ticker} />}
+              {['patterns','market','volatility','regime'].includes(activeTab) && <PriceTab ticker={ticker} data={data} states={<RegimePanel data={data} />} />}
               {activeTab === 'intel'       && <><BreakthroughsPanel ticker={ticker} /><CompanyIntel ticker={ticker} /></>}
-              {activeTab === 'volatility'  && <VolatilityPanel data={data} />}
-              {activeTab === 'regime'      && <RegimePanel data={data} />}
+              
+              
               {activeTab === 'news'        && <NewsPanel ticker={ticker} data={data} />}
               {activeTab === 'peers'       && <PeerPanel data={data} ticker={ticker} onAnalyze={runAnalysis} />}
               {activeTab === 'risk'        && <RiskPanel ticker={ticker} />}
@@ -387,7 +385,7 @@ export default function Dashboard() {
               {activeTab === 'iflow'       && <IFlowPanel ticker={ticker} />}
               {activeTab === 'financial'   && <><QuartersPanel ticker={ticker} /><FinancialIntelligencePanel ticker={ticker} /></>}
               {activeTab === 'valuation'   && <ValuationPanel ticker={ticker} />}
-              {activeTab === 'market'      && <MarketPanel ticker={ticker} />}
+              
               {activeTab === 'business'    && <BusinessPanel ticker={ticker} />}
               {activeTab === 'watchlist'   && <Watchlist onAnalyze={runAnalysis} />}
               {activeTab === 'wallstreet'  && <WallStreetPanel data={data} />}
