@@ -1,3 +1,4 @@
+import LoadingSnapshot from '../components/ui/LoadingSnapshot';
 // ============================================================
 // QuantEdge v6.0 — Dashboard
 // PUBLIC — no login required to analyze
@@ -127,6 +128,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState('');
   const [elapsed, setElapsed] = useState(0);
+  const [notCompany, setNotCompany] = useState<string|null>(null);
   const timerRef = useRef<any>(null);
 
   const runAnalysis = useCallback(async (sym?: string) => {
@@ -138,6 +140,12 @@ export default function Dashboard() {
     setLoading(true);
     setElapsed(0);
     setActiveTab('overview');
+    // Company pages are for stocks in the universe; a fund stops here with an explanation.
+    try {
+      const qk = await api.get(`/api/v6/quick/${symbol}`);
+      if (qk.data && qk.data.is_company === false) { setNotCompany(qk.data.message); setLoading(false); return; }
+    } catch { /* snapshot unavailable: proceed with the analysis */ }
+    setNotCompany(null);
 
     // Progress messages
     const msgs = [
@@ -323,31 +331,13 @@ export default function Dashboard() {
       </header>
 
       {/* ── Loading overlay ── */}
-      {loading && (
-        <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(26,15,10,0.85)',
-          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          zIndex: 200, backdropFilter: 'blur(12px)',
-        }}>
-          <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 40, color: '#daa520', letterSpacing: 8, marginBottom: 12 }}>
-            ANALYZING {inputTicker}
-          </div>
-          <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 11, color: '#9d8b7a', letterSpacing: 2, marginBottom: 32 }}>
-            {loadingMsg}
-          </div>
-          {/* Progress bar */}
-          <div className="qe-scorebar" style={{ width: 360, height: 3, background: '#2d1e18', borderRadius: 2, overflow: 'hidden', marginBottom: 20 }}>
-            <div style={{
-              height: '100%', background: 'linear-gradient(90deg,#daa520,#22c55e)',
-              borderRadius: 2, width: `${Math.min((elapsed / 45) * 100, 95)}%`,
-              transition: 'width 1s ease',
-            }} />
-          </div>
-          <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 10, color: '#8a7560' }}>
-            {elapsed}s elapsed · 12 panel models · 152 features
-          </div>
-        </div>
-      )}
+      {loading && <LoadingSnapshot ticker={ticker} elapsed={elapsed} />}
+      {!loading && notCompany && (
+        <div style={{ maxWidth: 720, margin: '80px auto', padding: 28, background: '#1c130e', border: '1px solid #3a2920', borderRadius: 12, textAlign: 'center' }}>
+          <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 22, color: '#daa520', marginBottom: 14 }}>{ticker}</div>
+          <div style={{ fontSize: 15.5, lineHeight: 1.7, color: '#d4c4b0' }}>{notCompany}</div>
+          <button onClick={() => navigate('/')} style={{ marginTop: 22, background: 'none', border: '1px solid #daa520', color: '#daa520', borderRadius: 6, padding: '10px 18px', fontFamily: "'Fira Code',monospace", fontSize: 11, letterSpacing: 1.5, cursor: 'pointer' }}>SEARCH A COMPANY →</button>
+        </div>)}
 
       <main style={{ maxWidth: 2100, margin: '0 auto', padding: '16px 28px' }}>
 

@@ -565,8 +565,18 @@ async def lifespan(app: FastAPI):
     # ran once at startup and exited, contrary to the docs).
     async def _startup_warmer():
         await asyncio.sleep(120)  # let health checks settle first
-        TOP = ["AAPL", "MSFT", "NVDA", "TSLA", "SPY", "QQQ", "AMZN", "META"]
+        from zoneinfo import ZoneInfo
+        from datetime import datetime as _dt
         while True:
+            # The 40 largest companies, read live, so the most-visited pages open instantly.
+            # Paused 02:00-07:00 ET so it never competes with the nightly jobs for CPU.
+            if 2 <= _dt.now(ZoneInfo("America/New_York")).hour < 7:
+                await asyncio.sleep(600); continue
+            try:
+                TOP = [r["ticker"] for r in await app.state.db.fetch(
+                    "SELECT ticker FROM universe WHERE active AND market_cap IS NOT NULL ORDER BY market_cap DESC LIMIT 40")] + ["SPY", "QQQ"]
+            except Exception:
+                TOP = ["AAPL", "MSFT", "NVDA", "TSLA", "AMZN", "META", "SPY", "QQQ"]
             for ticker in TOP:
                 try:
                     cache_key = f"analysis:v6:{ticker}:o1s1"
@@ -595,7 +605,7 @@ async def lifespan(app: FastAPI):
                 return
 
     app.state.warmer_task = asyncio.create_task(_startup_warmer())
-    logger.info("✅ Cache warmer started — will pre-warm AAPL MSFT NVDA TSLA SPY QQQ AMZN META")
+    logger.info("✅ Cache warmer started — 40 largest companies + SPY/QQQ, hourly, paused 02:00-07:00 ET")
 
     logger.info("✅ QuantEdge v6.0 ready")
     # Pre-warm the pattern library (~90MB) in a thread so the first

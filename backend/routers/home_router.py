@@ -170,3 +170,42 @@ async def search_suggest(request: Request, q: str = Query(..., min_length=1, max
         SELECT ticker, name FROM universe WHERE active AND (ticker ILIKE $1 || '%' OR name ILIKE '%' || $1 || '%')
         ORDER BY (upper(ticker) = upper($1)) DESC, (ticker ILIKE $1 || '%') DESC, market_cap DESC NULLS LAST LIMIT 8""", q)
     return {"results": [{"ticker": r["ticker"], "name": r["name"]} for r in rows]}
+
+
+@router.get("/quick/{ticker}")
+async def quick_snapshot(ticker: str, request: Request):
+    """Everything known instantly about a stock while the full analysis runs: in-universe
+    check (common stocks only), live quote, 6-month closes, 52-week range, market cap,
+    latest SEC events and 90-day insider open-market net. Database + one snapshot call."""
+    tk = ticker.upper().strip()
+    pool = request.app.state.db
+    u = await pool.fetchrow("SELECT ticker, name, market_cap, exchange FROM universe WHERE ticker=$1", tk)
+    if not u:
+        return {"ticker": tk, "is_company": False,
+                "message": (f"{tk} isn't a company in QuantEdge's universe. Company pages cover US-listed common stocks; "
+                            "funds (like index or country ETFs) and foreign listings don't have the filings, earnings and "
+                            "insider data these pages are built on.")}
+    async def build():
+        snap = (await _snap([tk])).get(tk) or {}
+        rows = await pool.fetch("SELECT d, c FROM daily_bars WHERE ticker=$1 AND d > CURRENT_DATE - 190 ORDER BY d", tk)
+        yr = await pool.fetchrow("SELECT max(h) hi, min(l) lo FROM daily_bars WHERE ticker=$1 AND d > CURRENT_DATE - 365", tk)
+        ev = await pool.fetch("""SELECT available_at, title, significance FROM ci_events WHERE ticker=$1
+                                 AND event_type NOT IN ('insider_transaction','attention_spike') ORDER BY available_at DESC LIMIT 5""", tk)
+        ins = await pool.fetch("""SELECT d.value FROM ci_derived d JOIN ci_events e ON e.id=d.event_id
+                                  WHERE e.ticker=$1 AND d.field='transaction' AND e.available_at > NOW() - INTERVAL '90 days'""", tk)
+        buy = sell = 0.0; nb = ns = 0
+        for r in ins:
+            v = json.loads(r["value"]) if isinstance(r["value"], str) else r["value"]
+            if not v.get("open_market"): continue
+            if v.get("code") == "P": buy += v.get("value", 0); nb += 1
+            else: sell += v.get("value", 0); ns += 1
+        closes = [float(r["c"]) for r in rows]; price = snap.get("price") or (closes[-1] if closes else None)
+        return {"ticker": tk, "is_company": True, "name": _nice(u["name"]), "exchange": u["exchange"],
+                "market_cap": u["market_cap"], "price": price, "today_pct": snap.get("chg_pct"),
+                "week_pct": round((closes[-1] / closes[-6] - 1) * 100, 2) if len(closes) >= 6 else None,
+                "high_52w": float(yr["hi"]) if yr and yr["hi"] else None, "low_52w": float(yr["lo"]) if yr and yr["lo"] else None,
+                "closes": [round(c, 2) for c in closes], "dates": [str(r["d"]) for r in rows],
+                "filings": [{"date": str(r["available_at"])[:10], "title": r["title"], "significance": r["significance"]} for r in ev],
+                "insiders_90d": {"buys": nb, "sells": ns, "buy_value": buy, "sell_value": sell},
+                "updated_ns": snap.get("updated_ns")}
+    return await _cached(request, f"quick:{tk}", 60, build)

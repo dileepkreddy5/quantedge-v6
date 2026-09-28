@@ -160,13 +160,13 @@ const Home: React.FC = () => {
           ? `In ${mood.n_similar_days} similar moments since ${String(mood.since).slice(0, 4)}, the S&P 500 was higher a month later ${mood.higher_month_later_pct}% of the time — about the same as on any day (${mood.base_pct}%). On its own, today's mood doesn't point either way.`
           : `In ${mood.n_similar_days} similar moments since ${String(mood.since).slice(0, 4)}, the S&P 500 was higher a month later ${mood.higher_month_later_pct}% of the time, versus ${mood.base_pct}% on any day.`) : ''}</span></div>}
       <div className="idx">{(mk?.us || [0, 1, 2, 3, 4]).map((r: any, k: number) => r?.ticker ? (
-        <a className="ix" key={r.ticker} onClick={() => go(r.ticker)}><div className="n">{r.name}</div><div className="p">{r.proxy}</div>
+        <div className="ix" key={r.ticker}><div className="n">{r.name}</div><div className="p">{r.proxy}</div>
           <div className={`t ${cls(v(r))}`}>{sgn(v(r))}</div>
           <div className="w">{span === 'today' ? <>week <span className={cls(r.week_pct)}>{sgn(r.week_pct, 1)}</span></> : <>today <span className={cls(r.today_pct)}>{sgn(r.today_pct)}</span></>} · avg day {sgn(r.avg_day_pct)}</div>
-          <Spark s={r.spark} /></a>) : <div className="ix skel" key={k}>…</div>)}</div>
+          <Spark s={r.spark} /></div>) : <div className="ix skel" key={k}>…</div>)}</div>
       <div className="world">{(mk?.world || []).map((r: any) => (
-        <a className="wx" key={r.ticker} onClick={() => go(r.ticker)}><div className="n">{r.name} <span style={{ fontFamily: 'var(--mono)', fontSize: 10.5, color: 'var(--mute)' }}>{r.ticker}</span></div>
-          <div className={`t ${cls(v(r))}`}>{sgn(v(r))}</div><div className="w">{span === 'today' ? `week ${sgn(r.week_pct, 1)}` : `today ${sgn(r.today_pct)}`}</div></a>))}</div>
+        <div className="wx" key={r.ticker}><div className="n">{r.name} <span style={{ fontFamily: 'var(--mono)', fontSize: 10.5, color: 'var(--mute)' }}>{r.ticker}</span></div>
+          <div className={`t ${cls(v(r))}`}>{sgn(v(r))}</div><div className="w">{span === 'today' ? `week ${sgn(r.week_pct, 1)}` : `today ${sgn(r.today_pct)}`}</div></div>))}</div>
       <div className="fine">{mk?.note}</div>
     </div></div>
 
