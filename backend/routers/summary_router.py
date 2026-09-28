@@ -99,6 +99,14 @@ async def summary(ticker: str, request: Request):
         n_ = dt.date.fromisoformat(last_q) + dt.timedelta(days=126)
         while n_ < dt.date.today(): n_ += dt.timedelta(days=91)
         nxt = str(n_)
-    return {"ticker": tk, "name": r["name"], "as_of": str(r["as_of"]), "sentences": S, "trackers": shows, "has_warnings": bool(warns),
+    facts = None
+    if f.get("available"):
+        qs = f.get("quarters") or []; last4 = qs[-4:]
+        rev = sum(q["sales"] for q in last4) if len(last4) == 4 else None
+        ni = f.get("net_income_ttm")
+        facts = {"revenue_ttm": rev, "sales_yoy": f.get("sales_yoy"), "gross_margin": f.get("gross_margin"),
+                 "op_margin": f.get("op_margin"), "net_margin_ttm": (ni / rev) if (ni is not None and rev) else None,
+                 "last_quarter": qs[-1]["end"] if qs else None, "source": "SEC filings"}
+    return {"ticker": tk, "name": r["name"], "as_of": str(r["as_of"]), "sentences": S, "facts": facts, "trackers": shows, "has_warnings": bool(warns),
             "breakthroughs": bt[:3], "next_results_est": nxt, "tier": r["tier"], "sector": r["sector"], "history_note": r["history_note"],
             "note": "Written from SEC filings, prices and QuantEdge's nightly facts. Not advice."}

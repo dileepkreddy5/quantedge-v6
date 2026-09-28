@@ -348,7 +348,7 @@ export default function Dashboard() {
           <>
             {/* ── Ticker header ── */}
             <TickerHeader data={data} ticker={ticker} />
-            <StockSnapshot data={data} />
+            <StockSnapshot data={data} ticker={ticker} />
 
             {/* ── Tabs ── */}
             <div className="qe-tabscroll" style={{ borderBottom: '1px solid rgba(212,149,108,0.12)', marginBottom: 20 }}>
@@ -483,8 +483,14 @@ function TickerHeader({ data, ticker }: { data: any; ticker: string }) {
 }
 
 // ── Institutional Snapshot (fundamentals · valuation · positioning · street) ──
-function StockSnapshot({ data }: { data: any }) {
-  const f = data.fundamentals || {};
+function StockSnapshot({ data, ticker }: { data: any; ticker?: string }) {
+  // Growth and margins from the company's own SEC filings (same source as the Summary),
+  // so the page never shows two different numbers for the same thing.
+  const [sec, setSec] = useState<any>(null);
+  useEffect(() => { setSec(null); if (!ticker) return; api.get(`/api/v6/summary/${ticker}`).then(r => setSec(r.data?.facts || null)).catch(() => {}); }, [ticker]);
+  const f0 = data.fundamentals || {};
+  const f = sec ? { ...f0, revenue_ttm: sec.revenue_ttm ?? f0.revenue_ttm, revenue_growth: sec.sales_yoy ?? f0.revenue_growth,
+                    gross_margin: sec.gross_margin ?? f0.gross_margin, net_margin: sec.net_margin_ttm ?? f0.net_margin } : f0;
   const ar = data.analyst_ratings || {};
   const cons = ar.consensus || {};
   const price = data.price ?? 0;
@@ -511,9 +517,9 @@ function StockSnapshot({ data }: { data: any }) {
     <div style={{ background:'#241510', border:'1px solid rgba(212,149,108,0.12)', borderRadius:8, padding:'16px 20px', marginBottom:20,
       display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))', gap:24 }}>
       <div>
-        <ColHead t="FUNDAMENTALS" />
+        <ColHead t={sec ? `FUNDAMENTALS · SEC FILINGS${sec.last_quarter ? " · QTR TO " + sec.last_quarter : ""}` : "FUNDAMENTALS"} />
         <Cell label="Revenue TTM" value={fmtBig(f.revenue_ttm)} />
-        <Cell label="Rev Growth" value={fmtPct(f.revenue_growth)} color={f.revenue_growth == null ? undefined : col(f.revenue_growth > 0)} />
+        <Cell label={sec ? "Sales growth (vs yr ago)" : "Rev Growth"} value={fmtPct(f.revenue_growth)} color={f.revenue_growth == null ? undefined : col(f.revenue_growth > 0)} />
         <Cell label="Gross Margin" value={fmtPct(f.gross_margin)} color={col(f.gross_margin>0.4)} />
         <Cell label="Net Margin" value={fmtPct(f.net_margin)} color={col(f.net_margin>0.1)} />
         <Cell label="ROE" value={fmtPct(f.roe)} color={col(f.roe>0.15)} />

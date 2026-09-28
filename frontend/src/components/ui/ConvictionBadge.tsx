@@ -33,11 +33,11 @@ export default function ConvictionBadge({ ticker }: { ticker: string }) {
       onMouseEnter={() => setShow(true)} onMouseLeave={() => setShow(false)}>
       <div style={{ background: `${col}12`, border: `1px solid ${col}55`, borderRadius: 6,
         padding: '6px 14px', cursor: 'help', textAlign: 'center' }}>
-        <div style={{ fontSize: 9, color: '#9d8b7a', letterSpacing: 2 }}>QUANTEDGE CONVICTION</div>
+        <div style={{ fontSize: 9, color: '#9d8b7a', letterSpacing: 2 }}>QUANTEDGE SCORE</div>
         <div style={{ fontSize: 18, fontWeight: 700, color: col, letterSpacing: 1 }}>
-          QuantEdge score {c.conviction_score} · not yet validated</div>
+          {c.conviction_score}<span style={{ fontSize: 11, fontWeight: 400, marginLeft: 4 }}>/ 100</span></div>
         <div style={{ fontSize: 8, color: '#7a7266', letterSpacing: 1 }}>
-          {(c.coverage.pct * 100).toFixed(0)}% coverage · {c.coverage.modules_live}/{c.coverage.modules_total} modules live</div>
+          not yet validated · {c.coverage.modules_live}/{c.coverage.modules_total} modules</div>
       </div>
       {show && (
         <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 6, zIndex: 50,
