@@ -466,18 +466,27 @@ function TickerHeader({ data, ticker }: { data: any; ticker: string }) {
           { label: 'MARKET VALUE', value: formatLarge(data.market_cap) },
           { label: 'P/E', value: (data.pe_ratio ?? data.fundamentals?.pe_ratio) != null ? `${Number(data.pe_ratio ?? data.fundamentals?.pe_ratio).toFixed(1)}×` : '—' },
           { label: 'VS 52W HIGH', value: (data.week_52_high && data.price) ? `${((data.price / data.week_52_high - 1) * 100).toFixed(1)}%` : '—' },
-          { label: 'VOLATILITY', value: pct(data.annual_vol) },
         ].map(s => (
           <div key={s.label} style={{ textAlign: 'center' }}>
             <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: '#8a7560', letterSpacing: 2, marginBottom: 2 }}>{s.label}</div>
             <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 12, color: '#d4c4b0', fontWeight: 600 }}>{s.value}</div>
           </div>
         ))}
+        <VolStat ticker={ticker} />
       </div>
 
 
     </div>
   );
+}
+
+// Volatility from the single price-stats source, with its window stated.
+function VolStat({ ticker }: { ticker: string }) {
+  const [v, setV] = useState<any>(null);
+  useEffect(() => { setV(null); api.get(`/api/v6/price-stats/${ticker}`).then(r => setV(r.data)).catch(() => {}); }, [ticker]);
+  return (<div style={{ textAlign: 'center' }}>
+    <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: '#8a7560', letterSpacing: 2, marginBottom: 2 }}>VOLATILITY · 12M</div>
+    <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 12, color: '#d4c4b0', fontWeight: 600 }}>{v?.vol_1y != null ? `${(v.vol_1y * 100).toFixed(1)}%` : '—'}</div></div>);
 }
 
 // ── Institutional Snapshot (fundamentals · valuation · positioning · street) ──

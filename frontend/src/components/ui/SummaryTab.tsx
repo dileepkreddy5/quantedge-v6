@@ -67,6 +67,9 @@ const SummaryTab: React.FC<{ ticker: string; data: any; macro?: React.ReactNode 
   useEffect(() => { setS(null); api.get(`/api/v6/summary/${ticker}`).then(r => setS(r.data)).catch(e => setS({ error: e?.response?.data?.detail || 'summary unavailable' })); }, [ticker]);
   useEffect(() => { setConv(null); api.get(`/api/v7/conviction/${ticker}`).then(r => setConv(r.data?.data || r.data)).catch(() => {}); }, [ticker]);
   const pr = s?.profile;
+  const [ps, setPs] = useState<any>(null);
+  useEffect(() => { setPs(null); api.get(`/api/v6/price-stats/${ticker}`).then(r => setPs(r.data)).catch(() => {}); }, [ticker]);
+  const pp = (x: any) => x == null ? '—' : `${Math.abs(x * 100).toFixed(0)}%`;
   const [seg, setSeg] = useState<any>(null); const [segView, setSegView] = useState(0);
   useEffect(() => { setSeg(null); setSegView(0); api.get(`/api/v6/segments/${ticker}`).then(r => setSeg(r.data)).catch(() => setSeg({ available: false })); }, [ticker]);
   const card = { background: C.s1, border: `1px solid ${C.b1}`, borderRadius: 10, padding: 18, marginBottom: 16 };
@@ -118,9 +121,9 @@ const SummaryTab: React.FC<{ ticker: string; data: any; macro?: React.ReactNode 
     <div style={card}>
       <div style={{ fontFamily: mono, fontSize: 10, letterSpacing: 2, color: C.gold, marginBottom: 10 }}>KEY NUMBERS, IN PLAIN WORDS</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))', gap: 12, fontSize: 14, color: C.latte, lineHeight: 1.6 }}>
-        <div><b style={{ color: C.cream }}>{dd != null ? `${(Math.abs(dd) * (Math.abs(dd) <= 1 ? 100 : 1)).toFixed(0)}%` : '—'}</b> — its worst fall from a peak in the price history we hold.</div>
-        <div><b style={{ color: C.cream }}>{beta != null ? `${Number(beta).toFixed(2)}×` : '—'}</b> — how much it tends to move when the whole market moves 1% (its “beta”).</div>
-        <div><b style={{ color: C.cream }}>{data?.annual_vol != null ? `${(data.annual_vol * (data.annual_vol <= 1 ? 100 : 1)).toFixed(0)}%` : '—'}</b> — a typical year's price swing (annual volatility).</div>
+        <div><b style={{ color: C.cream }}>{pp(ps?.max_drawdown_all)}</b> — its worst fall from a peak since {ps?.history_start?.slice(0, 4) || '2021'} (last 12 months: {pp(ps?.max_drawdown_1y)}).</div>
+        <div><b style={{ color: C.cream }}>{ps?.beta_1y != null ? `${ps.beta_1y.toFixed(2)}×` : '—'}</b> — how much it moved for each 1% move in the S&P 500 over the last 12 months (its “beta”).</div>
+        <div><b style={{ color: C.cream }}>{ps?.vol_1y != null ? `${(ps.vol_1y * 100).toFixed(0)}%` : '—'}</b> — its volatility over the last 12 months{ps?.daily_move_typical ? `; a typical day moves about ${(ps.daily_move_typical * 100).toFixed(1)}%` : ''}.</div>
       </div></div>
     {conv?.modules?.length > 0 && (<div style={card}>
       <div onClick={() => setOpenWhy(v => !v)} style={{ display: 'flex', alignItems: 'baseline', gap: 12, cursor: 'pointer' }}>

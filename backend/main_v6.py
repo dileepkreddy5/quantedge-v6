@@ -333,6 +333,25 @@ async def lifespan(app: FastAPI):
                 name="Daily bars sync 17:30 ET",
                 replace_existing=True, max_instances=1, coalesce=True,
             )
+            # Safety net: a restart around 17:30 ET used to skip the day's sync. Two minutes
+            # after every start, fill any missing sessions (no cost when already current),
+            # and if it's past 20:00 ET with facts older than the newest bars, rebuild them.
+            import datetime as _dtm
+            from apscheduler.triggers.date import DateTrigger
+            async def _catch_up():
+                try:
+                    await _sync_bars()
+                    now = _dtm.datetime.now(et)
+                    bar_d = await app.state.db.fetchval("SELECT max(d) FROM daily_bars")
+                    facts_d = await app.state.db.fetchval("SELECT max(as_of) FROM company_facts")
+                    if bar_d and facts_d and facts_d < bar_d and now.hour >= 20:
+                        from quantedge.facts.price_facts import build_price_facts
+                        r = await build_price_facts(app.state.db)
+                        logger.info(f"catch-up: price facts rebuilt for {bar_d} ({r.get('companies')} companies)")
+                except Exception as e:
+                    logger.error(f"startup catch-up failed: {e}")
+            scheduler.add_job(_catch_up, trigger=DateTrigger(run_date=_dtm.datetime.now(et) + _dtm.timedelta(minutes=2)),
+                              id="bars_catch_up", replace_existing=True)
             scheduler.add_job(
                 _refresh_universe,
                 trigger=CronTrigger(day_of_week="sat", hour=6, minute=0, timezone=et),

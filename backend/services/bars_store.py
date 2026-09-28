@@ -265,6 +265,23 @@ class BarsStore:
             return len(recs)
         return 0
 
+    async def sync_missing(self, max_days: int = 15) -> Dict:
+        """Fill EVERY missing weekday session since the newest stored bar, so a missed night
+        heals itself on the next run. Today is included only after 17:15 ET, so a partial
+        trading day is never stored as a full one. Holidays return 0 rows."""
+        from datetime import datetime, timedelta
+        from zoneinfo import ZoneInfo
+        now = datetime.now(ZoneInfo("America/New_York"))
+        last = await self.pool.fetchval("SELECT max(d) FROM daily_bars")
+        out = {"from": str(last), "days": [], "bars": 0}
+        if last is None: return out
+        d, steps = last + timedelta(days=1), 0
+        while d <= now.date() and steps < max_days:
+            if d.weekday() < 5 and (d < now.date() or (now.hour, now.minute) >= (17, 15)):
+                k = await self.sync_day(d); out["days"].append([str(d), k]); out["bars"] += k
+            d += timedelta(days=1); steps += 1
+        return out
+
     async def stats(self) -> Dict:
         async with self.pool.acquire() as conn:
             return {
