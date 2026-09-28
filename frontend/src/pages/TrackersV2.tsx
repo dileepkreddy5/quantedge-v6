@@ -9,6 +9,7 @@ const TRACKERS = [
   { id: 'quiet', name: 'Quiet climbers', q: 'Rising steadily, week after week, before everyone notices.', api: 'quiet-climbers' },
   { id: 'better', name: 'Getting better', q: 'Results improving quarter after quarter, straight from SEC filings.', api: 'getting-better' },
   { id: 'warn', name: 'Warning signs', q: 'Good companies showing early cracks — before the price fully reflects it.', api: 'warning-signs' },
+  { id: 'rising', name: 'Rising stars', q: 'Growing fast enough to move up a size tier — tomorrow\'s bigger companies.', api: 'rising-stars' },
 ];
 const TIERS = [['large', 'Large', 'over $10B'], ['mid', 'Mid', '$2B–$10B'], ['small', 'Small', '$300M–$2B']];
 const STAGE: Record<string, [string, string]> = { falling: ['Still falling', '#ef7d5a'], basing: ['Going sideways', '#e0ad3a'], turning: ['Turning up', '#8fd19e'], recovering: ['Recovering', '#3ec27a'], near_high: ['Near its high', '#b09c86'] };
@@ -25,7 +26,8 @@ const CSS = `
 .t2 nav .links{margin-left:auto;display:flex;gap:26px;font-size:14.5px;color:var(--dust)}.t2 nav .links a.on{color:var(--cream)}
 .t2 .eyebrow{font-family:var(--mono);font-size:11.5px;letter-spacing:.26em;text-transform:uppercase;color:var(--gold)}
 .t2 .head{padding:40px 0 18px}.t2 h1{font-family:var(--serif);font-weight:300;font-size:44px;color:var(--cream);margin:10px 0 0;letter-spacing:-.015em}
-.t2 .trk{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:24px}
+.t2 .trk{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-top:24px}
+.t2 .srch{margin-left:auto;align-self:center;background:var(--panel);border:1px solid var(--line2);border-radius:8px;color:var(--cream);font-family:var(--mono);font-size:13px;padding:9px 14px;width:280px;outline:none}
 .t2 .tb{text-align:left;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px;color:var(--latte)}
 .t2 .tb .n{font-family:var(--serif);font-size:21px;color:var(--cream)}.t2 .tb .d{font-size:13px;color:var(--dust);margin-top:6px;line-height:1.5}
 .t2 .tb.on{border-color:var(--gold);background:var(--panel2)}
@@ -111,24 +113,27 @@ const TrackersV2: React.FC = () => {
   const LEGACY: Record<string, string> = { 'fast-growers': 'better', comebacks: 'on-sale', climbers: 'quiet', filter: 'on-sale' };
   const tr = TRACKERS.find(t => t.id === (sp.get('t') || LEGACY[tab || ''])) || TRACKERS[0];
   const tier = (TIERS.find(x => x[0] === sp.get('tier')) || TIERS[0])[0];
+  const etier = tr.id === 'rising' && tier === 'large' ? 'mid' : tier;     // rising stars: mid→large, small→mid
+  const [q, setQ] = useState('');
   const set = (k: string, v: string) => { const n = new URLSearchParams(sp); n.set(k, v); setSp(n, { replace: false }); };
   const [data, setData] = useState<any>(null); const [open, setOpen] = useState<string | null>(null);
   const [sort, setSort] = useState('size'); const [weak, setWeak] = useState(false);
   const [depth, setDepth] = useState('all'); const [stage, setStage] = useState('all'); const [cause, setCause] = useState('all');
-  useEffect(() => { setData(null); setOpen(null);
-    const qs = tr.id === 'on-sale' ? `?tier=${tier}&sort=${sort}&quality=${weak ? 'all' : 'strong'}` : tr.id === 'warn' ? `?tier=${tier}&healthy_only=${!weak}` : `?tier=${tier}`;
+  useEffect(() => { setData(null); setOpen(null); setQ('');
+    const qs = tr.id === 'on-sale' ? `?tier=${etier}&sort=${sort}&quality=${weak ? 'all' : 'strong'}` : tr.id === 'warn' ? `?tier=${etier}&healthy_only=${!weak}` : `?tier=${etier}`;
     api.get(`/api/v6/trackers/${tr.api}${qs}`).then(r => setData(r.data)).catch(() => setData({ error: true, companies: [] }));
-  }, [tr.id, tier, sort, weak]); // eslint-disable-line
+  }, [tr.id, etier, sort, weak]); // eslint-disable-line
   const [sev, setSev] = useState('all');
   const go = (t: string) => nav(`/dashboard?ticker=${t}`);
 
   const rows = useMemo(() => {
-    const cs = data?.companies || [];
+    const needle = q.trim().toLowerCase();
+    const cs = (data?.companies || []).filter((c: any) => !needle || c.ticker.toLowerCase().includes(needle) || (c.name || '').toLowerCase().includes(needle));
     if (tr.id === 'warn') return cs.filter((c: any) => sev === 'all' || (sev === 'serious' && c.serious > 0) || (sev === 'multi' && c.signs.length >= 2));
     if (tr.id !== 'on-sale') return cs;
     return cs.filter((c: any) => (depth === 'all' || (depth === '20' && c.pct_below_high > -0.30) || (depth === '30' && c.pct_below_high <= -0.30 && c.pct_below_high > -0.50) || (depth === '50' && c.pct_below_high <= -0.50))
       && (stage === 'all' || c.stage === stage) && (cause === 'all' || c.drop_cause === cause));
-  }, [data, tr.id, depth, stage, cause, sev]);
+  }, [data, tr.id, depth, stage, cause, sev, q]);
 
   const hist = data?.history?.buckets || {};
   const hb = depth === '50' ? hist['50'] : depth === '30' ? hist['30'] : hist['20'];
@@ -141,7 +146,12 @@ const TrackersV2: React.FC = () => {
       <div className="head"><div className="eyebrow">Trackers · rebuilt every night</div><h1>Find the companies worth your attention.</h1>
         <div className="trk">{TRACKERS.map(t => (<button key={t.id} className={`tb ${t.id === tr.id ? 'on' : ''}`} onClick={() => set('t', t.id)}>
           <div className="n">{t.name}</div><div className="d">{t.q}</div></button>))}</div>
-        <div className="tiers">{TIERS.map(([k, l, s]) => (<button key={k} className={`tier ${tier === k ? 'on' : ''}`} onClick={() => set('tier', k)}>{l}<small>{s}</small></button>))}</div>
+        <div className="tiers">{(tr.id === 'rising' ? [['mid', 'Mid → Large', 'to $10B+'], ['small', 'Small → Mid', 'to $2B+']] : TIERS).map(([k, l, sub]) => (
+          <button key={k} className={`tier ${etier === k ? 'on' : ''}`} onClick={() => set('tier', k)}>{l}<small>{sub}</small></button>))}
+          <label htmlFor="tsearch" style={{ position: 'absolute', left: -9999 }}>Search this tracker</label>
+          <input id="tsearch" className="srch" value={q} onChange={e => setQ(e.target.value)} placeholder="Search this tracker — ticker or name" autoComplete="off" /></div>
+        {q && data && rows.length === 0 && <div className="empty">{q.toUpperCase()} isn't on this tracker in this size group today.
+          <br /><button className="open" onClick={() => go(q.trim().toUpperCase())}>Open its full analysis →</button></div>}
       </div>
 
       {/* ── GREAT COMPANIES ON SALE ── */}
@@ -164,7 +174,7 @@ const TrackersV2: React.FC = () => {
           <button className={`pill ${weak ? 'on' : ''}`} onClick={() => setWeak(w => !w)} style={{ marginLeft: 8 }}>{weak ? '✓ ' : ''}Include weaker businesses</button>
           <span className="meta">{data ? `${rows.length} companies${data.counts ? ` · ${data.counts.weakening} weaker set aside` : ''} · as of ${data.as_of || ''}` : 'loading…'}</span>
         </div>
-        {data && rows.length === 0 && <div className="empty">no companies match these filters</div>}
+        {data && !q && rows.length === 0 && <div className="empty">no companies match these filters</div>}
         {rows.map((c: any) => { const st = STAGE[c.stage] || [c.stage, '#b09c86']; const lowPct = c.low_date && c.pct_off_low != null ? (1 + c.pct_below_high) / (1 + c.pct_off_low) - 1 : null;
           const isOpen = open === c.ticker;
           return (<div className="row" key={c.ticker}>
@@ -203,7 +213,7 @@ const TrackersV2: React.FC = () => {
             <div className="v">The six cells show the move over each period — green up, orange down. <b>Coverage vs peers</b> below 1.0× means fewer news articles than a typical company this size. Our news feed is thin for many companies, so treat coverage as a hint, not a measurement.</div></div>
         </div>
         <div className="bar"><span className="meta" style={{ marginLeft: 0 }}>{data ? `${rows.length} companies · as of ${data.as_of || ''}` : 'loading…'}</span></div>
-        {data && rows.length === 0 && <div className="empty">no quiet climbers in this size tier today</div>}
+        {data && !q && rows.length === 0 && <div className="empty">no quiet climbers in this size tier today</div>}
         {rows.map((c: any, i: number) => (<div className="lb" key={c.ticker} onClick={() => go(c.ticker)}>
           <span className="rk">{i + 1}</span>
           <div><span className="tk">{c.ticker}</span><span className="nm">{nice(c.name)}</span><span className="sub">{c.sector} · {bil(c.market_cap)}</span></div>
@@ -226,7 +236,7 @@ const TrackersV2: React.FC = () => {
             <div className="v">Improvement often shows up in the numbers before the price fully reflects it. The aim is to catch it <b>while it's happening</b> — check each company's price move to see how much is already priced in.</div></div>
         </div>
         <div className="bar"><span className="meta" style={{ marginLeft: 0 }}>{data ? `${rows.length} companies · as of ${data.as_of || ''}` : 'loading…'}</span></div>
-        {data && rows.length === 0 && <div className="empty">no companies in this size tier meet all the conditions today</div>}
+        {data && !q && rows.length === 0 && <div className="empty">no companies in this size tier meet all the conditions today</div>}
         <div className="gc">{rows.map((c: any) => (<div className="gcard" key={c.ticker} onClick={() => go(c.ticker)}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}><span className="tk">{c.ticker}</span>
             <span className="streak">{c.acceleration_streak >= 7 ? '7+' : c.acceleration_streak} QTRS SPEEDING UP</span></div>
@@ -257,7 +267,7 @@ const TrackersV2: React.FC = () => {
           <button className={`pill ${!weak ? 'on' : ''}`} onClick={() => setWeak(w => !w)} style={{ marginLeft: 8 }}>{!weak ? '✓ ' : ''}Only companies healthy 6 months ago</button>
           <span className="meta">{data ? `${rows.length} companies · signs from the last 30 days · as of ${data.as_of || ''}` : 'loading…'}</span>
         </div>
-        {data && rows.length === 0 && <div className="empty">no warning signs in this size tier in the last 30 days</div>}
+        {data && !q && rows.length === 0 && <div className="empty">no warning signs in this size tier in the last 30 days</div>}
         {rows.map((c: any) => (<div className={`wco ${c.serious ? 'serious' : 'watch'}`} key={c.ticker}>
           <div className="wtop" onClick={() => go(c.ticker)}>
             <div><span className="tk">{c.ticker}</span><span className="nm">{nice(c.name)}</span>
@@ -271,6 +281,34 @@ const TrackersV2: React.FC = () => {
             <span className="dt">{fmtDate(s.date)}</span><span className="sr">{s.source}</span>
             <span>{s.text}{s.note && <small>{s.note}</small>}</span></div>))}
         </div>))}
+        <p className="foot">{data?.note} Research, not advice.</p>
+      </>)}
+      {/* ── RISING STARS ── */}
+      {tr.id === 'rising' && (<>
+        <div className="callout">
+          <div className="card"><div className="k">HOW THIS LIST IS BUILT</div>
+            <div className="v">{etier === 'mid' ? 'Mid-size' : 'Small'} companies with <b>sales growing 20%+ a year, sustained across most of the last four quarters</b>, on a real base of sales, with <b>margins widening as they grow</b> and the <b>price beating the market</b> in at least half of the last 26 weeks. Where 13F data exists, we show whether <b>more funds are buying in</b>.</div></div>
+          <div className="card"><div className="k">HOW TO READ “MONTHS TO THE NEXT TIER”</div>
+            <div className="v">If the company's market value grew as fast as its sales did over the last year, this is how long it would take to reach {etier === 'mid' ? '$10B' : '$2B'}. <b>Arithmetic on the recent pace, not a forecast</b> — growth slows, and prices don't follow sales one-for-one.</div></div>
+        </div>
+        <div className="bar"><span className="meta" style={{ marginLeft: 0 }}>{data ? `${rows.length} companies · as of ${data.as_of || ''}` : 'loading…'}</span></div>
+        {data && !q && rows.length === 0 && <div className="empty">no rising stars in this group today</div>}
+        <div className="gc">{rows.map((c: any) => (<div className="gcard" key={c.ticker} onClick={() => go(c.ticker)}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}><span className="tk">{c.ticker}</span>
+            {c.funds_arriving && <span className="streak">MORE FUNDS BUYING</span>}</div>
+          <span className="nm" style={{ marginTop: -8 }}>{nice(c.name)} · {bil(c.market_cap)} · {c.sector}</span>
+          <div className="big" style={{ fontFamily: 'var(--serif)', fontSize: 17, color: 'var(--cream)', lineHeight: 1.4 }}>
+            {c.months_to_next_tier_at_sales_pace == null ? '' : c.months_to_next_tier_at_sales_pace <= 0 ? `At the ${c.next_tier}-company threshold now` :
+              `~${c.months_to_next_tier_at_sales_pace} months to ${c.next_tier === 'large' ? '$10B' : '$2B'} at its sales pace`}</div>
+          <Bars v={c.sales_quarters} />
+          <Rets r={c.returns} vol={c.vol_ratio_20_60} />
+          <div className="kv">
+            <div><div className="k">SALES GROWTH · LAST 4 QTRS</div><div className="v" style={{ fontSize: 13 }}>{(c.sales_yoy_4q || []).map((y: number) => pct(y)).join(' · ')}</div></div>
+            <div><div className="k">OPERATING MARGIN</div><div className="v"><span className="mu">{c.op_margin_year_ago != null ? `${Math.round(c.op_margin_year_ago * 100)}%` : '—'}</span> → <span className="up">{c.op_margin != null ? `${Math.round(c.op_margin * 100)}%` : '—'}</span></div></div>
+            <div><div className="k">BEAT THE MARKET</div><div className="v">{c.weeks_beat_mkt_26} / 26 weeks</div></div>
+            <div><div className="k">FUNDS (13F)</div><div className="v" style={{ fontSize: 13 }}>{c.funds ? `+${c.funds.new_managers ?? 0} new · −${c.funds.exited_managers ?? 0} exited` : 'no data yet'}</div></div>
+          </div>
+        </div>))}</div>
         <p className="foot">{data?.note} Research, not advice.</p>
       </>)}
     </div></div>);

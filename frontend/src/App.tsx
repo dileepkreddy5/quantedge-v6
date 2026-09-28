@@ -9,6 +9,7 @@ import Landing from './pages/Landing';
 import Home from './pages/Home';
 import Trackers from './pages/Trackers';
 import TrackersV2 from './pages/TrackersV2';
+import SafeBoundary from './components/ui/SafeBoundary';
 import Legal from './pages/Legal';
 import LandingWire from './pages/LandingWire';
 import Dashboard from './pages/Dashboard';
@@ -39,8 +40,8 @@ export default function App() {
       <Routes>
         {/* Public */}
         <Route path="/"          element={<Home />} />
-        <Route path="/trackers" element={<TrackersV2 />} />
-        <Route path="/trackers/:tab" element={<TrackersV2 />} />
+        <Route path="/trackers" element={<SafeBoundary label="trackers"><TrackersV2 /></SafeBoundary>} />
+        <Route path="/trackers/:tab" element={<SafeBoundary label="trackers"><TrackersV2 /></SafeBoundary>} />
         <Route path="/trackers-new" element={<Navigate to="/trackers" replace />} />
         <Route path="/trackers-old" element={<Trackers />} />
         <Route path="/terms"     element={<Legal page="terms" />} />

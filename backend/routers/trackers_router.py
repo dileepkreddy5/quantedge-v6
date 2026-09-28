@@ -241,3 +241,56 @@ async def warning_signs(request: Request, tier: str = Query("large"), healthy_on
     return {"as_of": str(as_of), "tier": tier, "n": len(out), "healthy_only": healthy_only, "companies": out,
             "note": "Signs from the last 30 days. Serious: SEC items 4.02, 4.01, 2.06, abrupt CEO/CFO exits, late-filing notices. "
                     "Financials and real estate skip the margin and cash tests. Signs are reasons to look closer, not predictions."}
+
+
+NEXT_TIER = {"mid": ("large", 10e9), "small": ("mid", 2e9)}
+
+
+@router.get("/trackers/rising-stars")
+async def rising_stars(request: Request, tier: str = Query("mid")):
+    """Companies on track to move up a size tier: sustained fast sales growth, margins
+    widening as they grow, the price confirming it, and (where 13F data exists) more funds
+    arriving. Distance to the next tier is shown as arithmetic on the recent pace."""
+    import math
+    if tier not in NEXT_TIER: raise HTTPException(status_code=422, detail="tier must be mid|small")
+    nxt, thr = NEXT_TIER[tier]
+    pool = request.app.state.db
+    as_of = await pool.fetchval("SELECT max(as_of) FROM company_facts")
+    rows = await pool.fetch("""SELECT * FROM company_facts WHERE as_of=$1 AND tier=$2 AND primary_listing AND NOT is_spac
+        AND data_suspect IS NULL AND fundamentals IS NOT NULL AND ret_1y > 0 AND weeks_beat_mkt_26 >= 13""", as_of, tier)
+    inst = {}
+    for x in await pool.fetch("""SELECT DISTINCT ON (e.ticker, d.field) e.ticker, d.field, d.value FROM ci_derived d
+            JOIN ci_events e ON e.id = d.event_id WHERE e.event_type = 'institutional_snapshot'
+            AND d.field IN ('managers','new_managers','exited_managers') ORDER BY e.ticker, d.field, e.event_date DESC"""):
+        v = json.loads(x["value"]) if isinstance(x["value"], str) else x["value"]
+        inst.setdefault(x["ticker"], {})[x["field"]] = v.get("value")
+    out = []
+    for r in rows:
+        f = _f(r)
+        if not f.get("available") or f.get("stale"): continue
+        qs = f.get("quarters") or []; ys = [q.get("sales_yoy") for q in qs[-4:] if q.get("sales_yoy") is not None]
+        sy = f.get("sales_yoy") or 0
+        if sy < 0.20 or len(ys) < 4 or sum(y >= 0.15 for y in ys) < 3: continue
+        if (f.get("op_margin_change_1y") or 0) < 0 or (f.get("gross_margin_change_1y") or 0) < -0.01: continue
+        # Real businesses only: meaningful sales now and a year ago, and near profitable today.
+        # Without this, drug companies going from $0.1M to $20M read as "+22,000% growth".
+        MIN_Q = 50e6 if tier == "mid" else 15e6
+        if len(qs) < 5 or (qs[-1].get("sales") or 0) < MIN_Q or (qs[-5].get("sales") or 0) < 0.5 * MIN_Q: continue
+        if (f.get("op_margin") or -1) < -0.10 or (qs[-5].get("op_margin") or 0) < -1.0: continue
+        mc = r["market_cap"] or 0
+        months = round(12 * math.log(thr / mc) / math.log(1 + sy), 0) if mc and mc < thr and sy > 0 else None
+        i = inst.get(r["ticker"], {})
+        funds_arriving = (i.get("new_managers") or 0) > (i.get("exited_managers") or 0) if i else None
+        score = min(1.5, sy) + 5 * min(0.1, f.get("op_margin_change_1y") or 0) + (r["weeks_beat_mkt_26"] / 26) + (0.2 if funds_arriving else 0)
+        out.append({"ticker": r["ticker"], "name": r["name"], "sector": r["sector"], "market_cap": mc, "price": r["price"],
+                    "returns": {"1d": r["ret_1d"], "1w": r["ret_1w"], "1m": r["ret_1m"], "3m": r["ret_3m"], "6m": r["ret_6m"], "1y": r["ret_1y"]},
+                    "vol_ratio_20_60": r["vol_ratio_20_60"], "sales_yoy": sy, "sales_yoy_4q": ys,
+                    "op_margin": f.get("op_margin"), "op_margin_year_ago": (qs[-5]["op_margin"] if len(qs) >= 5 else None),
+                    "gross_margin_change_1y": f.get("gross_margin_change_1y"), "cash_backed": f.get("cash_backed"),
+                    "sales_quarters": [q["sales"] for q in qs], "weeks_beat_mkt_26": r["weeks_beat_mkt_26"],
+                    "funds": i or None, "funds_arriving": funds_arriving,
+                    "next_tier": nxt, "next_tier_threshold": thr, "months_to_next_tier_at_sales_pace": months, "score": score})
+    out.sort(key=lambda c: c["score"], reverse=True)
+    return {"as_of": str(as_of), "tier": tier, "next_tier": nxt, "n": len(out), "companies": out,
+            "note": ("Months to the next tier = if the company's market value grew at the same rate as its sales over the last year. "
+                     "Arithmetic on the recent pace, not a forecast.")}

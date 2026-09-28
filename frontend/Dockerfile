@@ -11,11 +11,22 @@ COPY . .
 RUN npm run build
 
 FROM nginx:1.27-alpine
+# index.html is always re-checked (it names the current code files); the code files under
+# /static/ carry a content hash in their names, so they can be cached for a year. Without
+# this, browsers kept an old index.html after deploys and showed a blank page.
 RUN printf 'server {\n\
   listen 80;\n\
   root /usr/share/nginx/html;\n\
-  index index.html;\n\
-  location / { try_files $uri $uri/ /index.html; }\n\
+  gzip on;\n\
+  gzip_types text/css application/javascript application/json image/svg+xml;\n\
+  location /static/ {\n\
+    add_header Cache-Control "public, max-age=31536000, immutable";\n\
+    try_files $uri =404;\n\
+  }\n\
+  location / {\n\
+    add_header Cache-Control "no-cache";\n\
+    try_files $uri /index.html;\n\
+  }\n\
 }\n' > /etc/nginx/conf.d/default.conf
 COPY --from=build /app/build /usr/share/nginx/html
 EXPOSE 80
