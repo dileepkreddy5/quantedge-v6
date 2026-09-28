@@ -67,6 +67,8 @@ const SummaryTab: React.FC<{ ticker: string; data: any; macro?: React.ReactNode 
   useEffect(() => { setS(null); api.get(`/api/v6/summary/${ticker}`).then(r => setS(r.data)).catch(e => setS({ error: e?.response?.data?.detail || 'summary unavailable' })); }, [ticker]);
   useEffect(() => { setConv(null); api.get(`/api/v7/conviction/${ticker}`).then(r => setConv(r.data?.data || r.data)).catch(() => {}); }, [ticker]);
   const pr = s?.profile;
+  const [seg, setSeg] = useState<any>(null); const [segView, setSegView] = useState(0);
+  useEffect(() => { setSeg(null); setSegView(0); api.get(`/api/v6/segments/${ticker}`).then(r => setSeg(r.data)).catch(() => setSeg({ available: false })); }, [ticker]);
   const card = { background: C.s1, border: `1px solid ${C.b1}`, borderRadius: 10, padding: 18, marginBottom: 16 };
   const beta = data?.capm_beta ?? data?.beta; const dd = data?.max_drawdown;
   return (<div>
@@ -82,6 +84,21 @@ const SummaryTab: React.FC<{ ticker: string; data: any; macro?: React.ReactNode 
       </div>
       <div style={{ fontFamily: mono, fontSize: 9.5, color: C.cocoa, marginTop: 10 }}>Description: {pr.source}.</div>
     </div>)}
+    {seg?.available && seg.breakdowns?.length > 0 && (() => { const b = seg.breakdowns[Math.min(segView, seg.breakdowns.length - 1)]; return (<div style={card}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
+        <span style={{ fontFamily: mono, fontSize: 10, letterSpacing: 2, color: C.gold }}>WHERE THE MONEY COMES FROM</span>
+        <span style={{ fontFamily: mono, fontSize: 10, color: C.cocoa }}>FISCAL YEAR TO {seg.fiscal_year_end}</span>
+        <span style={{ flex: 1 }} />
+        {seg.breakdowns.map((x: any, i: number) => <button key={i} onClick={() => setSegView(i)} style={{ fontFamily: mono, fontSize: 10.5, padding: '5px 10px', background: 'none', border: `1px solid ${i === segView ? C.gold : C.b1}`, borderRadius: 5, color: i === segView ? C.gold : C.dust, cursor: 'pointer' }}>{x.axis.replace('By ', '')}</button>)}
+      </div>
+      {b.items.map((it: any, i: number) => (<div key={i} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.6fr) minmax(0,2fr) 90px 80px', gap: 14, alignItems: 'center', padding: '7px 0', borderTop: i ? `1px solid ${C.b1}` : 'none' }}>
+        <span style={{ fontSize: 14, color: C.cream }}>{it.label}</span>
+        <span style={{ height: 8, background: '#140d0a', borderRadius: 4, overflow: 'hidden' }}><i style={{ display: 'block', height: '100%', width: `${Math.max(1, (it.share || 0) * 100)}%`, background: 'linear-gradient(90deg,#daa520,#8a6a1a)' }} /></span>
+        <span style={{ fontFamily: mono, fontSize: 12, color: C.latte, textAlign: 'right' }}>${(it.revenue / 1e9).toFixed(it.revenue >= 1e10 ? 0 : 1)}B · {Math.round((it.share || 0) * 100)}%</span>
+        <span style={{ fontFamily: mono, fontSize: 12, textAlign: 'right', color: it.growth == null ? C.cocoa : it.growth >= 0 ? C.up : C.dn }}>{it.growth == null ? '—' : `${it.growth >= 0 ? '+' : ''}${(it.growth * 100).toFixed(0)}%`}</span>
+      </div>))}
+      <div style={{ fontFamily: mono, fontSize: 9.5, color: C.cocoa, marginTop: 10 }}>Revenue and growth vs the year before, from {seg.source}. <a href={seg.url} target="_blank" rel="noopener noreferrer" style={{ color: C.gold }}>filing →</a></div>
+    </div>); })()}
     <div style={card}>
       <div style={{ fontFamily: mono, fontSize: 10, letterSpacing: 2, color: C.gold, marginBottom: 12 }}>IN PLAIN ENGLISH{s?.as_of ? ` · AS OF ${s.as_of}` : ''}</div>
       {!s && <div style={{ fontFamily: mono, fontSize: 11, color: C.dust }}>writing the summary…</div>}

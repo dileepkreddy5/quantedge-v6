@@ -126,3 +126,19 @@ async def summary(ticker: str, request: Request):
     return {"ticker": tk, "name": r["name"], "as_of": str(r["as_of"]), "sentences": S, "facts": facts, "profile": profile, "trackers": shows, "has_warnings": bool(warns),
             "breakthroughs": bt[:3], "next_results_est": nxt, "tier": r["tier"], "sector": r["sector"], "history_note": r["history_note"],
             "note": "Written from SEC filings, prices and QuantEdge's nightly facts. Not advice."}
+
+
+@router.get("/segments/{ticker}")
+async def segments(ticker: str, request: Request):
+    """Revenue by product/service, business segment and region from the latest 10-K."""
+    tk = ticker.upper().strip(); pool = request.app.state.db
+    cik = await pool.fetchval("SELECT cik FROM company_facts WHERE ticker=$1 ORDER BY as_of DESC LIMIT 1", tk)
+    if not cik: raise HTTPException(status_code=404, detail=f"{tk} is not in QuantEdge's company universe")
+    from quantedge.fundamentals.edgar_bulk import UA
+    from quantedge.fundamentals.segments import get_segments
+    try:
+        d = await get_segments(pool, cik, tk, UA)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"could not read the 10-K: {type(e).__name__}")
+    if not d: return {"ticker": tk, "available": False, "note": "This company's latest 10-K doesn't break revenue down by product, segment or region in a readable form."}
+    return {"ticker": tk, "available": True, **d}
