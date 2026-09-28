@@ -368,7 +368,7 @@ export default function Dashboard() {
 
             {/* ── Tab content ── */}
             <div style={{ animation: 'fadeIn 0.3s ease' }}>
-              {activeTab === 'overview'    && <SummaryTab ticker={ticker} data={data} macro={<MacroPanel ticker={ticker} />} classic={<OverviewV2 data={data} ticker={ticker} onAnalyze={runAnalysis} />} />}
+              {activeTab === 'overview'    && <SummaryTab ticker={ticker} data={data} macro={<MacroPanel ticker={ticker} />} />}
               {activeTab === 'ml'          && <MLModelsPanel data={data} />}
               {activeTab === 'patterns'    && <PatternLab ticker={ticker} />}
               {activeTab === 'intel'       && <><BreakthroughsPanel ticker={ticker} /><CompanyIntel ticker={ticker} /></>}

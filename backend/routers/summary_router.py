@@ -107,6 +107,22 @@ async def summary(ticker: str, request: Request):
         facts = {"revenue_ttm": rev, "sales_yoy": f.get("sales_yoy"), "gross_margin": f.get("gross_margin"),
                  "op_margin": f.get("op_margin"), "net_margin_ttm": (ni / rev) if (ni is not None and rev) else None,
                  "last_quarter": qs[-1]["end"] if qs else None, "source": "SEC filings"}
-    return {"ticker": tk, "name": r["name"], "as_of": str(r["as_of"]), "sentences": S, "facts": facts, "trackers": shows, "has_warnings": bool(warns),
+    profile = None
+    rd = getattr(request.app.state, "redis", None); pk = f"profile:{tk}"
+    try:
+        hit = await rd.get(pk) if rd is not None else None
+        if hit: profile = json.loads(hit)
+    except Exception: pass
+    if profile is None:
+        try:
+            import os, httpx
+            async with httpx.AsyncClient(timeout=10) as cx:
+                res = (await cx.get(f"https://api.polygon.io/v3/reference/tickers/{tk}", params={"apiKey": os.environ.get("POLYGON_API_KEY", "")})).json().get("results") or {}
+            profile = {"description": res.get("description"), "website": res.get("homepage_url"), "employees": res.get("total_employees"),
+                       "listed": res.get("list_date"), "industry": (res.get("sic_description") or "").capitalize() or None, "source": "Polygon company profile"}
+            if rd is not None and profile.get("description"): await rd.setex(pk, 7 * 86400, json.dumps(profile))
+        except Exception:
+            profile = None
+    return {"ticker": tk, "name": r["name"], "as_of": str(r["as_of"]), "sentences": S, "facts": facts, "profile": profile, "trackers": shows, "has_warnings": bool(warns),
             "breakthroughs": bt[:3], "next_results_est": nxt, "tier": r["tier"], "sector": r["sector"], "history_note": r["history_note"],
             "note": "Written from SEC filings, prices and QuantEdge's nightly facts. Not advice."}

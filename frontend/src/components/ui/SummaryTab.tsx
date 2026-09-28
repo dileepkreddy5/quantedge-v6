@@ -62,12 +62,26 @@ const PriceChart2: React.FC<{ ticker: string }> = ({ ticker }) => {
   </div>);
 };
 
-const SummaryTab: React.FC<{ ticker: string; data: any; macro?: React.ReactNode; classic?: React.ReactNode }> = ({ ticker, data, macro, classic }) => {
-  const [s, setS] = useState<any>(null); const [showClassic, setShowClassic] = useState(false);
+const SummaryTab: React.FC<{ ticker: string; data: any; macro?: React.ReactNode }> = ({ ticker, data, macro }) => {
+  const [s, setS] = useState<any>(null); const [conv, setConv] = useState<any>(null); const [openWhy, setOpenWhy] = useState(true);
   useEffect(() => { setS(null); api.get(`/api/v6/summary/${ticker}`).then(r => setS(r.data)).catch(e => setS({ error: e?.response?.data?.detail || 'summary unavailable' })); }, [ticker]);
+  useEffect(() => { setConv(null); api.get(`/api/v7/conviction/${ticker}`).then(r => setConv(r.data?.data || r.data)).catch(() => {}); }, [ticker]);
+  const pr = s?.profile;
   const card = { background: C.s1, border: `1px solid ${C.b1}`, borderRadius: 10, padding: 18, marginBottom: 16 };
   const beta = data?.capm_beta ?? data?.beta; const dd = data?.max_drawdown;
   return (<div>
+    {pr?.description && (<div style={card}>
+      <div style={{ fontFamily: mono, fontSize: 10, letterSpacing: 2, color: C.gold, marginBottom: 10 }}>WHAT {(s?.name || ticker).toUpperCase()} DOES</div>
+      <p style={{ fontSize: 15, lineHeight: 1.7, color: C.latte, margin: '0 0 12px' }}>{pr.description}</p>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 18, fontFamily: mono, fontSize: 11.5, color: C.dust }}>
+        {s?.sector && <span>Sector <b style={{ color: C.cream, fontWeight: 500 }}>{s.sector}</b></span>}
+        {pr.industry && <span>Industry <b style={{ color: C.cream, fontWeight: 500 }}>{pr.industry}</b></span>}
+        {pr.employees && <span>Employees <b style={{ color: C.cream, fontWeight: 500 }}>{Number(pr.employees).toLocaleString()}</b></span>}
+        {pr.listed && <span>Listed since <b style={{ color: C.cream, fontWeight: 500 }}>{pr.listed.slice(0, 4)}</b></span>}
+        {pr.website && <a href={pr.website} target="_blank" rel="noopener noreferrer" style={{ color: C.gold }}>{pr.website.replace(/^https?:\/\//, '').replace(/\/$/, '')} →</a>}
+      </div>
+      <div style={{ fontFamily: mono, fontSize: 9.5, color: C.cocoa, marginTop: 10 }}>Description: {pr.source}.</div>
+    </div>)}
     <div style={card}>
       <div style={{ fontFamily: mono, fontSize: 10, letterSpacing: 2, color: C.gold, marginBottom: 12 }}>IN PLAIN ENGLISH{s?.as_of ? ` · AS OF ${s.as_of}` : ''}</div>
       {!s && <div style={{ fontFamily: mono, fontSize: 11, color: C.dust }}>writing the summary…</div>}
@@ -91,12 +105,23 @@ const SummaryTab: React.FC<{ ticker: string; data: any; macro?: React.ReactNode;
         <div><b style={{ color: C.cream }}>{beta != null ? `${Number(beta).toFixed(2)}×` : '—'}</b> — how much it tends to move when the whole market moves 1% (its “beta”).</div>
         <div><b style={{ color: C.cream }}>{data?.annual_vol != null ? `${(data.annual_vol * (data.annual_vol <= 1 ? 100 : 1)).toFixed(0)}%` : '—'}</b> — a typical year's price swing (annual volatility).</div>
       </div></div>
+    {conv?.modules?.length > 0 && (<div style={card}>
+      <div onClick={() => setOpenWhy(v => !v)} style={{ display: 'flex', alignItems: 'baseline', gap: 12, cursor: 'pointer' }}>
+        <span style={{ fontFamily: mono, fontSize: 10, letterSpacing: 2, color: C.gold }}>WHY THE QUANTEDGE SCORE IS {conv.conviction_score}</span>
+        <span style={{ fontFamily: mono, fontSize: 10, color: C.cocoa }}>NOT YET VALIDATED — we're recording it daily to measure whether high scores beat low ones</span>
+        <span style={{ marginLeft: 'auto', fontFamily: mono, fontSize: 11, color: C.dust }}>{openWhy ? '▾' : '▸'}</span></div>
+      {openWhy && (<div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', gap: '6px 28px', marginTop: 14 }}>
+        {[...conv.modules].sort((a: any, b: any) => (b.weight || 0) - (a.weight || 0)).map((m: any) => (
+          <div key={m.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 46px 120px 40px', gap: 10, alignItems: 'center', fontFamily: mono, fontSize: 11.5, opacity: m.score == null ? 0.45 : 1 }}>
+            <span style={{ color: C.latte }}>{(m.label || m.id).replace(' Intelligence', '')}</span>
+            <span style={{ color: C.cocoa }}>{Math.round((m.weight || 0) * 100)}%</span>
+            <span style={{ height: 6, background: '#140d0a', borderRadius: 3, overflow: 'hidden' }}><i style={{ display: 'block', height: '100%', width: `${Math.max(0, Math.min(100, m.score ?? 0))}%`, background: C.dust }} /></span>
+            <span style={{ color: C.cream, textAlign: 'right' }}>{m.score == null ? '—' : Math.round(m.score)}</span>
+          </div>))}
+      </div>)}
+      {openWhy && <div style={{ fontFamily: mono, fontSize: 9.5, color: C.cocoa, marginTop: 10 }}>Weight = share of the total score. Each module scores 0–100 from its own tab's data; two of them (Forecast, ML models) use forecasts that don't currently hold up on recent data.</div>}
+    </div>)}
     {macro && <div style={{ marginBottom: 16 }}>{macro}</div>}
-    <div style={{ textAlign: 'center', margin: '20px 0 40px' }}>
-      <button onClick={() => setShowClassic(v => !v)} style={{ fontFamily: mono, fontSize: 11, color: C.dust, background: 'none', border: `1px solid ${C.b1}`, borderRadius: 6, padding: '8px 14px', cursor: 'pointer' }}>
-        {showClassic ? 'Hide classic overview' : 'Show classic overview (being retired)'}</button>
-      {showClassic && <div style={{ marginTop: 16, textAlign: 'left' }}>{classic}</div>}
-    </div>
   </div>);
 };
 export default SummaryTab;
