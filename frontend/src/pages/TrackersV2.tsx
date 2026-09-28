@@ -6,12 +6,12 @@ import { api } from '../auth/authStore';
 
 const TRACKERS = [
   { id: 'worth', name: 'Worth a look', q: 'Our shortlist: great companies on a dip, early growth not yet priced, fresh breakthroughs.', api: 'worth-a-look' },
-  { id: 'movers', name: 'Top movers', q: 'Biggest gainers and losers — from today to a full year.', api: 'movers' },
   { id: 'on-sale', name: 'Great companies on sale', q: 'The best companies trading far below their high — for reasons that will likely pass.', api: 'on-sale' },
-  { id: 'quiet', name: 'Quiet climbers', q: 'Rising steadily, week after week, before everyone notices.', api: 'quiet-climbers' },
   { id: 'better', name: 'Getting better', q: 'Results improving quarter after quarter, straight from SEC filings.', api: 'getting-better' },
-  { id: 'warn', name: 'Warning signs', q: 'Good companies showing early cracks — before the price fully reflects it.', api: 'warning-signs' },
   { id: 'rising', name: 'Rising stars', q: 'Growing fast enough to move up a size tier — tomorrow\'s bigger companies.', api: 'rising-stars' },
+  { id: 'quiet', name: 'Quiet climbers', q: 'Rising steadily, week after week, before everyone notices.', api: 'quiet-climbers' },
+  { id: 'warn', name: 'Warning signs', q: 'Good companies showing early cracks — before the price fully reflects it.', api: 'warning-signs' },
+  { id: 'movers', name: 'Gainers & losers', q: 'The biggest gainers and losers — from today to a full year.', api: 'movers' },
 ];
 const TIERS = [['large', 'Large', 'over $10B'], ['mid', 'Mid', '$2B–$10B'], ['small', 'Small', '$300M–$2B']];
 const STAGE: Record<string, [string, string]> = { falling: ['Still falling', '#ef7d5a'], basing: ['Going sideways', '#e0ad3a'], turning: ['Turning up', '#8fd19e'], recovering: ['Recovering', '#3ec27a'], near_high: ['Near its high', '#b09c86'] };
@@ -149,17 +149,31 @@ const TrackersV2: React.FC = () => {
     api.get(`/api/v6/trackers/${tr.api}${qs}`).then(r => setData({ ...r.data, __key: key })).catch(() => setData({ error: true, companies: [], __key: key }));
   }, [tr.id, etier, sort, weak, period]); // eslint-disable-line
   const data = raw && raw.__key === key ? raw : null;
+  const [members, setMembers] = useState<Record<string, string[]>>({}); const [multi, setMulti] = useState(false);
+  useEffect(() => { setMembers({}); api.get(`/api/v6/trackers/membership?tier=${etier}`).then(r => setMembers(r.data.members || {})).catch(() => {}); }, [etier]);
+  const TNAME: Record<string, string> = { 'on-sale': 'On sale', quiet: 'Quiet climbers', better: 'Getting better', rising: 'Rising stars', warn: 'Warning signs' };
+  const SELF: Record<string, string> = { 'on-sale': 'on-sale', quiet: 'quiet', better: 'better', rising: 'rising', warn: 'warn' };
+  const positives = (t: string) => (members[t] || []).filter(m => m !== 'warn');
+  const Also: React.FC<{ t: string }> = ({ t }) => {
+    const ms = (members[t] || []).filter(m => m !== SELF[tr.id]);
+    if (!ms.length) return null;
+    const good = ms.filter(m => m !== 'warn'), bad = ms.includes('warn') && tr.id !== 'warn';
+    return (<span className="sub" style={{ marginTop: 4 }}>
+      {good.length > 0 && <span style={{ color: 'var(--gold)' }}>Also on: {good.map(m => TNAME[m]).join(' · ')}</span>}
+      {bad && <span style={{ color: '#e0ad3a' }}>{good.length ? ' · ' : ''}⚠ has warning signs</span>}</span>);
+  };
   const [sev, setSev] = useState('all');
   const go = (t: string) => nav(`/dashboard?ticker=${t}`);
 
   const rows = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    const cs = (data?.companies || []).filter((c: any) => !needle || c.ticker.toLowerCase().includes(needle) || (c.name || '').toLowerCase().includes(needle));
+    const cs = (data?.companies || []).filter((c: any) => (!needle || c.ticker.toLowerCase().includes(needle) || (c.name || '').toLowerCase().includes(needle))
+      && (!multi || positives(c.ticker).length >= 2));
     if (tr.id === 'warn') return cs.filter((c: any) => sev === 'all' || (sev === 'serious' && c.serious > 0) || (sev === 'multi' && c.signs.length >= 2));
     if (tr.id !== 'on-sale') return cs;
     return cs.filter((c: any) => (depth === 'all' || (depth === '20' && c.pct_below_high > -0.30) || (depth === '30' && c.pct_below_high <= -0.30 && c.pct_below_high > -0.50) || (depth === '50' && c.pct_below_high <= -0.50))
       && (stage === 'all' || c.stage === stage) && (cause === 'all' || c.drop_cause === cause));
-  }, [data, tr.id, depth, stage, cause, sev, q]);
+  }, [data, tr.id, depth, stage, cause, sev, q, multi, members]);
 
   const hist = data?.history?.by_tier?.[etier] || data?.history?.buckets || {};
   const hb = depth === '50' ? hist['50'] : depth === '30' ? hist['30'] : hist['20'];
@@ -175,7 +189,8 @@ const TrackersV2: React.FC = () => {
         <div className="tiers">{(tr.id === 'rising' ? [['mid', 'Mid → Large', 'to $10B+'], ['small', 'Small → Mid', 'to $2B+']] : TIERS).map(([k, l, sub]) => (
           <button key={k} className={`tier ${etier === k ? 'on' : ''}`} onClick={() => set('tier', k)}>{l}<small>{sub}</small></button>))}
           <label htmlFor="tsearch" style={{ position: 'absolute', left: -9999 }}>Search this tracker</label>
-          <input id="tsearch" className="srch" value={q} onChange={e => setQ(e.target.value)} placeholder="Search this tracker — ticker or name" autoComplete="off" /></div>
+          <button className={`pill ${multi ? 'on' : ''}`} onClick={() => setMulti(m => !m)} style={{ alignSelf: 'center', marginLeft: 'auto', marginRight: 10 }}>{multi ? '✓ ' : ''}On 2+ trackers</button>
+          <input id="tsearch" className="srch" style={{ marginLeft: 0 }} value={q} onChange={e => setQ(e.target.value)} placeholder="Search this tracker — ticker or name" autoComplete="off" /></div>
         {q && data && rows.length === 0 && <div className="empty">{q.toUpperCase()} isn't on this tracker in this size group today.
           <br /><button className="open" onClick={() => go(q.trim().toUpperCase())}>Open its full analysis →</button></div>}
       </div>
@@ -192,7 +207,7 @@ const TrackersV2: React.FC = () => {
         {data && !q && rows.length === 0 && <div className="empty">nothing on the shortlist in this size tier today</div>}
         <div className="feat">{rows.filter((p: any) => p.top5).map((p: any, i: number) => (<div className="fc" key={p.ticker}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}><span className="rank">{i + 1}</span>
-            <div><span className="tk">{p.ticker}</span><span className="nm">{nice(p.name)} · {bil(p.market_cap)} · {p.sector}</span></div></div>
+            <div><span className="tk">{p.ticker}</span><Also t={p.ticker} /><span className="nm">{nice(p.name)} · {bil(p.market_cap)} · {p.sector}</span></div></div>
           <div>{p.kinds.map((k: string) => <span key={k} className={`kd ${kcls(k)}`}>{KIND[k] || k}</span>)}</div>
           <ul>{p.case.map((c: string, j: number) => <li key={j}>{c}</li>)}</ul>
           <div className="cat">
@@ -207,7 +222,7 @@ const TrackersV2: React.FC = () => {
         </div>))}</div>
         {rows.filter((p: any) => !p.top5).map((p: any, i: number) => (<div className="wr" key={p.ticker} onClick={() => go(p.ticker)}>
           <span className="rk">{i + 9}</span>
-          <div><span className="tk">{p.ticker}</span><span className="nm">{nice(p.name)} · {bil(p.market_cap)}</span></div>
+          <div><span className="tk">{p.ticker}</span><Also t={p.ticker} /><span className="nm">{nice(p.name)} · {bil(p.market_cap)}</span></div>
           <div className="hide">{p.kinds.map((k: string) => <span key={k} className={`kd ${kcls(k)}`}>{KIND[k] || k}</span>)}</div>
           <div className="hide" style={{ fontSize: 13, color: 'var(--latte)', lineHeight: 1.5 }}>{p.case[0]}</div>
           <div className="hide num mu" style={{ fontSize: 11.5 }}>results ~{fmtDate(p.next_results_est)}</div>
@@ -232,7 +247,7 @@ const TrackersV2: React.FC = () => {
               {data && list.length === 0 && <div className="empty">{needle ? `${q.toUpperCase()} isn't among them` : 'none'}</div>}
               {list.map((c: any, i: number) => (<div className="lb" key={c.ticker} onClick={() => go(c.ticker)} style={{ gridTemplateColumns: '32px minmax(0,1.2fr) 96px minmax(0,2.2fr)' }}>
                 <span className="rk" style={{ fontSize: 18 }}>{i + 1}</span>
-                <div><span className="tk">{c.ticker}</span><span className="nm">{nice(c.name)} · {bil(c.market_cap)}</span>
+                <div><span className="tk">{c.ticker}</span><Also t={c.ticker} /><span className="nm">{nice(c.name)} · {bil(c.market_cap)}</span>
                   {c.tags.length > 0 && <span className="sub" style={{ color: 'var(--gold)' }}>{c.tags.join(' · ')}</span>}</div>
                 <span className={`num ${c.move >= 0 ? 'up' : 'dn'}`} style={{ fontSize: 18 }}>{pct(c.move, 1)}</span>
                 <div className="hide"><Rets r={c.returns} vol={c.vol_ratio_20_60} /></div>
@@ -267,7 +282,7 @@ const TrackersV2: React.FC = () => {
           const isOpen = open === c.ticker;
           return (<div className="row" key={c.ticker}>
             <div className="rh" onClick={() => setOpen(isOpen ? null : c.ticker)}>
-              <div><span className="tk">{c.ticker}</span><span className="nm">{nice(c.name)}</span><span className="sub">{c.sector} · {bil(c.market_cap)}</span></div>
+              <div><span className="tk">{c.ticker}</span><Also t={c.ticker} /><span className="nm">{nice(c.name)}</span><span className="sub">{c.sector} · {bil(c.market_cap)}</span></div>
               <div><span className="num dn" style={{ fontSize: 17 }}>{pct(c.pct_below_high)}</span> <span className="mu num" style={{ fontSize: 11 }}>from {fmtDate(c.high_date)} high · {c.months_since_high} mo</span>
                 <div className="gauge">{lowPct != null && <div className="fill" style={{ left: 0, width: `${Math.min(100, -lowPct * 100)}%` }} />}
                   <div className="now" style={{ left: `calc(${Math.min(100, -c.pct_below_high * 100)}% - 1px)` }} /></div>
@@ -304,7 +319,7 @@ const TrackersV2: React.FC = () => {
         {data && !q && rows.length === 0 && <div className="empty">no quiet climbers in this size tier today</div>}
         {rows.map((c: any, i: number) => (<div className="lb" key={c.ticker} onClick={() => go(c.ticker)}>
           <span className="rk">{i + 1}</span>
-          <div><span className="tk">{c.ticker}</span><span className="nm">{nice(c.name)}</span><span className="sub">{c.sector} · {bil(c.market_cap)}</span></div>
+          <div><span className="tk">{c.ticker}</span><Also t={c.ticker} /><span className="nm">{nice(c.name)}</span><span className="sub">{c.sector} · {bil(c.market_cap)}</span></div>
           <Rets r={c.returns} vol={c.vol_ratio_20_60} />
           <div className="hide"><span className="num">beat market {c.weeks_beat_mkt_26}/26 wks</span>
             <div className="meter"><i style={{ width: `${c.weeks_beat_mkt_26 / 26 * 100}%`, background: 'var(--up)' }} /></div></div>
@@ -326,7 +341,7 @@ const TrackersV2: React.FC = () => {
         <div className="bar"><span className="meta" style={{ marginLeft: 0 }}>{data ? `${rows.length} companies · as of ${data.as_of || ''}` : 'loading…'}</span></div>
         {data && !q && rows.length === 0 && <div className="empty">no companies in this size tier meet all the conditions today</div>}
         <div className="gc">{rows.map((c: any) => (<div className="gcard" key={c.ticker} onClick={() => go(c.ticker)}>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}><span className="tk">{c.ticker}</span>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}><span className="tk">{c.ticker}</span><Also t={c.ticker} />
             <span className="streak">{c.acceleration_streak >= 7 ? '7+' : c.acceleration_streak} QTRS SPEEDING UP</span></div>
           <span className="nm" style={{ marginTop: -8 }}>{nice(c.name)} · {bil(c.market_cap)}</span>
           <Bars v={(c.quarters || []).map((q: any) => q.sales)} />
@@ -358,7 +373,7 @@ const TrackersV2: React.FC = () => {
         {data && !q && rows.length === 0 && <div className="empty">no warning signs in this size tier in the last 30 days</div>}
         {rows.map((c: any) => (<div className={`wco ${c.serious ? 'serious' : 'watch'}`} key={c.ticker}>
           <div className="wtop" onClick={() => go(c.ticker)}>
-            <div><span className="tk">{c.ticker}</span><span className="nm">{nice(c.name)}</span>
+            <div><span className="tk">{c.ticker}</span><Also t={c.ticker} /><span className="nm">{nice(c.name)}</span>
               <span className="sub">{c.sector} · {bil(c.market_cap)} · first sign {c.days_since_first} days ago</span></div>
             <Rets r={c.returns} vol={c.vol_ratio_20_60} />
             <div className="wsev"><b style={{ color: c.serious ? '#e5484d' : '#e0ad3a' }}>{c.signs.length} sign{c.signs.length > 1 ? 's' : ''}</b>
@@ -382,7 +397,7 @@ const TrackersV2: React.FC = () => {
         <div className="bar"><span className="meta" style={{ marginLeft: 0 }}>{data ? `${rows.length} companies · as of ${data.as_of || ''}` : 'loading…'}</span></div>
         {data && !q && rows.length === 0 && <div className="empty">no rising stars in this group today</div>}
         <div className="gc">{rows.map((c: any) => (<div className="gcard" key={c.ticker} onClick={() => go(c.ticker)}>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}><span className="tk">{c.ticker}</span>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}><span className="tk">{c.ticker}</span><Also t={c.ticker} />
             {c.funds_arriving && <span className="streak">MORE FUNDS BUYING</span>}</div>
           <span className="nm" style={{ marginTop: -8 }}>{nice(c.name)} · {bil(c.market_cap)} · {c.sector}</span>
           <div className="big" style={{ fontFamily: 'var(--serif)', fontSize: 17, color: 'var(--cream)', lineHeight: 1.4 }}>

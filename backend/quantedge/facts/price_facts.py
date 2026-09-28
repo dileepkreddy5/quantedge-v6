@@ -146,7 +146,10 @@ async def build_price_facts(pool, as_of: date | None = None) -> dict:
             j = di.get(d)
             if j is not None: M[k, j] = c[i]
         hi_i = int(np.argmax(c)); lo_i = hi_i + int(np.argmin(c[hi_i:]))
-        ret = lambda s: float(c[-1] / c[-1 - s] - 1) if n > s else None
+        def ret(s_):
+            if n <= s_ or not c[-1 - s_] > 0: return None
+            x = float(c[-1] / c[-1 - s_] - 1)
+            return x if np.isfinite(x) else None
         wk_beat = up_wk = 0; wk_n = 0
         for w in range(26):
             a, b = n - 1 - 5 * w, n - 1 - 5 * (w + 1)

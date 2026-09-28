@@ -2,6 +2,7 @@
 from __future__ import annotations
 import json
 from datetime import timedelta
+import math
 from fastapi import APIRouter, Query, Request, HTTPException
 from core.artifact_paths import artifact_read_path
 
@@ -500,12 +501,12 @@ async def movers(request: Request, tier: str = Query("large"), period: str = Que
     if period == "1d":
         from routers.home_router import _snap
         snap = await _snap(list(by))
-        move = {t: (v["chg_pct"] / 100.0) for t, v in snap.items() if v.get("chg_pct") is not None and v.get("price")}
+        move = {t: (v["chg_pct"] / 100.0) for t, v in snap.items() if v.get("chg_pct") is not None and v.get("price") and math.isfinite(v["chg_pct"])}
         upd = max([v.get("updated_ns") or 0 for v in snap.values()] or [0])
         quote_time = __import__("datetime").datetime.fromtimestamp(upd / 1e9, tz=__import__("datetime").timezone.utc).isoformat() if upd else None
         vol_today = {t: v.get("volume") or 0 for t, v in snap.items()}
     else:
-        move = {t: r[col] for t, r in by.items() if r[col] is not None}
+        move = {t: r[col] for t, r in by.items() if r[col] is not None and math.isfinite(r[col])}
         vol_today = {}
     res = {t: e["event_date"] for e in await pool.fetch("""SELECT DISTINCT ON (ticker) ticker, event_date FROM ci_events
         WHERE item_code='2.02' AND ticker = ANY($1) AND event_date > CURRENT_DATE - 7 ORDER BY ticker, event_date DESC""", list(by))}
@@ -516,11 +517,37 @@ async def movers(request: Request, tier: str = Query("large"), period: str = Que
         if t in res: tags.append(f"results {res[t]}")
         if (r["vol_ratio_20_60"] or 0) >= 1.8: tags.append(f"volume {r['vol_ratio_20_60']:.1f}× its usual")
         return {"ticker": t, "name": r["name"], "sector": r["sector"], "market_cap": r["market_cap"], "price": r["price"], "move": m,
-                "returns": {"1d": r["ret_1d"], "1w": r["ret_1w"], "2w": r["ret_2w"], "1m": r["ret_1m"], "3m": r["ret_3m"], "6m": r["ret_6m"], "1y": r["ret_1y"]},
-                "vol_ratio_20_60": r["vol_ratio_20_60"], "tags": tags}
+                "returns": {k: (v if v is not None and math.isfinite(v) else None) for k, v in
+                            {"1d": r["ret_1d"], "1w": r["ret_1w"], "2w": r["ret_2w"], "1m": r["ret_1m"], "3m": r["ret_3m"], "6m": r["ret_6m"], "1y": r["ret_1y"]}.items()},
+                "vol_ratio_20_60": r["vol_ratio_20_60"] if r["vol_ratio_20_60"] is not None and math.isfinite(r["vol_ratio_20_60"]) else None, "tags": tags}
     ranked = sorted(move.items(), key=lambda kv: kv[1])
     return {"as_of": str(as_of), "tier": tier, "period": period, "quote_time": quote_time, "universe": len(move),
             "gainers": [card(t, m) for t, m in reversed(ranked[-limit:]) if m > 0],
             "losers": [card(t, m) for t, m in ranked[:limit] if m < 0],
             "note": ("1-day moves use the live quote (15-minute delayed); longer periods use the last close. "
                      "Companies trading under a minimum dollar volume are left out.")}
+
+
+@router.get("/trackers/membership")
+async def membership(request: Request, tier: str = Query("large")):
+    """Which trackers each company in a tier appears on (cached 30 min)."""
+    if tier not in ("large", "mid", "small"): raise HTTPException(status_code=422, detail="tier must be large|mid|small")
+    rd = getattr(request.app.state, "redis", None); key = f"trk:member:{tier}"
+    if rd is not None:
+        try:
+            hit = await rd.get(key)
+            if hit: return json.loads(hit)
+        except Exception: pass
+    out: dict[str, list] = {}
+    def add(res, name):
+        for c in res.get("companies", []): out.setdefault(c["ticker"], []).append(name)
+    add(await on_sale(request, tier=tier, min_drop=0.20, quality="strong", sort="size"), "on-sale")
+    add(await quiet_climbers(request, tier=tier), "quiet")
+    add(await getting_better(request, tier=tier), "better")
+    if tier in ("mid", "small"): add(await rising_stars(request, tier=tier), "rising")
+    add(await warning_signs(request, tier=tier, healthy_only=False), "warn")
+    res = {"tier": tier, "members": out}
+    if rd is not None:
+        try: await rd.setex(key, 1800, json.dumps(res))
+        except Exception: pass
+    return res
