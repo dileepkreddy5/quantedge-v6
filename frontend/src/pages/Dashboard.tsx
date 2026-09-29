@@ -206,8 +206,8 @@ export default function Dashboard() {
       .catch(() => setConviction(null));
   }, [ticker, data]);
   const convScore = conviction ? Math.round(conviction.score) : null;
-  const convVerdict = conviction ? conviction.verdict.replace('_',' ') : signal;
-  const convColor = convVerdict.includes('BUY') ? '#22c55e' : convVerdict.includes('SELL') ? '#ef4444' : '#f59e0b';
+  const convVerdict = 'SCORE';   // no BUY/SELL verdict until the score has a measured track record
+  const convColor = '#9d8b7a';
 
   return (
     <div style={{ minHeight: '100vh', background: '#1a0f0a', fontFamily: "'Outfit', sans-serif", color: '#f4e8d8' }}>
@@ -384,7 +384,7 @@ export default function Dashboard() {
               {activeTab === 'valuation'   && <ValuationPanel ticker={ticker} />}
               
               {['business','financial','management','competitive','industry'].includes(activeTab) && <BusinessTab ticker={ticker} sections={[
-                { id: 'quarters', title: 'Quarterly results', hint: '12 quarters, each vs the same quarter a year earlier', open: true, node: <QuartersPanel ticker={ticker} /> },
+                { id: 'quarters', title: 'Quarterly results', hint: 'up to 20 quarters, each vs the same quarter a year earlier', open: true, node: <QuartersPanel ticker={ticker} /> },
                 { id: 'quality', title: 'Financial quality', hint: 'profitability, cash flow, balance sheet — every score explained', node: <FinancialIntelligencePanel ticker={ticker} /> },
                 { id: 'moat', title: 'Moat & business model', hint: 'how durable its advantage looks in the numbers', node: <BusinessPanel ticker={ticker} /> },
                 { id: 'mgmt', title: 'Management & capital allocation', hint: 'buybacks, dividends, insiders, reinvestment', node: <ManagementPanel ticker={ticker} /> },
@@ -468,7 +468,6 @@ function TickerHeader({ data, ticker }: { data: any; ticker: string }) {
       <div style={{ display: 'flex', gap: 20, marginLeft: 'auto', flexWrap: 'wrap' }}>
         {[
           { label: 'MARKET VALUE', value: formatLarge(data.market_cap) },
-          { label: 'P/E', value: (data.pe_ratio ?? data.fundamentals?.pe_ratio) != null ? `${Number(data.pe_ratio ?? data.fundamentals?.pe_ratio).toFixed(1)}×` : '—' },
           { label: 'VS 52W HIGH', value: (data.week_52_high && data.price) ? `${((data.price / data.week_52_high - 1) * 100).toFixed(1)}%` : '—' },
         ].map(s => (
           <div key={s.label} style={{ textAlign: 'center' }}>
@@ -476,12 +475,23 @@ function TickerHeader({ data, ticker }: { data: any; ticker: string }) {
             <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 12, color: '#d4c4b0', fontWeight: 600 }}>{s.value}</div>
           </div>
         ))}
+        <PeStat ticker={ticker} mcap={data.market_cap} />
         <VolStat ticker={ticker} />
       </div>
 
 
     </div>
   );
+}
+
+// P/E from the last four reported quarters (SEC), not a year-old annual figure.
+function PeStat({ ticker, mcap }: { ticker: string; mcap?: number }) {
+  const [f, setF] = useState<any>(null);
+  useEffect(() => { setF(null); api.get(`/api/v6/summary/${ticker}`).then(r => setF(r.data?.facts || null)).catch(() => {}); }, [ticker]);
+  const pe = f?.ni_ttm > 0 && mcap ? mcap / f.ni_ttm : null;
+  return (<div style={{ textAlign: 'center' }}>
+    <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 8, color: '#8a7560', letterSpacing: 2, marginBottom: 2 }}>P/E · 12M</div>
+    <div style={{ fontFamily: "'Fira Code',monospace", fontSize: 12, color: '#d4c4b0', fontWeight: 600 }}>{pe != null ? `${pe.toFixed(1)}×` : f && !(f.ni_ttm > 0) ? 'loss' : '—'}</div></div>);
 }
 
 // Volatility from the single price-stats source, with its window stated.
@@ -501,7 +511,7 @@ function StockSnapshot({ data, ticker }: { data: any; ticker?: string }) {
   useEffect(() => { setSec(null); if (!ticker) return; api.get(`/api/v6/summary/${ticker}`).then(r => setSec(r.data?.facts || null)).catch(() => {}); }, [ticker]);
   const f0 = data.fundamentals || {};
   const f = sec ? { ...f0, revenue_ttm: sec.revenue_ttm ?? f0.revenue_ttm, revenue_growth: sec.sales_yoy ?? f0.revenue_growth,
-                    gross_margin: sec.gross_margin ?? f0.gross_margin, net_margin: sec.net_margin_ttm ?? f0.net_margin } : f0;
+                    gross_margin: sec.gross_margin_ttm ?? f0.gross_margin, net_margin: sec.net_margin_ttm ?? f0.net_margin } : f0;
   const ar = data.analyst_ratings || {};
   const cons = ar.consensus || {};
   const price = data.price ?? 0;
@@ -531,16 +541,15 @@ function StockSnapshot({ data, ticker }: { data: any; ticker?: string }) {
         <ColHead t={sec ? `FUNDAMENTALS · SEC FILINGS${sec.last_quarter ? " · QTR TO " + sec.last_quarter : ""}` : "FUNDAMENTALS"} />
         <Cell label="Revenue TTM" value={fmtBig(f.revenue_ttm)} />
         <Cell label={sec ? "Sales growth (vs yr ago)" : "Rev Growth"} value={fmtPct(f.revenue_growth)} color={f.revenue_growth == null ? undefined : col(f.revenue_growth > 0)} />
-        <Cell label="Gross Margin" value={fmtPct(f.gross_margin)} color={col(f.gross_margin>0.4)} />
-        <Cell label="Net Margin" value={fmtPct(f.net_margin)} color={col(f.net_margin>0.1)} />
-        <Cell label="ROE" value={fmtPct(f.roe)} color={col(f.roe>0.15)} />
+        <Cell label={sec ? "Gross margin · 12 mo" : "Gross Margin"} value={fmtPct(f.gross_margin)} color={col(f.gross_margin>0.4)} />
+        <Cell label={sec ? "Net margin · 12 mo" : "Net Margin"} value={fmtPct(f.net_margin)} color={col(f.net_margin>0.1)} />
+        <Cell label="Operating margin · 12 mo" value={sec?.op_margin_ttm != null ? `${(sec.op_margin_ttm * 100).toFixed(1)}%` : "—"} />
         <Cell label="Liabilities / Equity" value={f.debt_to_equity != null ? Number(f.debt_to_equity).toFixed(2) : '—'} color={col(f.debt_to_equity != null ? f.debt_to_equity < 1.5 : null)} />
       </div>
       <div>
         <ColHead t="VALUATION" />
-        <Cell label="P/E" value={fmtX(f.pe_ratio ?? data.pe_ratio)} />
-        <Cell label="P/S" value={fmtX(f.price_to_sales)} />
-        <Cell label="EV/EBITDA" value={fmtX(f.ev_ebitda)} />
+        <Cell label="P/E · last 12 mo" value={sec?.ni_ttm > 0 && data.market_cap ? `${(data.market_cap / sec.ni_ttm).toFixed(1)}x` : "—"} />
+        <Cell label="P/S · last 12 mo" value={sec?.revenue_ttm && data.market_cap ? `${(data.market_cap / sec.revenue_ttm).toFixed(1)}x` : "—"} />
         <Cell label="FCF Yield" value={fmtPct(data.fcf_yield)} color={col(data.fcf_yield>0.04)} />
       </div>
       <div>
