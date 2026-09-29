@@ -104,7 +104,11 @@ async def summary(ticker: str, request: Request):
         qs = f.get("quarters") or []; last4 = qs[-4:]
         rev = sum(q["sales"] for q in last4) if len(last4) == 4 else None
         ni = f.get("net_income_ttm")
-        facts = {"revenue_ttm": rev, "sales_yoy": f.get("sales_yoy"), "gross_margin": f.get("gross_margin"),
+        def _ttm_margin(key):
+            if len(last4) != 4 or any(q.get(key) is None or not q.get("sales") for q in last4): return None
+            return sum(q[key] * q["sales"] for q in last4) / sum(q["sales"] for q in last4)
+        facts = {"revenue_ttm": rev, "ni_ttm": ni, "gross_margin_ttm": _ttm_margin("gross_margin"), "op_margin_ttm": _ttm_margin("op_margin"),
+                 "sales_yoy": f.get("sales_yoy"), "gross_margin": f.get("gross_margin"),
                  "op_margin": f.get("op_margin"), "net_margin_ttm": (ni / rev) if (ni is not None and rev) else None,
                  "last_quarter": qs[-1]["end"] if qs else None, "source": "SEC filings"}
     profile = None
