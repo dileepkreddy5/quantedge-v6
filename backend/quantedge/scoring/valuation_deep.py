@@ -86,7 +86,9 @@ def compute_valuation_deep(merged, fin_features, val_features, price, market_cap
     if ab.get("tangible_nav_per_share"): f["tangible_nav_upside"]=gap_to_price(ab["tangible_nav_per_share"], price)
     f["epv_upside"]=gap_to_price(val_features.get("epv_per_share"), price)
     f["graham_upside"]=gap_to_price(val_features.get("graham_number"), price)
-    f["residual_income_upside"]=gap_to_price(val_features.get("residual_income_value"), price)
+    _ri = val_features.get("residual_income_value")
+    # not scored when the method doesn't fit (its value >3x or <1/4 of the price): +238% scored a perfect 100 for Apple
+    f["residual_income_upside"]=gap_to_price(_ri, price) if (_ri and price and 0.25*price <= _ri <= 3*price) else None
     f["dcf_weighted_upside"]=gap_to_price(val_features.get("dcf_weighted"), price)
     div_ttm=ttm("dividends_paid") or latest_ttm("dividends_paid")
     if div_ttm and shares:

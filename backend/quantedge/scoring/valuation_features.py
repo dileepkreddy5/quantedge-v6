@@ -92,8 +92,10 @@ def compute_valuation_features(merged, fin_features, price, market_cap, wacc_dic
         f["upside_to_fair"]=round((fair-price)/price,4)
         f["buy_zone"]=round(fair*0.7,2); f["sell_zone"]=round(fair*1.15,2)
         f["price_to_fair"]=round(price/fair,3)
+    # Methods whose value is more than 3x or under a quarter of the price don't fit the company
+    # (e.g. residual income for Apple, whose book value is tiny after buybacks); leave them out.
     intrinsics=[v for v in [f.get("dcf_weighted"),f.get("epv_per_share"),
-                f.get("graham_number"),f.get("residual_income_value")] if v and v>0]
+                f.get("graham_number"),f.get("residual_income_value")] if v and v>0 and (not price or 0.25*price <= v <= 3*price)]
     if intrinsics:
         f["intrinsic_consensus"]=round(sum(intrinsics)/len(intrinsics),2)
         f["consensus_upside"]=round((f["intrinsic_consensus"]-price)/price,4)

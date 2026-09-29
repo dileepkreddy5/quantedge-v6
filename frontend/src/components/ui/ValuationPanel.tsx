@@ -256,7 +256,8 @@ export default function ValuationPanel({ ticker }:{ ticker:string }){
       <ValuationBridge d={d} />
 
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8,marginTop:6}}>
-        <span style={{fontSize:11,color:'var(--cocoa)',letterSpacing:1}}>RAW SIGNALS · all {d.tree.categories.reduce((a,c)=>a+c.n_signals,0)} across 10 categories</span>
+        <span style={{fontSize:11,color:'var(--cocoa)',letterSpacing:1}}>HOW THE VALUATION SCORE IS BUILT · {d.tree.categories.reduce((a,c)=>a+c.n_signals,0)} signals in {d.tree.categories.length} categories
+          <span style={{display:'block',letterSpacing:0,fontSize:11.5,color:'var(--cocoa-dust)',marginTop:3}}>Each signal scores 0–100 — against its peers (a percentile) when peer data exists, otherwise against fixed good/great thresholds. Greyed signals aren't scored.</span></span>
         <button onClick={()=>{const v=!allOpen;setAllOpen(v);const m:Record<string,boolean>={};d.tree.categories.forEach(c=>m[c.id]=v);setExpanded(m);}}
           style={{background:'var(--surface-2)',border:'1px solid #2a2a2a',color:'var(--cocoa-dust)',borderRadius:8,padding:'5px 12px',fontSize:11,cursor:'pointer'}}>
           {allOpen?'Collapse all':'Expand all'}</button>
@@ -278,11 +279,21 @@ export default function ValuationPanel({ ticker }:{ ticker:string }){
                   {cat.signals.map(s=>{
                     const pending=s.status==='needs_source'||s.score==null;
                     const rv=s.raw_value;
-                    const fmt=rv==null?'—':Math.abs(rv)>=1000000?'$'+(rv/1e9).toFixed(1)+'B':Math.abs(rv)<1&&Math.abs(rv)>0?(rv*100).toFixed(1)+'%':rv.toFixed(2);
+                    const key=(s.id+' '+s.label).toLowerCase();
+                    const fmt=rv==null?'—'
+                      : Math.abs(rv)>=1000000 ? '$'+(rv/1e9).toFixed(1)+'B'
+                      : /p2f|price \/|multiple|ev\/|p\/e|p\/s|pe_|ps_|_pe|_ps/.test(key) ? rv.toFixed(2)+'×'
+                      : /upside|margin of safety|growth|return|gap/.test(key) ? (rv>=0?'+':'')+(rv*100).toFixed(1)+'%'
+                      : /%|pct|share|fraction|reliance|scenario|yield|consensus|ratio of/.test(key) ? (rv*100).toFixed(1)+'%'
+                      : rv.toFixed(2);
+                    const why = s.score==null ? (s.method==='needs_source' ? 'data source pending' : 'not scored — input unavailable or the method doesn\'t fit this company') : '';
+                    const how = s.score==null ? '' : s.method==='percentile' ? `vs peers · ${Math.round(s.score)}th pct` : 'vs thresholds';
                     return (
-                      <div key={s.id} title={s.evidence} style={{display:'flex',alignItems:'center',gap:10,padding:'5px 0',borderBottom:'1px solid var(--border-1)',opacity:pending?0.5:1}}>
-                        <span style={{fontSize:12,color:'var(--latte)',flex:1}}>{s.label}</span>
-                        <span style={{fontSize:12,color:'var(--cocoa-dust)',width:80,textAlign:'right'}}>{pending?'pending':fmt}</span>
+                      <div key={s.id} style={{display:'flex',alignItems:'center',gap:10,padding:'7px 0',borderBottom:'1px solid var(--border-1)',opacity:pending?0.55:1}}>
+                        <span style={{fontSize:12.5,color:'var(--latte)',flex:1}}>{s.label}
+                          <span style={{display:'block',fontSize:11,color:'var(--cocoa-dust)',marginTop:2}}>{s.evidence}{why ? <em style={{color:'#e0ad3a',fontStyle:'normal'}}> — {why}</em> : null}</span></span>
+                        <span style={{fontSize:12.5,color:'var(--cream,#f4e8d8)',width:84,textAlign:'right',fontFamily:"'Fira Code',monospace"}}>{fmt}</span>
+                        <span style={{fontSize:10,color:'var(--cocoa)',width:120,textAlign:'right',fontFamily:"'Fira Code',monospace"}}>{how}</span>
                         <div style={{width:90,height:6,background:'var(--surface-3)',borderRadius:3,overflow:'hidden'}}>
                           {!pending && <div style={{height:'100%',width:`${s.score}%`,background:heat(s.score)}}/>}
                         </div>
