@@ -62,7 +62,6 @@ const TABS = [
   { id: 'business',    label: '🏰 BUSINESS' },
   { id: 'news',        label: '📰 NEWS' },
   { id: 'risk',        label: '🛡 MODELS & RISK' },
-  { id: 'watchlist',   label: '★ WATCHLIST' },
 ];
 
 const QUICK_TICKERS = ['AAPL', 'NVDA', 'TSLA', 'SPY', 'QQQ', 'MSFT', 'AMZN', 'META', 'GOOGL', 'BRK-B'];
@@ -218,7 +217,7 @@ export default function Dashboard() {
           
           {/* Logo */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-            <div style={{
+            <div onClick={() => { window.location.href = '/'; }} title="Home" role="link" style={{
               fontFamily: "'Bebas Neue', sans-serif",
               fontSize: 22, letterSpacing: 5, color: '#daa520',
             }}>QUANTEDGE</div>
@@ -385,7 +384,7 @@ export default function Dashboard() {
                 { id: 'comp', title: 'Competition', hint: 'how it compares with close rivals', node: <CompetitivePanel ticker={ticker} /> },
                 { id: 'ind', title: 'Industry', hint: 'its sector, and how it moves with it — beta only means something when correlation is meaningful', node: <IndustryPanel ticker={ticker} /> },
               ]} />}
-              {activeTab === 'watchlist'   && <Watchlist onAnalyze={runAnalysis} />}
+              
               
               
               

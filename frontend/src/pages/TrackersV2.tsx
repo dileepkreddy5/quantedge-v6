@@ -181,7 +181,7 @@ const TrackersV2: React.FC = () => {
 
   return (<div className="t2"><style>{CSS}</style>
     <nav><div className="wrap"><a className="logo" onClick={() => nav('/')}>QUANTEDGE</a>
-      <div className="links"><a onClick={() => nav('/')}>Markets</a><a className="on">Trackers</a><a onClick={() => nav('/methodology')}>How it works</a></div></div></nav>
+      <div className="links"><a onClick={() => nav('/')}>Markets</a><a className="on">Trackers</a><a onClick={() => nav('/watchlist')}>Watchlist</a><a onClick={() => nav('/methodology')}>How it works</a></div></div></nav>
     <div className="wrap">
       <div className="head"><div className="eyebrow">Trackers · rebuilt every night</div><h1>Find the companies worth your attention.</h1>
         <div className="trk">{TRACKERS.map(t => (<button key={t.id} className={`tb ${t.id === tr.id ? 'on' : ''}`} onClick={() => set('t', t.id)}>

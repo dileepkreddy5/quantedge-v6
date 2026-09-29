@@ -128,7 +128,7 @@ const Home: React.FC = () => {
     <style>{CSS}</style>
     <nav><div className="wrap">
       <a className="logo" onClick={focusSearch}>QUANTEDGE</a>
-      <div className="links"><a href="#markets">Markets</a><a onClick={() => nav('/trackers')}>Trackers</a><a href="#how">How it works</a></div>
+      <div className="links"><a href="#markets">Markets</a><a onClick={() => nav('/trackers')}>Trackers</a><a onClick={() => nav('/watchlist')}>Watchlist</a><a href="#how">How it works</a></div>
       <button className="btn ghost" onClick={() => nav('/login')}>Log in</button>
     </div></nav>
 
