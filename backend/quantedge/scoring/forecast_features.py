@@ -24,13 +24,17 @@ def compute_forecast_features(merged, closes, fin_features):
     def S(k,n=12): return [_f(x.get(k)) for x in merged[-n:] if _f(x.get(k)) is not None]
     def qoq(vals):
         return [vals[i]/vals[i-1]-1 for i in range(1,len(vals)) if vals[i-1] and vals[i-1]>0]
+    def yoy(vals):
+        # each quarter vs the same quarter a year earlier: quarter-to-quarter change turned Apple's
+        # seasonal post-holiday drop into "-12% growth" while the filings show +16% year over year
+        return [vals[i]/vals[i-4]-1 for i in range(4,len(vals)) if vals[i-4] and vals[i-4]>0]
 
     rev=S("revenue",12); ni=S("net_income",12); oi=S("operating_income",12)
     gp=S("gross_profit",12); ocf=S("operating_cash_flow",12); eps=S("eps_diluted",12)
 
     # ========== EARNINGS TRAJECTORY ==========
     if len(ni)>=6:
-        g=qoq(ni)
+        g=yoy(ni)
         if len(g)>=4:
             f["earnings_accel"]=st.mean(g[-2:])-st.mean(g[:2])  # 2nd derivative
             f["earnings_growth_recent"]=st.mean(g[-2:])
@@ -38,7 +42,7 @@ def compute_forecast_features(merged, closes, fin_features):
         f["earnings_trend_slope"]=_cagr_slope(ni[-6:])
         f["earnings_positivity"]=sum(1 for x in ni[-8:] if x>0)/len(ni[-8:])
     if len(eps)>=6:
-        eg=qoq(eps)
+        eg=yoy(eps)
         if len(eg)>=4:
             f["eps_growth_recent"]=st.mean(eg[-2:])
             f["eps_accel"]=st.mean(eg[-2:])-st.mean(eg[:2])
@@ -46,7 +50,7 @@ def compute_forecast_features(merged, closes, fin_features):
 
     # ========== REVENUE TRAJECTORY & 2YR-STACKED ==========
     if len(rev)>=6:
-        rg=qoq(rev)
+        rg=yoy(rev)
         if len(rg)>=4:
             f["revenue_growth_persistence"]=1.0-min(1.0,st.pstdev(rg)/(abs(st.mean(rg))+0.02))
             f["revenue_accel"]=st.mean(rg[-2:])-st.mean(rg[:2])

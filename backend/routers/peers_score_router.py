@@ -48,10 +48,28 @@ def score_peers(features):
     return {"label":"Peers Intelligence","weight":2.0,"score":s,"confidence":c,"categories":cats}
 
 async def compute_peers_intelligence(ticker: str, api_key: str, pool=None) -> Dict[str,Any]:
+    try:   # percentile among the real peers; the stored bucket is only a fallback
+        if pool is not None:
+            from routers.summary_router import real_peer_score
+            _rs = await real_peer_score(pool, ticker.upper().strip())
+            if _rs: return _rs
+    except Exception:
+        pass
     ticker=ticker.upper().strip()
     peer_bucket=None
     if pool is not None:
-        try: peer_bucket=await PeerStore(pool).get_peers(ticker)
+        try:
+            peer_bucket=await PeerStore(pool).get_peers(ticker)
+            # compare against the real peers (same industry, closest in size) — the shared definition used
+            # by the Valuation tab — instead of the broad bucket read back alphabetically
+            from routers.summary_router import real_peers
+            _g, _m, _ = await real_peers(pool, ticker)
+            _rows = await pool.fetch("""SELECT * FROM peer_stats WHERE ticker = ANY($1)
+                                        AND scan_time = (SELECT max(scan_time) FROM peer_stats)""", [c["ticker"] for c in _m])
+            if peer_bucket and len(_rows) >= 4:
+                peer_bucket = {**peer_bucket, "peers": [dict(r) for r in _rows], "bucket": _g}
+        except Exception:
+            pass
         except Exception: pass
     if not peer_bucket or not peer_bucket.get("available"):
         return {"ticker":ticker,"available":False,"reason":"no peer set available"}

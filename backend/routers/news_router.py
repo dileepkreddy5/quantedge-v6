@@ -63,9 +63,28 @@ async def _price_return_30d(ticker, api_key):
     except Exception: pass
     return None
 
+async def _about_only(ticker, articles):
+    """Polygon tags an article with every ticker it mentions (Apple's feed was 365 of 454 about other
+    companies). Keep only articles whose headline names this company; fall back to all if that leaves too few."""
+    import re, os, asyncpg
+    try:
+        pool = await asyncpg.connect("postgresql://quantedge:" + os.environ.get("POSTGRES_PASSWORD", "") + "@postgres:5432/quantedge")
+        nm = await pool.fetchval("SELECT name FROM company_facts WHERE ticker=$1 ORDER BY as_of DESC LIMIT 1", ticker.upper()) or ""
+        await pool.close()
+    except Exception:
+        nm = ""
+    base = re.sub(r"(,?\s+(inc|corp|corporation|co|company|ltd|plc|holdings?|group|class [a-z]|common stock|ordinary shares)\b\.?)+.*$", "", nm, flags=re.I).strip()
+    al = {ticker.upper(), base} | ({base.split()[0]} if base and len(base.split()[0]) > 3 else set())
+    al |= {"GOOGL": {"Google", "Alphabet"}, "GOOG": {"Google", "Alphabet"}, "META": {"Meta", "Facebook"}}.get(ticker.upper(), set())
+    rx = re.compile(r"\b(" + "|".join(re.escape(a) for a in sorted(al, key=len, reverse=True) if a) + r")\b", re.I)
+    kept = [a for a in (articles or []) if rx.search((a.get("title") if isinstance(a, dict) else getattr(a, "title", "")) or "")]
+    return kept if len(kept) >= 5 else articles
+
+
 async def compute_news_intelligence(ticker: str, api_key: str) -> Dict[str,Any]:
     ticker=ticker.upper().strip()
     articles=await _fetch_news(ticker, api_key)
+    articles=await _about_only(ticker, articles)     # same rule as the News tab: the headline must name the company
     if not articles:
         return {"ticker":ticker,"available":False,"reason":"no news coverage found"}
     pr30=await _price_return_30d(ticker, api_key)

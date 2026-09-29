@@ -571,3 +571,39 @@ async def wiki_attention(ticker: str, request: Request):
         if rd is not None: await rd.setex(ck, 12 * 3600, json.dumps(out))
     except Exception: pass
     return out
+
+
+
+async def real_peer_score(pool, tk: str):
+    """Peers score: the company's percentile rank among its REAL peers (same industry, closest in size)
+    on six measures from SEC-based facts, averaged. Replaces a comparison against a broad bucket that
+    only 1 of Apple's 8 real peers belonged to."""
+    group, members, me = await real_peers(pool, tk)
+    if not me or len(members) < 4: return None
+    def m(c):
+        f = json.loads(c["fundamentals"]) if isinstance(c["fundamentals"], str) else (c["fundamentals"] or {})
+        q4 = (f.get("quarters") or [])[-4:]; rev = sum(q["sales"] for q in q4) if len(q4) == 4 else None
+        ni, mc = f.get("net_income_ttm"), c["market_cap"]
+        return {"sales_growth": f.get("sales_yoy"), "gross_margin": f.get("gross_margin"), "op_margin": f.get("op_margin"),
+                "ret_1y": c["ret_1y"], "pe": (mc / ni) if (mc and ni and ni > 0) else None, "ps": (mc / rev) if (mc and rev) else None}
+    me_m, pm = m(me), [m(c) for c in members]
+    pct = {}
+    for k, v in me_m.items():
+        vals = [p[k] for p in pm if p[k] is not None]
+        if v is None or len(vals) < 3: continue
+        better = sum(1 for x in vals if (x > v if k in ("pe", "ps") else x < v)); ties = sum(1 for x in vals if x == v)
+        pct[k] = (better + 0.5 * ties) / len(vals)
+    if len(pct) < 3: return None
+    sc = 100 * sum(pct.values()) / len(pct)
+    return {"ticker": tk, "available": True, "intelligence": "peers", "score": round(sc, 1), "confidence": round(len(pct) / 6, 2),
+            "coverage": {"scored": len(pct), "total": 6}, "bucket": group, "peer_count": len(members), "percentiles": pct,
+            "peers_rating": "Above peers" if sc >= 60 else "Below peers" if sc < 40 else "In line with peers",
+            "method": "average percentile among real peers (same industry, closest in size) on sales growth, gross margin, operating margin, P/E, P/S, 1-year return"}
+
+
+@router.get("/model-validation")
+async def model_validation():
+    """The panel models' out-of-sample validation, as written by the trainer."""
+    try: rep = json.load(open("/app/models/panel/training_report.json"))
+    except Exception as e: raise HTTPException(status_code=404, detail=f"no validation report ({type(e).__name__})")
+    return _clean_json(rep)

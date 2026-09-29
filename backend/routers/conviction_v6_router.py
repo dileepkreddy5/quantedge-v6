@@ -60,6 +60,13 @@ async def get_conviction(ticker: str, http_request: Request,
         if not d.get("available"): return None
         return {"score": d.get("score"), "confidence": d.get("confidence"), "coverage": d.get("coverage")}
     async def _ml_scorer(ticker: str):
+        # Not scored while no forecast horizon passes validation; counts again automatically once one does.
+        try:
+            import json as _j
+            _rep = _j.load(open("/app/models/panel/training_report.json"))
+            if not any(v.get("reliable") for v in _rep.get("horizons", {}).values()): return None
+        except Exception:
+            return None
         from routers.ml_router import compute_ml_intelligence
         d = await compute_ml_intelligence(ticker, api_key)
         if not d.get("available"): return None

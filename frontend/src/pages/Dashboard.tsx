@@ -1,3 +1,4 @@
+import ModelsRiskTab from '../components/ui/ModelsRiskTab';
 import NewsTab from '../components/ui/NewsTab';
 import FilingsTab from '../components/ui/FilingsTab';
 import ValuationTab from '../components/ui/ValuationTab';
@@ -55,16 +56,12 @@ import BusinessPanel from '../components/ui/BusinessPanel';
 
 const TABS = [
   { id: 'overview',     label: '⬡ SUMMARY' },
-  { id: 'ml',          label: '🧠 ML MODELS' },
   { id: 'patterns',    label: '📈 PRICE & PATTERNS' },
   { id: 'intel',       label: '🔎 FILINGS, OWNERS & ANALYSTS' },
-  { id: 'forecast',    label: '🔮 FORECAST' },
   { id: 'valuation',   label: '⚖️ VALUATION & PEERS' },
   { id: 'business',    label: '🏰 BUSINESS' },
   { id: 'news',        label: '📰 NEWS' },
-  { id: 'risk',        label: '🛡 RISK' },
-  { id: 'portfolio',   label: '⚖ PORTFOLIO' },
-  { id: 'performance', label: '📈 PERFORMANCE' },
+  { id: 'risk',        label: '🛡 MODELS & RISK' },
   { id: 'watchlist',   label: '★ WATCHLIST' },
 ];
 
@@ -361,20 +358,20 @@ export default function Dashboard() {
             {/* ── Tab content ── */}
             <div style={{ animation: 'fadeIn 0.3s ease' }}>
               {activeTab === 'overview'    && <SummaryTab ticker={ticker} data={data} macro={<MacroPanel ticker={ticker} />} />}
-              {activeTab === 'ml'          && <MLModelsPanel data={data} />}
+              
               {['patterns','market','volatility','regime'].includes(activeTab) && <PriceTab ticker={ticker} data={data} states={<RegimePanel data={data} />} />}
               {['intel','ownership','iflow','wallstreet'].includes(activeTab) && <FilingsTab ticker={ticker} filings={<><BreakthroughsPanel ticker={ticker} /><CompanyIntel ticker={ticker} /></>} holders={<HoldersPanel ticker={ticker} />} flow={<IFlowPanel ticker={ticker} />} />}
               
               
               {['news','altdata'].includes(activeTab) && <NewsTab ticker={ticker} fullModel={<NewsPanel ticker={ticker} data={data} />} />}
               
-              {activeTab === 'risk'        && <RiskPanel ticker={ticker} />}
+              {['risk','ml','forecast','portfolio','performance'].includes(activeTab) && <ModelsRiskTab ticker={ticker} data={data} forward={<ForecastPanel ticker={ticker} />} riskModel={<RiskPanel ticker={ticker} />} />}
               
               
               
               
               {activeTab === 'macro'       && <MacroPanel ticker={ticker} />}
-              {activeTab === 'forecast'    && <ForecastPanel ticker={ticker} />}
+              
               
               
               
@@ -390,8 +387,8 @@ export default function Dashboard() {
               ]} />}
               {activeTab === 'watchlist'   && <Watchlist onAnalyze={runAnalysis} />}
               
-              {activeTab === 'portfolio'   && <PortfolioPanel data={data} />}
-              {activeTab === 'performance' && <PerformancePanel data={data} />}
+              
+              
             </div>
           </>
         )}

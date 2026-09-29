@@ -19,7 +19,7 @@ MODULE_REGISTRY = [
     {"id":"ownership",     "label":"Ownership Intelligence",     "weight":4,  "status":"live"},
     {"id":"forecast",      "label":"Forecast Intelligence",      "weight":4,  "status":"live"},
     {"id":"macro",         "label":"Macroeconomic Intelligence", "weight":3,  "status":"live"},
-    {"id":"alt_data",      "label":"Alternative Data Intelligence","weight":3,"status":"live"},
+    {"id":"alt_data",      "label":"Alternative Data Intelligence","weight":0,"status":"live"},   # 0 while it only re-scores Money flow and News inputs; restore when it holds new data
     {"id":"institutional", "label":"Institutional Flow Intelligence","weight":2,"status":"live"},
     {"id":"peers",         "label":"Peers Intelligence",         "weight":2,  "status":"live"},
     {"id":"ml_models",     "label":"ML Models Intelligence",     "weight":1,  "status":"live"},
