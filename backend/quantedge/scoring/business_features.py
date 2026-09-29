@@ -102,7 +102,8 @@ def compute_business_features(merged, fin_features, wacc=None, peer_data=None):
     # 3. REVENUE QUALITY
     f["recurring_revenue_ratio"]=fin_features.get("deferred_rev_to_revenue")
     f["deferred_rev_growth"]=fin_features.get("deferred_rev_growth")
-    f["revenue_consistency"]=_stability([(rev_t[i]/rev_t[i-1]-1) for i in range(1,len(rev_t)) if rev_t[i-1]])
+    # year-over-year by quarter: quarter-to-quarter swings are seasonality (a holiday quarter), not inconsistency
+    f["revenue_consistency"]=_stability([(rev_t[i]/rev_t[i-4]-1) for i in range(4,len(rev_t)) if rev_t[i-4]])
     f["revenue_cagr_5y"]=_cagr(rev_t)
     if len(rev_t)>=8:
         n=len(rev_t); mx=(n-1)/2; my=sum(rev_t)/n

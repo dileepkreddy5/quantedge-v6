@@ -81,6 +81,8 @@ async def compute_business_intelligence(ticker: str, api_key: str, pool=None) ->
     # peer-relative percentiles (from enriched peer_stats) to activate Competitive Position signals
     if biz_features and pool is not None:
         try:
+            if biz_features.get("roic_current") is None and fin_features.get("roic") is not None:
+                biz_features["roic_current"] = fin_features.get("roic")      # one ROIC across tabs
             own={"roic":fin_features.get("roic") or biz_features.get("roic_current"),
                  "gross_margin":fin_features.get("gross_margin") or biz_features.get("gross_margin_level"),
                  "net_margin":fin_features.get("net_margin"),

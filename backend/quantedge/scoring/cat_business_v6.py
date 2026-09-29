@@ -29,7 +29,7 @@ CATEGORIES = {
    _s("gross_margin_vs_peers","Gross margin vs peers","gross_margin_vs_peers",0.0,0.5,0.8,status="needs_source",evidence="requires enriched peer fundamentals"),
  ]),
  "revenue_quality": ("Revenue Quality & Recurrence", 1.60, [
-   _s("recurring_revenue_ratio","Recurring revenue mix","recurring_revenue_ratio",0.20,0.05,0.25,evidence="deferred/contracted revenue"),
+   _s("recurring_revenue_ratio","Customer prepayments (deferred revenue)","recurring_revenue_ratio",0.05,0.05,0.25,evidence="deferred revenue as a share of revenue — a proxy, not recurring revenue"),
    _s("deferred_rev_growth","Deferred revenue growth","deferred_rev_growth",0.14,0.0,0.15,evidence="growth in contracted base"),
    _s("revenue_predictability","Revenue predictability","revenue_predictability",0.16,0.7,0.95,evidence="R² of revenue trajectory"),
    _s("revenue_consistency","Revenue consistency","revenue_consistency",0.14,0.6,0.9,evidence="low growth volatility"),

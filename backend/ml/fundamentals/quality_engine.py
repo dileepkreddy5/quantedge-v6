@@ -188,7 +188,7 @@ def _safe(d: dict, key: str) -> Optional[float]:
         return None
 
 
-async def fetch_quarterly_financials(
+async def _fetch_quarterly_financials_raw(
     ticker: str,
     api_key: str,
     limit: int = 40,
@@ -646,3 +646,29 @@ if __name__ == "__main__":
     import sys
     ticker = sys.argv[1] if len(sys.argv) > 1 else "AAPL"
     asyncio.run(_test(ticker))
+
+
+
+# One stock page asks for the same statements from up to five sections (quarters, competitive,
+# management, risk, ownership). A single Polygon hiccup used to blank a section ("no financial
+# data") even though the data exists. Retry, and remember SUCCESSFUL results for 6 hours;
+# empty results are never remembered, so a failure can't get stuck.
+import time as _time, asyncio as _asyncio
+_QF_CACHE: dict = {}
+
+async def fetch_quarterly_financials(ticker, api_key, limit=12, *args, **kwargs):
+    key = (str(ticker).upper(), limit)
+    hit = _QF_CACHE.get(key)
+    if hit and _time.time() - hit[0] < 6 * 3600:
+        return hit[1]
+    for attempt in range(3):
+        try:
+            pq = await _fetch_quarterly_financials_raw(ticker, api_key, limit, *args, **kwargs)
+        except Exception:
+            pq = None
+        if pq:
+            _QF_CACHE[key] = (_time.time(), pq)
+            if len(_QF_CACHE) > 3000: _QF_CACHE.pop(next(iter(_QF_CACHE)))
+            return pq
+        await _asyncio.sleep(1.0 + attempt)
+    return pq or []
