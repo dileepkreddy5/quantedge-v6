@@ -72,6 +72,14 @@ async def get_peer_relative(
     if store is None:
         raise HTTPException(503, "peer store unavailable")
     meta = await store.get_peers(ticker)
+    try:   # replace the stored (alphabetical) slice with the shared, size-matched peers
+        from routers.summary_router import real_peers
+        _g, _m, _ = await real_peers(http_request.app.state.db, ticker)
+        if _m:
+            meta = {**meta, "available": True, "peers": [{"ticker": c["ticker"], "market_cap": c["market_cap"]} for c in _m],
+                    "label": _g, "group_label": _g, "bucket": _g, "kind": "industry-size"}
+    except Exception:
+        pass
     if not meta.get("available", True) or not meta.get("peers"):
         return {"data": {"available": False, "reason": meta.get("reason", "no peer group")}}
 

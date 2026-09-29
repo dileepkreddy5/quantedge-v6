@@ -81,7 +81,12 @@ def business_facts(cik: str) -> dict | None:
     revs = [(t, s) for t, s in revs if s]
     if not revs: return {"available": False, "reason": "no quarterly sales in SEC filings"}
     rev_tag, rev = max(revs, key=lambda ts: max(ts[1]))            # the tag with the most recent quarter
-    gp, op, ni = _q_income(facts, "GrossProfit"), _q_income(facts, "OperatingIncomeLoss"), _q_income(facts, "NetIncomeLoss")
+    gp, op = _q_income(facts, "GrossProfit"), _q_income(facts, "OperatingIncomeLoss")
+    # Net income under several labels, merged quarter by quarter in priority order
+    # (Broadcom reports under a tag other than NetIncomeLoss and came out as nothing).
+    ni = {}
+    for _t in ("NetIncomeLoss", "ProfitLoss", "NetIncomeLossAvailableToCommonStockholdersBasic", "NetIncomeLossAvailableToCommonStockholdersDiluted"):
+        for _e, _v in (_q_income(facts, _t) or {}).items(): ni.setdefault(_e, _v)
     ocf = _q_cashflow(facts)
     ends = sorted(rev)[-8:]
     qs = []
@@ -101,8 +106,8 @@ def business_facts(cik: str) -> dict | None:
         else: break
     gm_now, gm_then = last["gross_margin"], (qs[-5]["gross_margin"] if len(qs) >= 5 else None)
     om_now, om_then = last["op_margin"], (qs[-5]["op_margin"] if len(qs) >= 5 else None)
-    ni_ttm = sum(q["net_income"] for q in qs[-4:] if q["net_income"] is not None) if len(qs) >= 4 else None
-    ocf_ttm = sum(q["op_cash_flow"] for q in qs[-4:] if q["op_cash_flow"] is not None) if len(qs) >= 4 else None
+    ni_ttm = (sum(q["net_income"] for q in qs[-4:]) if len(qs) >= 4 and all(q["net_income"] is not None for q in qs[-4:]) else None)
+    ocf_ttm = (sum(q["op_cash_flow"] for q in qs[-4:]) if len(qs) >= 4 and all(q["op_cash_flow"] is not None for q in qs[-4:]) else None)
     healthy = bool((last["sales_yoy"] is None or last["sales_yoy"] > -0.10) and (om_now is None or om_now > -0.05 or (om_then is not None and om_now > om_then)))
     stale = (date.today() - date.fromisoformat(last["end"])).days > 200
     return {"available": True, "stale": stale, "rev_tag": rev_tag, "quarters": qs,

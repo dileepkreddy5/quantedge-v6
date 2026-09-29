@@ -191,3 +191,126 @@ async def price_stats(ticker: str, request: Request):
         if isinstance(o, (np.integer,)): return int(o)
         return o
     return clean(out)
+
+
+async def real_peers(pool, tk: str, n: int = 8):
+    """One definition of a company's peers, used everywhere: same 4-digit SIC industry if it has
+    6+ members, else the 3-digit group, else the sector — then the n closest in market value.
+    (The stored group list was read back alphabetically, so Apple's "peers" were six A-tickers.)"""
+    import math
+    me = await pool.fetchrow("SELECT * FROM company_facts WHERE ticker=$1 ORDER BY as_of DESC LIMIT 1", tk)
+    if not me: return None, [], None
+    sic = str(await pool.fetchval("SELECT sic_code FROM universe WHERE ticker=$1", tk) or "")
+    cand = await pool.fetch("""SELECT f.*, u.sic_code FROM company_facts f JOIN universe u ON u.ticker = f.ticker
+        WHERE f.as_of = $1 AND f.primary_listing AND NOT f.is_spac AND f.data_suspect IS NULL AND f.ticker <> $2
+          AND f.tier IN ('large','mid','small') AND f.fundamentals IS NOT NULL""", me["as_of"], tk)
+    group, members = None, []
+    for label, pref in (("same industry", sic[:4]), ("same industry group", sic[:3])):
+        if len(pref) < 3: continue
+        mm = [c for c in cand if str(c["sic_code"] or "").startswith(pref)]
+        if len(mm) >= 6 or (label == "same industry group" and len(mm) >= 3): group, members = f"{label} (SIC {pref})", mm; break
+    if not members:
+        members = [c for c in cand if c["sector"] == me["sector"]]; group = f"same sector ({me['sector']})"
+    mc0 = me["market_cap"] or 1
+    members = sorted(members, key=lambda c: abs(math.log((c["market_cap"] or 1) / mc0)))[:n]
+    return group, members, me
+
+
+@router.get("/valuation-view/{ticker}")
+async def valuation_view(ticker: str, request: Request):
+    """Valuation that says what it assumes: implied growth vs actual, P/E and P/S against the
+    company's own history (point-in-time: each quarter counted from its filing date), real
+    peers (same detailed industry, closest in size), and each valuation method on its own line."""
+    import math, numpy as np
+    tk = ticker.upper().strip(); pool = request.app.state.db
+    me = await pool.fetchrow("SELECT * FROM company_facts WHERE ticker=$1 ORDER BY as_of DESC LIMIT 1", tk)
+    if not me: raise HTTPException(status_code=404, detail=f"{tk} is not in QuantEdge's company universe")
+    fme = json.loads(me["fundamentals"]) if isinstance(me["fundamentals"], str) else (me["fundamentals"] or {})
+    # ---- own history: P/E and P/S every trading day, point-in-time ----
+    import os
+    from ml.fundamentals.quality_engine import fetch_quarterly_financials
+    pq = await fetch_quarterly_financials(tk, os.environ.get("POLYGON_API_KEY", ""), limit=24)
+    qs = []
+    for q in pq or []:
+        pe_ = str(getattr(q, "period_end", "") or "")[:10]
+        if not pe_: continue
+        fd = str(getattr(q, "filing_date", "") or "")[:10] or str(dt.date.fromisoformat(pe_) + dt.timedelta(days=45))
+        qs.append({"end": pe_, "avail": fd, "eps": getattr(q, "eps_diluted", None), "rev": getattr(q, "revenue", None), "sh": getattr(q, "diluted_shares", None)})
+    qs.sort(key=lambda x: x["end"])
+    # Split-adjust the filings: prices are split-adjusted, reported EPS and share counts are not
+    # (Nvidia's 10-for-1 in June 2024 made its pre-split P/E look ten times too low). A jump in
+    # share count by ~2x, 3x, 4x, 5x, 10x or 20x between quarters is a split; adjust earlier quarters.
+    for i in range(1, len(qs)):
+        a, b = qs[i - 1]["sh"], qs[i]["sh"]
+        if not a or not b: continue
+        r = b / a; k = None
+        for cand in (2, 3, 4, 5, 8, 10, 15, 20, 25, 30, 40, 50):
+            if abs(r / cand - 1) < 0.08: k = cand; break
+            if abs((1 / r) / cand - 1) < 0.08: k = 1 / cand; break
+        if k:
+            for j in range(i):
+                if qs[j]["eps"] is not None: qs[j]["eps"] /= k
+                if qs[j]["sh"]: qs[j]["sh"] *= k
+    bars = await pool.fetch("SELECT d, c FROM daily_bars WHERE ticker=$1 AND c > 0 ORDER BY d", tk)
+    hist = {"pe": [], "ps": []}
+    for b in bars:
+        known = [q for q in qs if q["avail"] <= str(b["d"])][-4:]
+        if len(known) < 4: continue
+        eps = [q["eps"] for q in known]; rev = [q["rev"] for q in known]; sh = known[-1]["sh"]
+        if None not in eps and sum(eps) > 0:
+            v_ = float(b["c"]) / sum(eps)
+            if 0 < v_ < 1000: hist["pe"].append(v_)
+        if None not in rev and sh and sum(rev) > 0 and sh > 0:
+            v_ = float(b["c"]) / (sum(rev) / sh)
+            if 0.01 < v_ < 500: hist["ps"].append(v_)          # impossible values are data errors, not history
+    def band(xs):
+        if len(xs) < 60: return None
+        a = np.array(xs); med0 = np.median(a); now = a[-1]
+        a = a[(a > med0 / 8) & (a < med0 * 8)]          # 8x away from its own median is bad data, not history
+        if len(a) < 60: return None
+        return {"now": float(now), "median": float(np.median(a)), "low": float(np.percentile(a, 5)), "high": float(np.percentile(a, 95)),
+                "percentile_now": float((a < now).mean() * 100), "days": int(len(a))}
+    own = {"pe": band(hist["pe"]), "ps": band(hist["ps"]), "since": str(bars[0]["d"]) if bars else None}
+    # ---- real peers: the shared definition ----
+    group, members, _ = await real_peers(pool, tk)
+    def row(c, is_self=False):
+        f = json.loads(c["fundamentals"]) if isinstance(c["fundamentals"], str) else (c["fundamentals"] or {})
+        q4 = (f.get("quarters") or [])[-4:]; rev = sum(q["sales"] for q in q4) if len(q4) == 4 else None
+        ni = f.get("net_income_ttm"); mc = c["market_cap"]
+        pe_ = (mc / ni) if (mc and ni and ni > 0) else None
+        return {"ticker": c["ticker"], "name": c["name"], "self": is_self, "market_cap": mc,
+                "pe": pe_ if (pe_ is None or pe_ <= 200) else None, "pe_note": ("n/m — very thin profits" if (pe_ and pe_ > 200) else "loss-making" if (ni is not None and ni <= 0) else "no earnings data" if ni is None else None),
+                "loss_making": bool(ni is not None and ni <= 0),
+                "ps": (mc / rev) if (mc and rev) else None, "sales_growth": f.get("sales_yoy"), "op_margin": f.get("op_margin"),
+                "ret_1y": c["ret_1y"]}
+    peers = [row(me, True)] + [row(c) for c in members]
+    def med(k): xs = [p[k] for p in peers[1:] if p[k] is not None]; return float(np.median(xs)) if xs else None
+    # ---- valuation methods, each on its own line ----
+    try:
+        from routers.valuation_router import get_valuation
+        v = await get_valuation(tk, request, None)
+    except Exception:
+        v = None
+    vd = (v or {}).get("data", v) if isinstance(v, dict) else {}
+    km = (vd or {}).get("key_metrics") or {}
+    price = me["price"]
+    methods = []
+    for key, name, what in (("dcf_bear", "DCF · bear case", "cash flows grow slowly, then fade"),
+                            ("dcf_base", "DCF · base case", f"discounted at {((vd or {}).get('wacc_used') or 0)*100:.1f}% a year, growth fading to ~3%"),
+                            ("dcf_bull", "DCF · bull case", "cash flows keep growing faster for longer"),
+                            ("epv_per_share", "Earnings power value", "today's earnings, no growth at all"),
+                            ("graham_number", "Graham number", "Benjamin Graham's rule of thumb from earnings and book value"),
+                            ("residual_income_value", "Residual income value", "book value plus future profits above the cost of equity")):
+        val = km.get(key)
+        ok = val is not None and val > 0
+        outlier = ok and price and (val > 3 * price or val < 0.25 * price)
+        methods.append({"method": name, "assumes": what, "value": val if ok else None,
+                        "vs_price": ((val / price - 1) if (ok and price) else None), "outlier": bool(outlier),
+                        "note": ("outlier — this method's assumptions don't fit this company (e.g. tiny book value after buybacks)" if outlier
+                                 else None if (val is None or ok) else "not meaningful — negative (loss-making or negative equity)")})
+    implied = km.get("reverse_dcf_implied_growth")
+    return {"ticker": tk, "price": price, "as_of": str(me["as_of"]), "loss_making": bool(fme.get("net_income_ttm") is not None and fme["net_income_ttm"] <= 0),
+            "implied_growth": implied, "actual_sales_growth": fme.get("sales_yoy"),
+            "own_history": own, "peers": {"group": group, "rows": peers, "median": {k: med(k) for k in ("pe", "ps", "sales_growth", "op_margin", "ret_1y")}},
+            "methods": methods,
+            "note": "History uses earnings as known on each date (quarters counted from their filing date). Peers: same detailed industry, closest in size, from SEC-based facts. Valuation methods depend heavily on their assumptions."}

@@ -1,3 +1,4 @@
+import ValuationTab from '../components/ui/ValuationTab';
 import BusinessTab from '../components/ui/BusinessTab';
 import PriceTab from '../components/ui/PriceTab';
 import SummaryTab from '../components/ui/SummaryTab';
@@ -56,15 +57,13 @@ const TABS = [
   { id: 'patterns',    label: '📈 PRICE & PATTERNS' },
   { id: 'intel',       label: '🔎 COMPANY INTEL' },
   { id: 'forecast',    label: '🔮 FORECAST' },
-  { id: 'valuation',   label: '⚖️ VALUATION' },
+  { id: 'valuation',   label: '⚖️ VALUATION & PEERS' },
   { id: 'business',    label: '🏰 BUSINESS' },
   { id: 'altdata',     label: '📡 ALT-DATA' },
   { id: 'iflow',       label: '💸 INST FLOW' },
   { id: 'ownership',   label: '🏦 OWNERSHIP' },
   { id: 'wallstreet',  label: '🏦 WALL ST.' },
   { id: 'news',        label: '📰 NEWS' },
-  { id: 'peers',       label: '👥 PEERS' },
-  { id: 'macro',       label: '🌐 MACRO' },
   { id: 'risk',        label: '🛡 RISK' },
   { id: 'portfolio',   label: '⚖ PORTFOLIO' },
   { id: 'performance', label: '📈 PERFORMANCE' },
@@ -370,7 +369,7 @@ export default function Dashboard() {
               
               
               {activeTab === 'news'        && <NewsPanel ticker={ticker} data={data} />}
-              {activeTab === 'peers'       && <PeerPanel data={data} ticker={ticker} onAnalyze={runAnalysis} />}
+              
               {activeTab === 'risk'        && <RiskPanel ticker={ticker} />}
               
               
@@ -381,7 +380,7 @@ export default function Dashboard() {
               {activeTab === 'altdata'     && <AltDataPanel ticker={ticker} />}
               {activeTab === 'iflow'       && <IFlowPanel ticker={ticker} />}
               
-              {activeTab === 'valuation'   && <ValuationPanel ticker={ticker} />}
+              {['valuation','peers'].includes(activeTab) && <ValuationTab ticker={ticker} peersChart={<PeerPanel data={data} ticker={ticker} onAnalyze={runAnalysis} />} fullModel={<ValuationPanel ticker={ticker} />} />}
               
               {['business','financial','management','competitive','industry'].includes(activeTab) && <BusinessTab ticker={ticker} sections={[
                 { id: 'quarters', title: 'Quarterly results', hint: 'up to 20 quarters, each vs the same quarter a year earlier', open: true, node: <QuartersPanel ticker={ticker} /> },
