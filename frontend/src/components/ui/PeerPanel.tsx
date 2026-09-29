@@ -23,7 +23,7 @@ const fmtCap = (c: number | null) => c ? (c >= 1e12 ? `$${(c/1e12).toFixed(1)}T`
 const pctColor = (p: number) => p >= 66 ? C.green : p >= 33 ? C.gold : C.red;
 
 interface Props {
-  lite?: boolean;   // Valuation tab: chart + disclosed relationships only data?: any; ticker?: string; onAnalyze?: (t: string) => void; }
+  lite?: boolean; data?: any; ticker?: string; onAnalyze?: (t: string) => void; }
 
 const PeerPanel: React.FC<Props> = ({ ticker: tickerProp, data: analysisData, onAnalyze, lite }) => {
   const ticker = (tickerProp || analysisData?.ticker || analysisData?.symbol || '').toUpperCase();
@@ -137,7 +137,7 @@ const PeerPanel: React.FC<Props> = ({ ticker: tickerProp, data: analysisData, on
       {/* Header */}
       <div style={{ display:'flex', alignItems:'baseline', gap:12, flexWrap:'wrap', marginBottom:6 }}>
         <span style={{ color: C.gold, fontWeight:700, fontSize:15 }}>{ticker} vs {pd.bucket.toUpperCase()} PEERS</span>
-        <span style={{ color: C.textDim, fontSize:12 }}>{pd.peer_count} comparable companies</span>
+        <span style={{ color: C.textDim, fontSize:12 }}>{lite ? 'price performance vs the same peers as the table above' : `${pd.peer_count} comparable companies`}</span>
       </div>
       {!lite && scoreData && (() => {
         const s = scoreData.score; const rating = scoreData.peers_rating || '';
