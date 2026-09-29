@@ -40,7 +40,7 @@ const PriceTab: React.FC<{ ticker: string; data: any; states?: React.ReactNode }
         <Tile k="LAST MONTH" v={ps?.vol_1m != null ? `${(ps.vol_1m * 100).toFixed(0)}%` : '—'} s="annualised" />
         <Tile k="LAST 12 MONTHS" v={ps?.vol_1y != null ? `${(ps.vol_1y * 100).toFixed(0)}%` : '—'} s="annualised" />
         <Tile k="VS ITS OWN HISTORY" v={vv.vol_percentile != null ? `${Math.round(vv.vol_percentile)}th pct` : '—'} s="higher = more turbulent than usual" />
-        <Tile k="BETA · 12 MONTHS" v={ps?.beta_1y != null ? `${ps.beta_1y.toFixed(2)}×` : '—'} s="moves this much per 1% S&P move" />
+        <Tile k="BETA · 12 MONTHS" v={ps?.beta_1y != null ? `${ps.beta_1y.toFixed(2)}×` : '—'} s={ps?.corr_1y != null && ps.corr_1y < 0.3 ? `correlation only ${ps.corr_1y.toFixed(2)} — it moves largely on its own, so beta says little` : `per 1% S&P move · correlation ${ps?.corr_1y?.toFixed(2) ?? '—'}`} />
         <Tile k="WORST FALL · 12 MONTHS" v={pc(ps?.max_drawdown_1y, 0)} col={C.dn} s={`since ${ps?.history_start || '2021'}: ${pc(ps?.max_drawdown_all, 0)}`} />
         <Tile k="DOWN DAYS VS UP DAYS" v={vv.up_down_vol_ratio != null ? `${vv.up_down_vol_ratio.toFixed(2)}×` : '—'} s="above 1 = falls are sharper than rises" />
       </div>

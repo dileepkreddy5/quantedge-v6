@@ -122,7 +122,9 @@ const SummaryTab: React.FC<{ ticker: string; data: any; macro?: React.ReactNode 
       <div style={{ fontFamily: mono, fontSize: 10, letterSpacing: 2, color: C.gold, marginBottom: 10 }}>KEY NUMBERS, IN PLAIN WORDS</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))', gap: 12, fontSize: 14, color: C.latte, lineHeight: 1.6 }}>
         <div><b style={{ color: C.cream }}>{pp(ps?.max_drawdown_all)}</b> — its worst fall from a peak since {ps?.history_start?.slice(0, 4) || '2021'} (last 12 months: {pp(ps?.max_drawdown_1y)}).</div>
-        <div><b style={{ color: C.cream }}>{ps?.beta_1y != null ? `${ps.beta_1y.toFixed(2)}×` : '—'}</b> — how much it moved for each 1% move in the S&P 500 over the last 12 months (its “beta”).</div>
+        <div>{ps?.corr_1y != null && ps.corr_1y < 0.3
+          ? <><b style={{ color: C.cream }}>Moves on its own</b> — over the last 12 months it has moved largely independently of the S&P 500 (correlation {ps.corr_1y.toFixed(2)}), so its beta ({ps.beta_1y?.toFixed(2)}) says little.</>
+          : <><b style={{ color: C.cream }}>{ps?.beta_1y != null ? `${ps.beta_1y.toFixed(2)}×` : '—'}</b> — how much it moved for each 1% move in the S&P 500 over the last 12 months (its “beta”; correlation {ps?.corr_1y?.toFixed(2) ?? '—'}).</>}</div>
         <div><b style={{ color: C.cream }}>{ps?.vol_1y != null ? `${(ps.vol_1y * 100).toFixed(0)}%` : '—'}</b> — its volatility over the last 12 months{ps?.daily_move_typical ? `; a typical day moves about ${(ps.daily_move_typical * 100).toFixed(1)}%` : ''}.</div>
       </div></div>
     {conv?.modules?.length > 0 && (<div style={card}>

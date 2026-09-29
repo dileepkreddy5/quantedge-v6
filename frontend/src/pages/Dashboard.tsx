@@ -1,3 +1,4 @@
+import BusinessTab from '../components/ui/BusinessTab';
 import PriceTab from '../components/ui/PriceTab';
 import SummaryTab from '../components/ui/SummaryTab';
 import BreakthroughsPanel from '../components/ui/BreakthroughsPanel';
@@ -55,7 +56,6 @@ const TABS = [
   { id: 'patterns',    label: '📈 PRICE & PATTERNS' },
   { id: 'intel',       label: '🔎 COMPANY INTEL' },
   { id: 'forecast',    label: '🔮 FORECAST' },
-  { id: 'financial',   label: '💎 FINANCIAL' },
   { id: 'valuation',   label: '⚖️ VALUATION' },
   { id: 'business',    label: '🏰 BUSINESS' },
   { id: 'altdata',     label: '📡 ALT-DATA' },
@@ -64,9 +64,6 @@ const TABS = [
   { id: 'wallstreet',  label: '🏦 WALL ST.' },
   { id: 'news',        label: '📰 NEWS' },
   { id: 'peers',       label: '👥 PEERS' },
-  { id: 'competitive', label: '⚔️ COMPETITIVE' },
-  { id: 'industry',    label: '🏭 INDUSTRY' },
-  { id: 'management',  label: '👔 MANAGEMENT' },
   { id: 'macro',       label: '🌐 MACRO' },
   { id: 'risk',        label: '🛡 RISK' },
   { id: 'portfolio',   label: '⚖ PORTFOLIO' },
@@ -375,18 +372,25 @@ export default function Dashboard() {
               {activeTab === 'news'        && <NewsPanel ticker={ticker} data={data} />}
               {activeTab === 'peers'       && <PeerPanel data={data} ticker={ticker} onAnalyze={runAnalysis} />}
               {activeTab === 'risk'        && <RiskPanel ticker={ticker} />}
-              {activeTab === 'industry'    && <IndustryPanel ticker={ticker} />}
-              {activeTab === 'competitive' && <CompetitivePanel ticker={ticker} />}
-              {activeTab === 'management'  && <ManagementPanel ticker={ticker} />}
+              
+              
+              
               {activeTab === 'ownership'   && <><HoldersPanel ticker={ticker} /><OwnershipPanel ticker={ticker} /></>}
               {activeTab === 'macro'       && <MacroPanel ticker={ticker} />}
               {activeTab === 'forecast'    && <ForecastPanel ticker={ticker} />}
               {activeTab === 'altdata'     && <AltDataPanel ticker={ticker} />}
               {activeTab === 'iflow'       && <IFlowPanel ticker={ticker} />}
-              {activeTab === 'financial'   && <><QuartersPanel ticker={ticker} /><FinancialIntelligencePanel ticker={ticker} /></>}
+              
               {activeTab === 'valuation'   && <ValuationPanel ticker={ticker} />}
               
-              {activeTab === 'business'    && <BusinessPanel ticker={ticker} />}
+              {['business','financial','management','competitive','industry'].includes(activeTab) && <BusinessTab ticker={ticker} sections={[
+                { id: 'quarters', title: 'Quarterly results', hint: '12 quarters, each vs the same quarter a year earlier', open: true, node: <QuartersPanel ticker={ticker} /> },
+                { id: 'quality', title: 'Financial quality', hint: 'profitability, cash flow, balance sheet — every score explained', node: <FinancialIntelligencePanel ticker={ticker} /> },
+                { id: 'moat', title: 'Moat & business model', hint: 'how durable its advantage looks in the numbers', node: <BusinessPanel ticker={ticker} /> },
+                { id: 'mgmt', title: 'Management & capital allocation', hint: 'buybacks, dividends, insiders, reinvestment', node: <ManagementPanel ticker={ticker} /> },
+                { id: 'comp', title: 'Competition', hint: 'how it compares with close rivals', node: <CompetitivePanel ticker={ticker} /> },
+                { id: 'ind', title: 'Industry', hint: 'its sector, and how it moves with it — beta only means something when correlation is meaningful', node: <IndustryPanel ticker={ticker} /> },
+              ]} />}
               {activeTab === 'watchlist'   && <Watchlist onAnalyze={runAnalysis} />}
               {activeTab === 'wallstreet'  && <WallStreetPanel data={data} />}
               {activeTab === 'portfolio'   && <PortfolioPanel data={data} />}

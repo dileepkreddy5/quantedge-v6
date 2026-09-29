@@ -161,16 +161,17 @@ async def price_stats(ticker: str, request: Request):
         if n <= k or d[-1] not in spy or d[-1 - k] not in spy: return None
         return spy[d[-1]] / spy[d[-1 - k]] - 1
     def dd(arr): return float(np.min(arr / np.maximum.accumulate(arr) - 1)) if len(arr) else None
-    beta = None
+    beta = None; corr = None
     common = [i for i in range(max(1, n - 252), n) if d[i] in spy and d[i - 1] in spy]
     if len(common) >= 120:
         a = np.array([c[i] / c[i - 1] - 1 for i in common]); b = np.array([spy[d[i]] / spy[d[i - 1]] - 1 for i in common])
         beta = float(np.cov(a, b)[0, 1] / np.var(b, ddof=1)) if np.var(b) > 0 else None
+        corr = float(np.corrcoef(a, b)[0, 1]) if np.var(b) > 0 and np.var(a) > 0 else None
     sma = lambda k: float(c[-k:].mean()) if n >= k else None
     s50, s200 = sma(50), sma(200); w = c[-252:]
     out = {"ticker": tk, "as_of": str(d[-1]), "history_start": str(d[0]), "price": float(c[-1]),
            "vol_1m": vol(21), "vol_1y": vol(252), "daily_move_typical": (vol(252) / np.sqrt(252)) if vol(252) else None,
-           "beta_1y": beta, "max_drawdown_1y": dd(w), "max_drawdown_all": dd(c),
+           "beta_1y": beta, "corr_1y": corr, "max_drawdown_1y": dd(w), "max_drawdown_all": dd(c),
            "sma50": s50, "sma200": s200, "above_50d": bool(c[-1] > s50) if s50 else None, "above_200d": bool(c[-1] > s200) if s200 else None,
            "high_52w": float(w.max()), "low_52w": float(w.min()), "pct_from_52w_high": float(c[-1] / w.max() - 1),
            "returns": {}}
