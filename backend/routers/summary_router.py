@@ -127,7 +127,8 @@ async def summary(ticker: str, request: Request):
             if rd is not None and profile.get("description"): await rd.setex(pk, 7 * 86400, json.dumps(profile))
         except Exception:
             profile = None
-    return {"ticker": tk, "name": r["name"], "as_of": str(r["as_of"]), "sentences": S, "facts": facts, "profile": profile, "trackers": shows, "has_warnings": bool(warns),
+    return {"ticker": tk, "name": r["name"], "as_of": str(r["as_of"]), "sentences": S, "facts": facts, "profile": profile,
+            "insiders_90d": {"bought": buy, "sold": sell}, "material_filings_90d": mat, "trackers": shows, "has_warnings": bool(warns),
             "breakthroughs": bt[:3], "next_results_est": nxt, "tier": r["tier"], "sector": r["sector"], "history_note": r["history_note"],
             "note": "Written from SEC filings, prices and QuantEdge's nightly facts. Not advice."}
 
@@ -314,3 +315,39 @@ async def valuation_view(ticker: str, request: Request):
             "own_history": own, "peers": {"group": group, "rows": peers, "median": {k: med(k) for k in ("pe", "ps", "sales_growth", "op_margin", "ret_1y")}},
             "methods": methods,
             "note": "History uses earnings as known on each date (quarters counted from their filing date). Peers: same detailed industry, closest in size, from SEC-based facts. Valuation methods depend heavily on their assumptions."}
+
+
+
+@router.get("/analysts/{ticker}")
+async def analysts(ticker: str, request: Request):
+    """Analyst recommendation counts month by month (Finnhub). Firm-by-firm ratings and price
+    targets need a paid feed and are not shown."""
+    import os, httpx
+    tk = ticker.upper().strip()
+    rd = getattr(request.app.state, "redis", None); ck = f"analysts:{tk}"
+    try:
+        hit = await rd.get(ck) if rd is not None else None
+        if hit: return json.loads(hit)
+    except Exception: pass
+    key = os.environ.get("FINNHUB_API_KEY") or os.environ.get("FINNHUB_KEY") or ""
+    if not key:
+        try:
+            from core.config import settings
+            key = getattr(settings, "FINNHUB_API_KEY", "") or ""
+        except Exception: key = ""
+    if not key: raise HTTPException(status_code=503, detail="analyst data source not configured")
+    async with httpx.AsyncClient(timeout=15) as cx:
+        rows = (await cx.get("https://finnhub.io/api/v1/stock/recommendation", params={"symbol": tk, "token": key})).json() or []
+    months = sorted([{"period": r.get("period"), "strong_buy": r.get("strongBuy", 0), "buy": r.get("buy", 0), "hold": r.get("hold", 0),
+                      "sell": r.get("sell", 0), "strong_sell": r.get("strongSell", 0)} for r in rows if r.get("period")], key=lambda x: x["period"])[-12:]
+    def bshare(m):
+        n = m["strong_buy"] + m["buy"] + m["hold"] + m["sell"] + m["strong_sell"]
+        return ((m["strong_buy"] + m["buy"]) / n, n) if n else (None, 0)
+    out = {"ticker": tk, "months": months, "source": "Finnhub recommendation trends", "available": bool(months)}
+    if months:
+        now_s, now_n = bshare(months[-1]); then = months[-7] if len(months) >= 7 else months[0]; then_s, then_n = bshare(then)
+        out.update({"latest": months[-1], "buy_share_now": now_s, "analysts_now": now_n, "buy_share_then": then_s, "then_period": then["period"]})
+    try:
+        if rd is not None: await rd.setex(ck, 12 * 3600, json.dumps(out))
+    except Exception: pass
+    return out

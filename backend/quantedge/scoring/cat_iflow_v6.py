@@ -10,7 +10,7 @@ CATEGORIES = {
    _s("adl","ADL slope","adl_slope",0.30,0.0,0.3,evidence="accumulation/distribution trend")]),
  "block_trade":("Block-Trade Activity",0.35,[
    _s("trade_size","Avg trade size trend","avg_trade_size_trend",0.35,0.0,0.2,evidence="institutional footprint (rising size)"),
-   _s("block_freq","Block-trade frequency","block_trade_frequency",0.35,0.1,0.4,evidence="large-trade days"),
+   _s("block_freq","High-volume days (last 10)","block_trade_frequency",0.35,0.1,0.4,evidence="large-trade days"),
    ]),
  "accumulation":("Accumulation/Distribution",0.35,[
    _s("accum20","20-day accumulation","accumulation_20d",0.45,0.52,0.72,evidence="up vs down volume"),
@@ -20,7 +20,7 @@ CATEGORIES = {
    _s("holder_count","Institutional holders","institutional_holder_count",0.45,1,5,evidence="major-holder breadth")]),
  "insider_flow":("Insider Flow",0.35,[
    _s("insider_vel","Insider flow velocity","insider_flow_velocity",0.35,5,30,evidence="Form 4 filing frequency"),
-   _s("insider_net","Insider net flow","insider_net_flow",0.40,0.15,0.5,evidence="insider buy conviction"),
+   _s("insider_net","Insider buying (share of insider $ traded)","insider_net_flow",0.40,0.15,0.5,evidence="insider buy conviction"),
    _s("insider_cluster","Insider cluster flow","insider_cluster_flow",0.25,0,1,evidence="3+ insiders buying")]),
  # "Smart-Money Footprint" held only foot2, a second entry on
  # institutional_footprint already scored elsewhere. Category removed.

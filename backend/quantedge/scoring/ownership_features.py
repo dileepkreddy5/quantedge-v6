@@ -22,10 +22,12 @@ def compute_ownership_features(merged, shares_out=None, market_cap=None, insider
     dil=cur("diluted_shares"); basic=cur("basic_shares")
     if dil and basic and basic>0: f["dilution_gap"]=dil/basic-1
     sh=series("diluted_shares",8)
-    if len(sh)>=6:
-        o=st.median(sh[:3]); n=st.median(sh[-3:])
+    if len(sh)>=5:
+        # exactly one year (latest quarter vs a year earlier), same as Management; real dilution kept,
+        # only a 90%+ jump is treated as an unadjusted split
+        o=sh[-5]; n=sh[-1]
         chg=(n/o-1) if o>0 else None
-        if chg is not None and abs(chg)<0.4:
+        if chg is not None and abs(chg)<0.9:
             f["share_count_trend"]=chg
             f["ownership_concentration_trend"]=-chg
 
@@ -63,7 +65,8 @@ def compute_ownership_features(merged, shares_out=None, market_cap=None, insider
 
     if insider.get("available") and insider.get("buy_value_ratio") is not None:
         f["ownership_conviction"]=insider["buy_value_ratio"]
-    bb=cur("buybacks")
+    _bbs=series("buybacks",4)
+    bb=sum(abs(x) for x in _bbs) if len(_bbs)==4 else None     # last 12 months, not one quarter
     # No buyback is a real zero, not missing data — see management_features.
     if market_cap and (bb is not None or cur("capex") is not None):
         f["buyback_intensity"]=(bb or 0.0)/market_cap

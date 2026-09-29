@@ -1,3 +1,4 @@
+import FilingsTab from '../components/ui/FilingsTab';
 import ValuationTab from '../components/ui/ValuationTab';
 import BusinessTab from '../components/ui/BusinessTab';
 import PriceTab from '../components/ui/PriceTab';
@@ -55,14 +56,11 @@ const TABS = [
   { id: 'overview',     label: '⬡ SUMMARY' },
   { id: 'ml',          label: '🧠 ML MODELS' },
   { id: 'patterns',    label: '📈 PRICE & PATTERNS' },
-  { id: 'intel',       label: '🔎 COMPANY INTEL' },
+  { id: 'intel',       label: '🔎 FILINGS, OWNERS & ANALYSTS' },
   { id: 'forecast',    label: '🔮 FORECAST' },
   { id: 'valuation',   label: '⚖️ VALUATION & PEERS' },
   { id: 'business',    label: '🏰 BUSINESS' },
   { id: 'altdata',     label: '📡 ALT-DATA' },
-  { id: 'iflow',       label: '💸 INST FLOW' },
-  { id: 'ownership',   label: '🏦 OWNERSHIP' },
-  { id: 'wallstreet',  label: '🏦 WALL ST.' },
   { id: 'news',        label: '📰 NEWS' },
   { id: 'risk',        label: '🛡 RISK' },
   { id: 'portfolio',   label: '⚖ PORTFOLIO' },
@@ -365,7 +363,7 @@ export default function Dashboard() {
               {activeTab === 'overview'    && <SummaryTab ticker={ticker} data={data} macro={<MacroPanel ticker={ticker} />} />}
               {activeTab === 'ml'          && <MLModelsPanel data={data} />}
               {['patterns','market','volatility','regime'].includes(activeTab) && <PriceTab ticker={ticker} data={data} states={<RegimePanel data={data} />} />}
-              {activeTab === 'intel'       && <><BreakthroughsPanel ticker={ticker} /><CompanyIntel ticker={ticker} /></>}
+              {['intel','ownership','iflow','wallstreet'].includes(activeTab) && <FilingsTab ticker={ticker} filings={<><BreakthroughsPanel ticker={ticker} /><CompanyIntel ticker={ticker} /></>} holders={<HoldersPanel ticker={ticker} />} flow={<IFlowPanel ticker={ticker} />} />}
               
               
               {activeTab === 'news'        && <NewsPanel ticker={ticker} data={data} />}
@@ -374,11 +372,11 @@ export default function Dashboard() {
               
               
               
-              {activeTab === 'ownership'   && <><HoldersPanel ticker={ticker} /><OwnershipPanel ticker={ticker} /></>}
+              
               {activeTab === 'macro'       && <MacroPanel ticker={ticker} />}
               {activeTab === 'forecast'    && <ForecastPanel ticker={ticker} />}
               {activeTab === 'altdata'     && <AltDataPanel ticker={ticker} />}
-              {activeTab === 'iflow'       && <IFlowPanel ticker={ticker} />}
+              
               
               {['valuation','peers'].includes(activeTab) && <ValuationTab ticker={ticker} peersChart={<PeerPanel data={data} ticker={ticker} onAnalyze={runAnalysis} lite />} fullModel={<ValuationPanel ticker={ticker} />} />}
               
@@ -391,7 +389,7 @@ export default function Dashboard() {
                 { id: 'ind', title: 'Industry', hint: 'its sector, and how it moves with it — beta only means something when correlation is meaningful', node: <IndustryPanel ticker={ticker} /> },
               ]} />}
               {activeTab === 'watchlist'   && <Watchlist onAnalyze={runAnalysis} />}
-              {activeTab === 'wallstreet'  && <WallStreetPanel data={data} />}
+              
               {activeTab === 'portfolio'   && <PortfolioPanel data={data} />}
               {activeTab === 'performance' && <PerformancePanel data={data} />}
             </div>
