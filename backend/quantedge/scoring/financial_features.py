@@ -58,10 +58,16 @@ def compute_financial_features(merged, market_cap=None, wacc=None):
               for r in m
               if r.get("operating_cash_flow") is not None and r.get("capex") is not None]
     fcf = sum(_fcf_q[-4:]) if len(_fcf_q) >= 4 else None
+    # Same-window rule: revenue from the SAME four quarters as the cash flow. Rivian's
+    # two newest quarters lack cash flow, so FCF covered 2025 while revenue covered
+    # mid-2025..mid-2026 — two different years in one ratio.
+    _fcf_rows = [r for r in m if r.get("operating_cash_flow") is not None and r.get("capex") is not None]
+    _rev_same = sum((r.get("revenue") or 0) for r in _fcf_rows[-4:]) if len(_fcf_rows) >= 4 else None
+    f["fcf_window_end"] = (_fcf_rows[-1].get("period_end") if _fcf_rows else None)
     f["gross_margin"]=_safe_div(gp,rev); f["operating_margin"]=_safe_div(oi,rev)
     f["net_margin"]=_safe_div(ni,rev)
     f["ebitda"]=(oi+da) if (oi is not None and da is not None) else None
-    f["ebitda_margin"]=_safe_div(f["ebitda"],rev); f["fcf_margin"]=_safe_div(fcf,rev)
+    f["ebitda_margin"]=_safe_div(f["ebitda"],rev); f["fcf_margin"]=_safe_div(fcf,_rev_same)
     f["rd_intensity"]=_safe_div(rd,rev); f["sbc_to_revenue"]=_safe_div(sbc,rev)
     f["cogs_ratio"]=_safe_div(cogs,rev)
     gm_q=[_safe_div(r.get("gross_profit"),r.get("revenue")) for r in m if r.get("revenue")]

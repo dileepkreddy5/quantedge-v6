@@ -667,8 +667,35 @@ async def fetch_quarterly_financials(ticker, api_key, limit=12, *args, **kwargs)
         except Exception:
             pq = None
         if pq:
+            try: await _fill_ocf_from_sec(str(ticker).upper(), pq)
+            except Exception: pass
             _QF_CACHE[key] = (_time.time(), pq)
             if len(_QF_CACHE) > 3000: _QF_CACHE.pop(next(iter(_QF_CACHE)))
             return pq
         await _asyncio.sleep(1.0 + attempt)
     return pq or []
+
+
+
+# Polygon sometimes lacks a quarter's operating cash flow (companies report it year-to-date in
+# 10-Qs and the split into single quarters fails). Our SEC facts split it correctly, so fill
+# the gaps from there, matched by quarter-end date. Rivian's two newest quarters were missing.
+_SEC_POOL = None
+async def _fill_ocf_from_sec(ticker, pq):
+    global _SEC_POOL
+    missing = [q for q in pq if getattr(q, "operating_cash_flow", None) is None and getattr(q, "period_end", None)]
+    if not missing: return
+    import asyncpg, os, json, datetime as _d
+    if _SEC_POOL is None:
+        _SEC_POOL = await asyncpg.create_pool("postgresql://quantedge:" + os.environ.get("POSTGRES_PASSWORD", "") + "@postgres:5432/quantedge", min_size=1, max_size=2)
+    v = await _SEC_POOL.fetchval("SELECT fundamentals FROM company_facts WHERE ticker=$1 ORDER BY as_of DESC LIMIT 1", ticker)
+    f = json.loads(v) if isinstance(v, str) else (v or {})
+    sec = [(_d.date.fromisoformat(x["end"]), x["op_cash_flow"]) for x in f.get("quarters", []) if x.get("op_cash_flow") is not None and x.get("end")]
+    for q in missing:
+        try: pe = _d.date.fromisoformat(str(q.period_end)[:10])
+        except Exception: continue
+        hit = min(sec, key=lambda t: abs((t[0] - pe).days), default=None)
+        if hit and abs((hit[0] - pe).days) <= 7:
+            q.operating_cash_flow = hit[1]
+            try: q.ocf_source = "SEC filing"
+            except Exception: pass

@@ -87,7 +87,10 @@ def compute_business_features(merged, fin_features, wacc=None, peer_data=None):
 
     # 2. PRICING POWER
     gm_hist=[(gp_t[i]/rev_t[i]) if rev_t[i] else None for i in range(len(gp_t))]
-    f["gross_margin_level"]=_mean(gm_hist); f["gross_margin_stability"]=_stability(gm_hist)
+    # level = the latest 12 months (a 3-year average showed Rivian at -46% after it turned gross-profitable);
+    # the 3-year history is used only for stability, where it belongs
+    _gmv=[x for x in gm_hist if x is not None]
+    f["gross_margin_level"]=_gmv[-1] if _gmv else None; f["gross_margin_stability"]=_stability(gm_hist)
     f["gross_margin_trend"]=_slope(gm_hist)
     em_hist=[(ebitda_t[i]/rev_t[i]) if (i<len(rev_t) and rev_t[i]) else None for i in range(len(ebitda_t))] if ebitda_t else []
     f["ebitda_margin_level"]=_mean(em_hist) if em_hist else None

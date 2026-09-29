@@ -27,7 +27,8 @@ def compute_management_features(merged, fin_features, insider=None, market_cap=N
     ni=ttm("net_income"); ocf=ttm("operating_cash_flow"); fcf=ttm("free_cash_flow")
     capex=ttm("capex"); div=ttm("dividends_paid"); bb=ttm("buybacks"); rev=ttm("revenue")
     assets=cur("assets"); eq=cur("equity")
-    f["fcf_generation"]=_sd(fcf,rev)
+    _rows=[x for x in merged if _f(x.get("free_cash_flow")) is not None and _f(x.get("revenue")) is not None][-4:]
+    f["fcf_generation"]=_sd(sum(_f(x.get("free_cash_flow")) for x in _rows), sum(_f(x.get("revenue")) for x in _rows)) if len(_rows)==4 else None
     f["reinvestment_rate"]=_sd(capex,ocf)
     # buyback yield + dividend yield
     # A company that runs no buyback and pays no dividend is not missing data —
@@ -117,11 +118,12 @@ def compute_management_features(merged, fin_features, insider=None, market_cap=N
     # ===== SHAREHOLDER ALIGNMENT =====
     # share count trend (buyback = shrinking = aligned; dilution = misaligned)
     shares=series("diluted_shares",8)
-    if len(shares)>=6:
-        _o=st.median(shares[:3]); _n=st.median(shares[-3:])
+    if len(shares)>=5:
+        # exactly one year: latest quarter vs the same quarter a year earlier. Real dilution
+        # (Rivian +15%) is kept; only a jump of 90%+ is treated as an unadjusted stock split.
+        _o=shares[-5]; _n=shares[-1]
         chg=(_n/_o-1) if _o>0 else None
-        # reject split artifacts (|change|>40% over 2yr is a data error, not real dilution/buyback)
-        f["share_count_change"]=chg if (chg is not None and abs(chg)<0.40) else None
+        f["share_count_change"]=chg if (chg is not None and abs(chg)<0.90) else None
     # SBC discipline
     sbc=ttm("sbc")
     if sbc is not None and rev and rev>0: f["sbc_intensity"]=sbc/rev
