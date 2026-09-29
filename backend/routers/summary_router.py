@@ -351,3 +351,185 @@ async def analysts(ticker: str, request: Request):
         if rd is not None: await rd.setex(ck, 12 * 3600, json.dumps(out))
     except Exception: pass
     return out
+
+
+_STOP = set("the a an and or of to in on for with at by from as is are was were be it its this that stock stocks shares share inc corp company co ltd".split())
+def _toks(t):
+    import re as _re
+    return {w for w in _re.findall(r"[a-z0-9]+", (t or "").lower()) if len(w) > 3 and w not in _STOP}
+
+
+EVENT_RULES = [   # (kind, weight, pattern) — transparent rules; the old classifier labelled everything "commentary"
+    ("results", 5.0, r"\b(earnings|results|quarter(ly)?|q[1-4]\b|fiscal|revenue|sales|profits?|eps|beats?|miss(es|ed)?|guidance|outlook|forecasts?|reports?|posts?|deliveries)\b"),
+    ("leadership", 4.0, r"\b(ceo|cfo|chief executive|chief financial|steps? down|resign\w*|appoint\w*|names? .{0,30}(ceo|cfo|chief)|successor|hands? off|retire\w*)\b"),
+    ("deal", 4.0, r"\b(acquir\w*|acquisition|merger|merge|buyout|takeover|to buy|stake in|divest\w*|spin[- ]?off)\b"),
+    ("capital", 3.5, r"\b(offering|share sale|dilut\w*|buyback|repurchase|dividend|convertible|notes due|raises \$|priced)\b"),
+    ("legal", 3.5, r"\b(lawsuit|sues|sued|antitrust|probe|investigat\w*|doj|ftc|sec charges|fine[ds]?|settle\w*|recall\w*|ban(s|ned)?|tariffs?|regulator\w*)\b"),
+    ("product", 3.0, r"\b(launch\w*|unveil\w*|introduc\w*|fda|approv\w*|clearance|trial|contract|partnership|agreement|orders?)\b"),
+    ("analyst", 2.0, r"\b(upgrade\w*|downgrade\w*|price target|initiat\w*|overweight|underweight|outperform|underperform)\b"),
+]
+_COMMENTARY = r"(\?\s*$|^\s*(why|is|should|can|will|what|how|here'?s|\d+ )\b|buy the dip|should investors|is it time|best stock|top \d|millionaire|fantastic|no[- ]brainer|screaming|forever|could soar|poised to|what (you|investors) need to know)"
+_MARKET = r"\b(stock market today|dow jones|s&p 500|nasdaq composite|wall street (today|closes|opens)|market wrap)\b"
+_PUB_W = {"Reuters": 3, "Bloomberg": 3, "The Wall Street Journal": 3, "Financial Times": 3, "Associated Press": 3, "CNBC": 2, "Barron's": 2,
+          "MarketWatch": 2, "Business Wire": 2.5, "PR Newswire": 2.5, "GlobeNewswire": 2.5, "Benzinga": 1, "The Motley Fool": 0.5,
+          "Zacks Investment Research": 0.5, "InvestorPlace": 0.5, "24/7 Wall St.": 0.5, "Seeking Alpha": 0.8}
+
+
+@router.get("/news-view/{ticker}")
+async def news_view(ticker: str, request: Request):
+    """News as events: articles about the same event are merged (type + date), ranked by what
+    happened, how widely it was covered and how the stock moved — commentary last. Tone labels are
+    Polygon's automated reading of each article (the vendor's AI), shown as such."""
+    import os, re, math, httpx, datetime as _d
+    from zoneinfo import ZoneInfo
+    tk = ticker.upper().strip(); pool = request.app.state.db
+    since = (_d.date.today() - _d.timedelta(days=90)).isoformat()
+    async with httpx.AsyncClient(timeout=30) as cx:
+        res = (await cx.get("https://api.polygon.io/v2/reference/news", params={"ticker": tk, "published_utc.gte": since, "limit": 1000,
+                                                                              "order": "desc", "apiKey": os.environ.get("POLYGON_API_KEY", "")})).json().get("results", [])
+    bars = await pool.fetch("SELECT d, c FROM daily_bars WHERE ticker=$1 AND d >= $2::date - 5 ORDER BY d", tk, _d.date.fromisoformat(since))
+    bd = [b["d"] for b in bars]; bc = [float(b["c"]) for b in bars]
+    def tday(ts):
+        try: t = _d.datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone(ZoneInfo("America/New_York"))
+        except Exception: return None
+        eff = t.date() + (_d.timedelta(days=1) if t.hour >= 16 else _d.timedelta(0))
+        return next((i for i, x in enumerate(bd) if x >= eff), None)
+    def mv(i): return (bc[i] / bc[i - 1] - 1) if (i is not None and 0 < i < len(bc)) else None
+    rules = [(k, w, re.compile(p, re.I)) for k, w, p in EVENT_RULES]
+    # Relevance: Polygon tags an article with every ticker it mentions (Apple's feed carried Berkshire's
+    # succession, Nvidia's a 6G market report). A story is the company's news only if the headline names it.
+    nm = (await pool.fetchval("SELECT name FROM company_facts WHERE ticker=$1 ORDER BY as_of DESC LIMIT 1", tk)) or ""
+    base = re.sub(r"(,?\s+(inc|corp|corporation|co|company|ltd|plc|holdings?|group|class [a-z]|common stock|ordinary shares|n\.?v\.?|s\.?a\.?)\b\.?)+.*$", "", nm, flags=re.I).strip()
+    aliases = {tk, base} | ({base.split()[0]} if base and len(base.split()[0]) > 3 else set())
+    aliases |= {"GOOGL": {"Google", "Alphabet"}, "GOOG": {"Google", "Alphabet"}, "META": {"Meta", "Facebook"}, "BRK.B": {"Berkshire"}}.get(tk, set())
+    about_rx = re.compile(r"\b(" + "|".join(re.escape(a) for a in sorted(aliases, key=len, reverse=True) if a) + r")\b", re.I)
+    com, mkt = re.compile(_COMMENTARY, re.I), re.compile(_MARKET, re.I)
+    arts = []
+    for r in res:
+        ins = next((x for x in (r.get("insights") or []) if x.get("ticker") == tk), {})
+        title = (r.get("title") or "").strip(); pub = (r.get("publisher") or {}).get("name") or ""
+        kind, w = None, 0.0
+        for k, wt, rx in rules:
+            if rx.search(title): kind, w = k, wt; break
+        commentary = bool(com.search(title)); market = bool(mkt.search(title))
+        if not about_rx.search(title): continue          # mentions only — not this company's news
+        i = tday(r.get("published_utc") or "")
+        arts.append({"title": title, "url": r.get("article_url"), "publisher": pub, "published": (r.get("published_utc") or "")[:16].replace("T", " "),
+                     "i": i, "kind": ("market" if market else kind or ("commentary" if commentary else "other")), "w": w,
+                     "commentary": commentary or market, "tone": ins.get("sentiment"), "tone_reason": ins.get("sentiment_reasoning"),
+                     "pub_w": _PUB_W.get(pub, 1.0), "_t": _toks(title)})
+    # 1) events: same (non-commentary) type within 2 trading days
+    events = []
+    for a in sorted([x for x in arts if not x["commentary"] and x["kind"] not in ("other",) and x["i"] is not None], key=lambda x: x["i"]):
+        e = next((e for e in events if e["kind"] == a["kind"] and abs(e["i"] - a["i"]) <= 2), None)
+        if e: e["members"].append(a)
+        else: events.append({"kind": a["kind"], "w": a["w"], "i": a["i"], "members": [a]})
+    # 2) commentary and untyped articles join an event they clearly discuss (same days, shared words), else stand alone
+    loose = []
+    for a in arts:
+        if not a["commentary"] and a["kind"] not in ("other",): continue
+        home = None
+        if a["i"] is not None:
+            for e in events:
+                if abs(e["i"] - a["i"]) <= 1 and any(len(a["_t"] & m["_t"]) >= 2 for m in e["members"]): home = e; break
+        if home: home["members"].append(a)
+        else: loose.append(a)
+    out = []
+    for e in events:
+        ms = e["members"]; lead = max(ms, key=lambda m: (not m["commentary"], m["pub_w"]))
+        m0, m1 = mv(e["i"]), mv(e["i"] + 1 if e["i"] is not None else None)
+        outlets = sorted({m["publisher"] for m in ms})
+        big = max(abs(m0 or 0), abs(m1 or 0))
+        score = e["w"] + math.log2(len(ms) + 1) + min(3.0, big * 30) + (lead["pub_w"] - 1) * 0.3
+        out.append({"type": e["kind"], "headline": lead["title"], "url": lead["url"], "source": lead["publisher"], "published": lead["published"],
+                    "event_day": str(bd[e["i"]]) if e["i"] is not None and e["i"] < len(bd) else None, "move_event_day": m0, "move_next_day": m1,
+                    "n_articles": len(ms), "outlets": outlets, "score": round(score, 2), "commentary": False,
+                    "tone": lead["tone"], "tone_reason": lead["tone_reason"],
+                    "also": [{"title": m["title"], "url": m["url"], "source": m["publisher"]} for m in sorted(ms, key=lambda m: -m["pub_w"])[:6] if m is not lead]})
+    for a in loose:
+        m0 = mv(a["i"])
+        out.append({"type": a["kind"], "headline": a["title"], "url": a["url"], "source": a["publisher"], "published": a["published"],
+                    "event_day": str(bd[a["i"]]) if a["i"] is not None and a["i"] < len(bd) else None, "move_event_day": m0, "move_next_day": None,
+                    "n_articles": 1, "outlets": [a["publisher"]], "score": round(0.5 + (a["pub_w"] - 1) * 0.2, 2), "commentary": True,
+                    "tone": a["tone"], "tone_reason": a["tone_reason"], "also": []})
+    # ---- what happened: the company's own 8-K filings (authoritative, complete, dated) ----
+    ITEM = {"2.02": ("results", 5.0, "Released quarterly results"), "5.02": ("leadership", 3.0, "Leadership change"),
+            "1.01": ("agreement", 3.5, "Signed a material agreement"), "1.02": ("agreement", 2.5, "Ended a material agreement"),
+            "2.01": ("deal", 4.0, "Completed an acquisition or sale of assets"), "2.03": ("capital", 3.0, "Took on a material debt obligation"),
+            "3.02": ("capital", 3.5, "Sold shares not registered publicly"), "2.05": ("restructuring", 4.0, "Announced restructuring or exit costs"),
+            "2.06": ("impairment", 4.5, "Recorded an impairment"), "4.01": ("auditor", 4.5, "Changed its auditor"),
+            "4.02": ("restatement", 5.0, "Said past financial statements can't be relied on"), "8.01": ("announcement", 2.5, "Made another material announcement"),
+            "7.01": ("disclosure", 1.5, "Published an investor presentation or disclosure"), "5.07": ("vote", 0.5, "Reported shareholder vote results"),
+            "5.03": ("governance", 0.8, "Changed its bylaws or charter")}
+    fil = await pool.fetch("""SELECT e.id, e.item_code, e.available_at, e.company_id cik, r.raw_payload->>'accession' acc, r.raw_payload->>'primaryDocument' doc
+        FROM ci_events e JOIN ci_raw_evidence r ON r.id = e.evidence_id
+        WHERE e.ticker = $1 AND r.form_type = '8-K' AND e.available_at >= $2::date ORDER BY e.available_at""", tk, _d.date.fromisoformat(since))
+    ids = [f_["id"] for f_ in fil]
+    der = await pool.fetch("""SELECT event_id, extractor_version, value FROM ci_derived WHERE event_id = ANY($1)
+        AND extractor_version IN ('press-release-v3','officer-change-v2')""", ids) if ids else []
+    dmap = {}
+    for x in der:
+        v_ = json.loads(x["value"]) if isinstance(x["value"], str) else x["value"]; dmap.setdefault(x["event_id"], {})[x["extractor_version"]] = v_
+    by_acc = {}
+    for f_ in fil:
+        g = by_acc.setdefault(f_["acc"], {"items": [], "ids": [], "at": f_["available_at"], "cik": f_["cik"], "doc": f_["doc"]})
+        g["items"].append(f_["item_code"]); g["ids"].append(f_["id"])
+    filings_out = []
+    for acc, g in by_acc.items():
+        known = [i_ for i_ in g["items"] if i_ in ITEM]
+        if not known or set(known) <= {"5.07", "5.03", "7.01"} and len(known) == len(g["items"]) and "7.01" not in known: pass
+        if not known: continue
+        lead = max(known, key=lambda i_: ITEM[i_][1]); kind, w, what = ITEM[lead]
+        find = []; officer = None
+        for i_ in g["ids"]:
+            dd = dmap.get(i_, {})
+            find += (dd.get("press-release-v3") or {}).get("findings", [])
+            officer = officer or dd.get("officer-change-v2")
+        if lead == "5.02" and officer:
+            cls = officer.get("class")
+            if cls == "abrupt_exec_exit": what, w = f"The {officer.get('role') or 'a senior officer'} is leaving" + (" (effective immediately)" if officer.get("immediate") else ""), 5.0
+            elif cls == "planned_exec_transition": what, w = "Planned leadership transition", 3.0
+            else: what, w = "Director or officer change", 1.0
+        pos = [x for x in find if x.get("direction") == "positive"]; neg = [x for x in find if x.get("direction") == "negative"]
+        key = (neg or pos or find or [None])[0]
+        if key: w += 1.0
+        at = g["at"]; i = tday(at.isoformat() if hasattr(at, "isoformat") else str(at))
+        m0, m1 = mv(i), mv(i + 1 if i is not None else None)
+        cov = [a for a in arts if a["i"] is not None and i is not None and i <= a["i"] <= i + 2]
+        cov_top = sorted(cov, key=lambda a: (-(not a["commentary"]), -a["pub_w"]))[:3]
+        score = w + math.log2(len(cov) + 1) * 0.6 + min(3.0, max(abs(m0 or 0), abs(m1 or 0)) * 30)
+        filings_out.append({"type": kind, "what": what, "items": sorted(set(g["items"])), "filed": str(at)[:16],
+                            "event_day": str(bd[i]) if i is not None and i < len(bd) else None, "move_event_day": m0, "move_next_day": m1,
+                            "key_sentence": (key or {}).get("sentence"), "key_label": (key or {}).get("type"),
+                            "filing_url": f"https://www.sec.gov/Archives/edgar/data/{int(g['cik'])}/{acc.replace('-', '')}/{g['doc']}" if g.get("cik") and g.get("doc") else None,
+                            "coverage_articles": len(cov), "coverage_headlines": [{"title": a["title"], "url": a["url"], "source": a["publisher"], "commentary": a["commentary"]} for a in cov_top],
+                            "score": round(score, 2)})
+    ranked = sorted([o for o in out if not o["commentary"]], key=lambda o: -o["score"])
+    top = ranked[:7] + sorted([o for o in out if o["commentary"]], key=lambda o: -o["score"])[:1]
+    days = {}
+    for a in arts:
+        if a["i"] is None or a["i"] >= len(bd): continue
+        k_ = str(bd[a["i"]]); e_ = days.setdefault(k_, {"n": 0, "pos": 0, "neg": 0})
+        e_["n"] += 1; e_["pos"] += a["tone"] == "positive"; e_["neg"] += a["tone"] == "negative"
+    series = [{"d": str(d), "close": c, **days.get(str(d), {"n": 0, "pos": 0, "neg": 0})} for d, c in zip(bd, bc) if str(d) >= since]
+    group, members, me = await real_peers(pool, tk)
+    peer_n = sorted([m_["news_30d"] for m_ in members if m_["news_30d"] is not None])
+    kinds = {}
+    for o in out: kinds[o["type"]] = kinds.get(o["type"], 0) + 1
+    return _clean_json({"ticker": tk, "since": since, "what_happened": sorted(filings_out, key=lambda x: x["filed"], reverse=True),
+                        "top_filings": sorted(filings_out, key=lambda x: -x["score"])[:6],
+                        "n_articles": len(arts), "n_mentions_only": len(res) - len(arts), "aliases": sorted(a for a in aliases if a), "n_events": len([o for o in out if not o["commentary"]]),
+                        "n_commentary": len([o for o in out if o["commentary"]]), "top": top,
+                        "timeline": sorted(out, key=lambda o: o["published"], reverse=True)[:80], "series": series, "kinds": kinds,
+                        "tones": {t: sum(1 for a in arts if a["tone"] == t) for t in ("positive", "neutral", "negative")},
+                        "attention": {"news_30d": me["news_30d"] if me else None, "peer_median_30d": (peer_n[len(peer_n) // 2] if peer_n else None), "peer_group": group},
+                        "tone_note": "Tone labels and their one-line reasons are Polygon's automated reading of each article (generated by the data vendor). They describe coverage; they don't predict the price.",
+                        "note": "Articles about the same event are merged. Moves are close-to-close on the event day and the day after (news after 4pm ET counts toward the next day)."})
+
+
+def _clean_json(o):
+    import math
+    if isinstance(o, float): return o if math.isfinite(o) else None
+    if isinstance(o, dict): return {k: _clean_json(v) for k, v in o.items()}
+    if isinstance(o, (list, tuple, set)): return [_clean_json(v) for v in o]
+    return o
