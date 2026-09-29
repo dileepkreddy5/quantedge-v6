@@ -192,6 +192,8 @@ async def warning_signs(request: Request, tier: str = Query("large"), healthy_on
         for f in fs:
             if f["type"] == "trial_negative":
                 add(t_, "serious", f["date"], "PRESS RELEASE · 8-K", f"Trial failed: “{f['sentence'][:160]}”")
+            elif f["type"] == "dividend_cut":
+                add(t_, "watch", f["date"], "PRESS RELEASE · 8-K", f"Cut or suspended its dividend: “{f['sentence'][:160]}”")
             elif f["type"] == "guidance_cut":
                 add(t_, "watch", f["date"], "PRESS RELEASE · 8-K", f"Lowered its forecast: “{f['sentence'][:160]}”")
     ins: dict[str, dict] = {}
@@ -589,14 +591,15 @@ async def membership(request: Request, tier: str = Query("large")):
 BT_LABEL = {"fda_approval": "FDA approval", "breakthrough_designation": "Breakthrough designation", "trial_positive": "Positive trial result",
             "trial_negative": "Trial failed", "coverage": "Coverage / reimbursement", "guidance_raise": "Raised forecast",
             "guidance_cut": "Lowered forecast", "major_contract": "Major contract", "record_results": "Record results",
-            "product_launch": "Product launch", "acquisition": "Acquisition"}
+            "product_launch": "Product launch", "acquisition": "Acquisition", "capital_raise": "Share / debt offering",
+            "buyback": "Buyback authorised", "dividend_raise": "Dividend raised", "dividend_cut": "Dividend cut"}
 BT_STRONG = {"fda_approval": 0.8, "coverage": 0.8, "trial_positive": 0.8, "breakthrough_designation": 0.6,
-             "guidance_raise": 0.6, "major_contract": 0.5, "product_launch": 0.3, "record_results": 0.3}
+             "guidance_raise": 0.6, "major_contract": 0.5, "product_launch": 0.3, "record_results": 0.3, "buyback": 0.3, "dividend_raise": 0.3}
 
 
 async def _press_findings(pool, tickers, days=60):
     rows = await pool.fetch("""SELECT e.ticker, e.available_at, d.value, d.citation FROM ci_derived d JOIN ci_events e ON e.id = d.event_id
-        WHERE d.extractor_version = 'press-release-v3' AND e.ticker = ANY($1) AND e.available_at > NOW() - ($2 || ' days')::interval
+        WHERE d.extractor_version IN ('press-release-v3','press-release-v4') AND NOT (d.extractor_version = 'press-release-v3' AND EXISTS (SELECT 1 FROM ci_derived d4 WHERE d4.event_id = d.event_id AND d4.extractor_version = 'press-release-v4')) AND e.ticker = ANY($1) AND e.available_at > NOW() - ($2 || ' days')::interval
         ORDER BY e.available_at DESC""", tickers, str(days))
     out = {}
     for r in rows:

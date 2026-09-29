@@ -466,7 +466,7 @@ async def news_view(ticker: str, request: Request):
         WHERE e.ticker = $1 AND r.form_type = '8-K' AND e.available_at >= $2::date ORDER BY e.available_at""", tk, _d.date.fromisoformat(since))
     ids = [f_["id"] for f_ in fil]
     der = await pool.fetch("""SELECT event_id, extractor_version, value FROM ci_derived WHERE event_id = ANY($1)
-        AND extractor_version IN ('press-release-v3','officer-change-v2')""", ids) if ids else []
+        AND extractor_version IN ('press-release-v3','press-release-v4','officer-change-v2')""", ids) if ids else []
     dmap = {}
     for x in der:
         v_ = json.loads(x["value"]) if isinstance(x["value"], str) else x["value"]; dmap.setdefault(x["event_id"], {})[x["extractor_version"]] = v_
@@ -483,7 +483,7 @@ async def news_view(ticker: str, request: Request):
         find = []; officer = None
         for i_ in g["ids"]:
             dd = dmap.get(i_, {})
-            find += (dd.get("press-release-v3") or {}).get("findings", [])
+            find += (dd.get("press-release-v4") or dd.get("press-release-v3") or {}).get("findings", [])
             officer = officer or dd.get("officer-change-v2")
         if lead == "5.02" and officer:
             cls = officer.get("class")
@@ -533,3 +533,41 @@ def _clean_json(o):
     if isinstance(o, dict): return {k: _clean_json(v) for k, v in o.items()}
     if isinstance(o, (list, tuple, set)): return [_clean_json(v) for v in o]
     return o
+
+
+
+@router.get("/wiki-attention/{ticker}")
+async def wiki_attention(ticker: str, request: Request):
+    """Public attention: daily English-Wikipedia page views of the company's article (Wikimedia, free).
+    The article is found through Wikidata's stock-ticker records (not a name search, so 'Apple' is Apple Inc.)."""
+    import httpx, urllib.parse, datetime as _d
+    tk = ticker.upper().strip()
+    rd = getattr(request.app.state, "redis", None); ck = f"wiki:{tk}"
+    try:
+        hit = await rd.get(ck) if rd is not None else None
+        if hit: return json.loads(hit)
+    except Exception: pass
+    UA = {"User-Agent": "QuantEdge/1.0 (research site; dileepkreddy5@gmail.com)"}
+    q = ('SELECT ?article WHERE { ?item p:P414 ?s . ?s pq:P249 "%s" . ?article schema:about ?item ; '
+         'schema:isPartOf <https://en.wikipedia.org/> . } LIMIT 3') % tk.replace('"', '')
+    out = {"ticker": tk, "available": False}
+    try:
+        async with httpx.AsyncClient(timeout=25, headers=UA) as cx:
+            b = (await cx.get("https://query.wikidata.org/sparql", params={"query": q, "format": "json"})).json().get("results", {}).get("bindings", [])
+            if b:
+                url = b[0]["article"]["value"]; title = url.rsplit("/", 1)[-1]
+                end = _d.date.today() - _d.timedelta(days=1); start = end - _d.timedelta(days=120)
+                pv = (await cx.get(f"https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article/en.wikipedia.org/all-access/user/{title}/daily/{start:%Y%m%d}00/{end:%Y%m%d}00")).json().get("items", [])
+                series = [{"d": f"{x['timestamp'][:4]}-{x['timestamp'][4:6]}-{x['timestamp'][6:8]}", "views": x["views"]} for x in pv]
+                if len(series) >= 30:
+                    v = [x["views"] for x in series]; last7 = sum(v[-7:]) / 7; base = sum(v[-97:-7]) / max(1, len(v[-97:-7]))
+                    peak = max(series, key=lambda x: x["views"])
+                    out = {"ticker": tk, "available": True, "article": urllib.parse.unquote(title).replace("_", " "), "url": url, "series": series,
+                           "avg_7d": last7, "avg_prior_90d": base, "ratio": (last7 / base) if base else None, "peak": peak,
+                           "note": "Daily page views of the company's English Wikipedia article (human readers only), from Wikimedia. A rise shows public attention, not direction."}
+    except Exception as e:
+        out = {"ticker": tk, "available": False, "reason": f"Wikipedia data unavailable ({type(e).__name__})"}
+    try:
+        if rd is not None: await rd.setex(ck, 12 * 3600, json.dumps(out))
+    except Exception: pass
+    return out

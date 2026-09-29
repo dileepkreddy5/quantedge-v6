@@ -9,7 +9,7 @@ import asyncio, html, json, re
 import httpx
 from loguru import logger
 
-EXTRACTOR = "press-release-v3"
+EXTRACTOR = "press-release-v4"
 RULES = [
     # an approval must be an EVENT ("received approval", "FDA approved X"), never the adjective "FDA-approved"
     ("fda_approval", "positive", r"\b(receiv(?:ed|es)|granted|obtain(?:ed|s)|announc(?:ed|es) (?:the )?(?:FDA )?)\b[^.]{0,80}\b(approval|clearance|510\(k\) clearance)\b[^.]{0,80}\b(FDA|Food and Drug Administration)\b|\b(receiv(?:ed|es)|granted|obtain(?:ed|s))\b[^.]{0,40}\b(FDA|Food and Drug Administration)\b[^.]{0,40}\b(approval|clearance)\b|\b(FDA|Food and Drug Administration)\b (?:has )?(approved|cleared|granted (?:approval|clearance))\b"),
@@ -24,6 +24,10 @@ RULES = [
     # "record" must be a claim in lowercase ("delivered record revenue"), not a name ("Carbon Record")
     ("record_results", "positive", r"(?-i:\brecord) (?:quarterly |annual |full[- ]year |fiscal )?(?:revenue|sales|net sales)\b"),
     ("product_launch", "positive", r"\b(launch(?:es|ed)|introduc(?:es|ed)|unveil(?:s|ed))\b (?:its |the |a |an )?(?:new|first|next-generation)\b[^.]{0,60}\b(product|platform|system|device|drug|therapy|model|service|chip|vehicle)\b"),
+    ("capital_raise", "neutral", r"\b(pric(?:ed|es|ing)|announc(?:ed|es)|complet(?:ed|es)|clos(?:ed|es))\b[^.]{0,60}\b(public offering|underwritten offering|registered direct offering|private placement|offering of [\d,.]+ (?:million )?shares|convertible (?:senior )?notes|senior notes)\b"),
+    ("buyback", "positive", r"\b(authoriz(?:ed|es|ation)|approv(?:ed|es)|new|additional)\b[^.]{0,60}\b(share repurchase|stock repurchase|buyback)\b"),
+    ("dividend_raise", "positive", r"\b(increas(?:ed|es|ing)|rais(?:ed|es|ing))\b[^.]{0,40}\b(quarterly |annual |cash )?dividend\b"),
+    ("dividend_cut", "negative", r"\b(suspend(?:ed|s)?|cut(?:s)?|reduc(?:ed|es)|eliminat(?:ed|es))\b[^.]{0,40}\b(quarterly |annual |cash )?dividend\b"),
     ("acquisition", "neutral", r"\bdefinitive agreement to acquire\b|\bto be acquired by\b|\bmerger agreement\b"),
 ]
 NEGATED = re.compile(r"\b(no|not|never|currently no|if approved|potential(?:ly)?|seek(?:ing|s)? (?:FDA )?approval|pending|expects? to|plans? to|anticipat\w+|may|could|would)\b", re.I)

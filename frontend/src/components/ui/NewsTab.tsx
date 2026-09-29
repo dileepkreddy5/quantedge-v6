@@ -31,11 +31,12 @@ const NewsChart: React.FC<{ series: any[] }> = ({ series }) => {
 };
 
 const NewsTab: React.FC<{ ticker: string; fullModel?: React.ReactNode }> = ({ ticker, fullModel }) => {
-  const [d, setD] = useState<any>(null); const [nx, setNx] = useState<any>(null);
+  const [d, setD] = useState<any>(null); const [nx, setNx] = useState<any>(null); const [wk, setWk] = useState<any>(null);
   const [open, setOpen] = useState<Record<string, boolean>>({}); const [showOp, setShowOp] = useState(false); const [showFull, setShowFull] = useState(false);
   useEffect(() => { setD(null); setOpen({});
     api.get(`/api/v6/news-view/${ticker}`).then(r => setD(r.data)).catch(e => setD({ error: e?.response?.data?.detail || 'news unavailable' }));
-    api.get(`/api/v6/summary/${ticker}`).then(r => setNx(r.data?.next_results_est)).catch(() => {}); }, [ticker]);
+    api.get(`/api/v6/summary/${ticker}`).then(r => setNx(r.data?.next_results_est)).catch(() => {});
+    setWk(null); api.get(`/api/v6/wiki-attention/${ticker}`).then(r => setWk(r.data)).catch(() => setWk({ available: false })); }, [ticker]);
   if (!d) return <div style={{ ...card, fontFamily: mono, fontSize: 11, color: C.dust }}>reading 90 days of filings and news…</div>;
   if (d.error) return <div style={card}>{d.error}</div>;
   const at = d.attention || {}; const tn = d.tones || {}; const tt = (tn.positive || 0) + (tn.neutral || 0) + (tn.negative || 0);
@@ -78,7 +79,15 @@ const NewsTab: React.FC<{ ticker: string; fullModel?: React.ReactNode }> = ({ ti
           <div style={{ fontFamily: mono, fontSize: 17, color: C.cream, marginTop: 5 }}>{d.n_articles} about it</div>
           <div style={{ fontSize: 12, color: C.dust, marginTop: 4 }}>{d.n_mentions_only} more only mentioned it (headline about another company) — not counted as its news</div></div>
       </div>
-      <div style={{ fontFamily: mono, fontSize: 9.5, color: C.cocoa, marginTop: 10 }}>{d.tone_note}</div>
+      {wk?.available && (() => { const v = wk.series.map((x: any) => x.views); const mx = Math.max(...v), mn = Math.min(...v);
+        return (<div style={{ background: C.s2, borderRadius: 8, padding: '12px 14px', marginTop: 10, display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,2fr)', gap: 16, alignItems: 'center' }}>
+          <div><div style={{ fontFamily: mono, fontSize: 9.5, color: C.cocoa, letterSpacing: 1.4 }}>PUBLIC ATTENTION · WIKIPEDIA</div>
+            <div style={{ fontFamily: mono, fontSize: 17, color: wk.ratio >= 1.5 ? C.amber : C.cream, marginTop: 5 }}>{wk.ratio != null ? `${wk.ratio.toFixed(1)}× usual` : '—'}</div>
+            <div style={{ fontSize: 12, color: C.dust, marginTop: 4 }}>{Math.round(wk.avg_7d).toLocaleString()} views a day this week vs {Math.round(wk.avg_prior_90d).toLocaleString()} usual · peak {wk.peak?.d} · <a href={wk.url} target="_blank" rel="noopener noreferrer" style={{ color: C.gold }}>{wk.article}</a></div></div>
+          <svg viewBox="0 0 400 60" style={{ width: '100%', height: 60 }} preserveAspectRatio="none">
+            <polyline fill="none" stroke={C.blue} strokeWidth={1.5} points={v.map((y: number, i: number) => `${(i / (v.length - 1)) * 400},${56 - ((y - mn) / (mx - mn || 1)) * 52}`).join(' ')} /></svg>
+        </div>); })()}
+      <div style={{ fontFamily: mono, fontSize: 9.5, color: C.cocoa, marginTop: 10 }}>{d.tone_note}{wk?.available ? ' ' + wk.note : ''}</div>
     </div>
     <div style={card}>
       <H t="MOST-COVERED STORIES" sub="SAME STORY FROM SEVERAL OUTLETS MERGED" />
