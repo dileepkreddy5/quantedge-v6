@@ -50,7 +50,7 @@ async def _closes(ticker, api_key, days=400):
     try:
         end=dt.date.today(); start=end-dt.timedelta(days=days)
         async with httpx.AsyncClient(timeout=15) as c:
-            u=f"{_POLY}/v2/aggs/ticker/{ticker}/range/1/day/{start.isoformat()}/{end.isoformat()}?adjusted=true&sort=asc&limit=500&apiKey={api_key}"
+            u=f"{_POLY}/v2/aggs/ticker/{ticker}/range/1/day/{start.isoformat()}/{end.isoformat()}?adjusted=true&sort=asc&limit=5000&apiKey={api_key}"
             r=await c.get(u)
             if r.status_code==200: return [b["c"] for b in (r.json() or {}).get("results",[])]
     except Exception: pass
