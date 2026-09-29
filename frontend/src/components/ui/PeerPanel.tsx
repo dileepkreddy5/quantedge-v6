@@ -22,9 +22,10 @@ interface PeerData {
 const fmtCap = (c: number | null) => c ? (c >= 1e12 ? `$${(c/1e12).toFixed(1)}T` : c >= 1e9 ? `$${(c/1e9).toFixed(0)}B` : `$${(c/1e6).toFixed(0)}M`) : '—';
 const pctColor = (p: number) => p >= 66 ? C.green : p >= 33 ? C.gold : C.red;
 
-interface Props { data?: any; ticker?: string; onAnalyze?: (t: string) => void; }
+interface Props {
+  lite?: boolean;   // Valuation tab: chart + disclosed relationships only data?: any; ticker?: string; onAnalyze?: (t: string) => void; }
 
-const PeerPanel: React.FC<Props> = ({ ticker: tickerProp, data: analysisData, onAnalyze }) => {
+const PeerPanel: React.FC<Props> = ({ ticker: tickerProp, data: analysisData, onAnalyze, lite }) => {
   const ticker = (tickerProp || analysisData?.ticker || analysisData?.symbol || '').toUpperCase();
   const [pd, setPd] = useState<PeerData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -51,8 +52,8 @@ const PeerPanel: React.FC<Props> = ({ ticker: tickerProp, data: analysisData, on
       const res = await api.get(`/api/v6/peers/${ticker}`);
       setPd(res.data?.data || null);
       try {
-        const sr = await api.get(`/api/v6/peers_score/${ticker}`);
-        if (sr.data?.data?.available) setScoreData(sr.data.data);
+        const sr = lite ? null : await api.get(`/api/v6/peers_score/${ticker}`);
+        if (sr?.data?.data?.available) setScoreData(sr.data.data);
       } catch { /* score is optional enhancement */ }
       try {
         const rr = await api.get(`/api/v6/relationships/${ticker}`);
@@ -60,7 +61,7 @@ const PeerPanel: React.FC<Props> = ({ ticker: tickerProp, data: analysisData, on
       } catch { /* filing coverage is uneven */ }
     } catch { setErr(true); }
     finally { setLoading(false); }
-  }, [ticker]);
+  }, [ticker, lite]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -138,7 +139,7 @@ const PeerPanel: React.FC<Props> = ({ ticker: tickerProp, data: analysisData, on
         <span style={{ color: C.gold, fontWeight:700, fontSize:15 }}>{ticker} vs {pd.bucket.toUpperCase()} PEERS</span>
         <span style={{ color: C.textDim, fontSize:12 }}>{pd.peer_count} comparable companies</span>
       </div>
-      {scoreData && (() => {
+      {!lite && scoreData && (() => {
         const s = scoreData.score; const rating = scoreData.peers_rating || '';
         const km = scoreData.key_metrics || {};
         const rc = s==null?'#8a7560':s>=72?'#22c55e':s>=58?'#4ade80':s>=44?'#daa520':s>=30?'#f59e0b':'#ef4444';
@@ -373,7 +374,7 @@ const PeerPanel: React.FC<Props> = ({ ticker: tickerProp, data: analysisData, on
       })()}
 
       {/* Fundamental percentile bars (quality / profitability / growth / valuation vs peers) */}
-      {pd.fund_factors && pd.fund_factors.length > 0 && (
+      {!lite && pd.fund_factors && pd.fund_factors.length > 0 && (
         <>
           <div style={{ color:C.gold, fontWeight:700, fontSize:13, marginBottom:4, marginTop:4 }}>FUNDAMENTALS vs PEERS</div>
           <div style={{ fontSize:11, color:C.textDim, marginBottom:12, fontStyle:'italic' }}>
@@ -473,8 +474,8 @@ const PeerPanel: React.FC<Props> = ({ ticker: tickerProp, data: analysisData, on
       })()}
 
       {/* Peer table */}
-      <div style={{ color:C.gold, fontWeight:700, fontSize:13, marginBottom:8 }}>CLOSEST RIVALS BY BUSINESS PROFILE</div>
-      <div style={{ maxHeight:320, overflowY:'auto' }}>
+      {!lite && <div style={{ color:C.gold, fontWeight:700, fontSize:13, marginBottom:8 }}>CLOSEST RIVALS BY BUSINESS PROFILE</div>}
+      <div style={{ maxHeight:320, overflowY:'auto', display: lite ? 'none' : undefined }}>
         <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
           <thead>
             <tr style={{ color:C.textDim, fontSize:10, textAlign:'left' }}>
