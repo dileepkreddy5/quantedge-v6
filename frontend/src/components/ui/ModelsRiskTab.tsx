@@ -23,13 +23,14 @@ const AUDIT: Record<string, [string, string]> = {
 
 const ModelsRiskTab: React.FC<{ ticker: string; data: any; forward?: React.ReactNode; riskModel?: React.ReactNode }> = ({ ticker, data, forward, riskModel }) => {
   const [rk, setRk] = useState<any>(null); const [ps, setPs] = useState<any>(null); const [sm, setSm] = useState<any>(null);
-  const [cv, setCv] = useState<any>(null); const [mv, setMv] = useState<any>(null); const [showRaw, setShowRaw] = useState(false); const [showRisk, setShowRisk] = useState(false);
+  const [cv, setCv] = useState<any>(null); const [mv, setMv] = useState<any>(null); const [ml, setMl] = useState<any>(null); const [showRisk, setShowRisk] = useState(false);
   useEffect(() => { setRk(null); setPs(null); setSm(null); setCv(null);
     api.get(`/api/v6/risk/${ticker}`).then(r => setRk(r.data?.data || r.data)).catch(() => setRk({}));
     api.get(`/api/v6/price-stats/${ticker}`).then(r => setPs(r.data)).catch(() => setPs({}));
     api.get(`/api/v6/summary/${ticker}`).then(r => setSm(r.data)).catch(() => setSm({}));
     api.get(`/api/v7/conviction/${ticker}`).then(r => setCv(r.data?.data || r.data)).catch(() => setCv({}));
-    api.get(`/api/v6/model-validation`).then(r => setMv(r.data)).catch(() => setMv({})); }, [ticker]);
+    api.get(`/api/v6/model-validation`).then(r => setMv(r.data)).catch(() => setMv({}));
+    setMl(null); api.get(`/api/v6/ml/risk/${ticker}`).then(r => setMl(r.data)).catch(() => setMl({})); }, [ticker]);
   const k = rk?.key_metrics || {}; const loss = sm?.facts?.ni_ttm != null && sm.facts.ni_ttm <= 0;
   const az = k.altman_z, cr = k.current_ratio, nde = k.net_debt_to_ebitda;
   const vol = ps?.vol_1y; const size = vol ? Math.min(1, 0.10 / vol) : null; const r1 = ps?.returns?.['1y'] || {};
@@ -63,24 +64,54 @@ const ModelsRiskTab: React.FC<{ ticker: string; data: any; forward?: React.React
             <td style={{ padding: '6px 8px', color: ac }}>{a[0]} <span style={{ color: C.cocoa }}>· {a[1]}</span></td></tr>); })}</tbody></table></div>
     </div>
     {forward && <div style={card}><H t="FORWARD INDICATORS" sub="GROWTH, REINVESTMENT AND MOMENTUM OF THE BUSINESS — NOT A PRICE FORECAST" />{forward}</div>}
-    <div style={card}>
-      <H t="MODEL VALIDATION" sub={mv?.split_date ? `TRAINED ON ${mv.n_tickers} STOCKS · TESTED ONLY ON DATA AFTER ${String(mv.split_date).slice(0, 10)}` : ''} />
-      <p style={{ fontSize: 14, color: C.latte, lineHeight: 1.65, margin: '0 0 12px' }}>The models rank stocks against each other. A <b>rank correlation</b> above 0 means their rankings lined up with what actually happened; in practice 0.03–0.06 is good. To count as <b>reliable</b>, the result must be statistically solid (t-statistic of 2 or more) on data the models never saw. <b style={{ color: hz.some(h => h.reliable) ? C.up : C.amber }}>{hz.some(h => h.reliable) ? 'Reliable horizons are used on the site.' : 'No horizon currently passes, so no model predictions are used anywhere on the site.'}</b></p>
-      <div style={{ overflowX: 'auto' }}><table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: mono, fontSize: 12 }}>
-        <thead><tr style={{ color: C.cocoa }}>{['Horizon', 'Rank correlation', 't-stat', 'Right direction', 'Independent windows', 'Tested rows', 'Reliable'].map((h, i) => <th key={i} style={{ textAlign: i ? 'right' : 'left', fontWeight: 400, padding: '6px 8px', borderBottom: `1px solid ${C.b1}` }}>{h}</th>)}</tr></thead>
-        <tbody>{hz.map((h: any, i: number) => (<tr key={i} title={h.confidence_note}>
-          <td style={{ padding: '6px 8px', color: C.latte }}>{h.horizon_label}</td>
-          <td style={{ padding: '6px 8px', textAlign: 'right', color: C.cream }}>{h.oos_rank_ic?.ensemble != null ? (h.oos_rank_ic.ensemble >= 0 ? '+' : '') + h.oos_rank_ic.ensemble.toFixed(3) : '—'}</td>
-          <td style={{ padding: '6px 8px', textAlign: 'right' }}>{h.ic_t_stat != null ? h.ic_t_stat.toFixed(2) : '—'}</td>
-          <td style={{ padding: '6px 8px', textAlign: 'right' }}>{h.ic_hit_rate != null ? `${Math.round(h.ic_hit_rate * 100)}%` : '—'}</td>
-          <td style={{ padding: '6px 8px', textAlign: 'right' }}>{h.n_independent_val_dates ?? '—'}</td>
-          <td style={{ padding: '6px 8px', textAlign: 'right', color: C.dust }}>{h.n_val?.toLocaleString() ?? '—'}</td>
-          <td style={{ padding: '6px 8px', textAlign: 'right', color: h.reliable ? C.up : C.amber }}>{h.reliable ? 'yes' : 'no'}</td></tr>))}</tbody></table></div>
-      <div style={{ fontSize: 12, color: C.cocoa, marginTop: 10 }}>Hover a row for the trainer's own note. A rebuild with stronger, verified inputs and stricter validation is planned.</div>
-      <div onClick={() => setShowRaw(v => !v)} style={{ fontFamily: mono, fontSize: 11, color: C.dust, marginTop: 12, cursor: 'pointer' }}>{showRaw ? '▾' : '▸'} per-stock experimental outputs (not used)</div>
-      {showRaw && <div style={{ fontSize: 12.5, color: C.dust, marginTop: 8, lineHeight: 1.6 }}>These models are trained on {ticker}'s own price history alone, at the moment the page opens — too few data points to learn from, which is why their training fit looks near-perfect while they disagree with each other.
-        <pre style={{ fontFamily: mono, fontSize: 11, color: C.cocoa, whiteSpace: 'pre-wrap', marginTop: 6 }}>{JSON.stringify(data?.ml_predictions || {}, null, 1).slice(0, 1500)}</pre></div>}
-    </div>
+    {(() => { const f = ml?.forecast; const ev = ml?.evidence || {}; const rv = ev.risk?.vol || {}; const d15 = ev.drop15_table, d25 = ev.drop25_table; const R = ev.returns || {};
+      const P = (v: any) => v == null ? '—' : `${Math.round(v * 100)}%`;
+      return (<>
+      <div style={card}>
+        <H t="RISK FORECAST · MACHINE LEARNING" sub={f ? `FOR ${ticker} · AS OF ${f.as_of} · VALIDATED ON DATA THE MODELS NEVER SAW` : ''} />
+        {!f ? <div style={{ fontSize: 13.5, color: C.dust }}>No forecast for {ticker} yet — it needs a year of trading and enough volume to be in the monthly panel.</div> : (<>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 10 }}>
+            <Tile k="EXPECTED VOLATILITY · NEXT MONTH" v={P(f.vol_21)} col={f.vol_21_pct > 0.8 ? C.amber : f.vol_21_pct < 0.3 ? C.up : C.cream}
+              s={`a typical day ±${(f.vol_21 / Math.sqrt(252) * 100).toFixed(1)}% · ${f.vol_21_pct >= 0.5 ? `more turbulent than ${Math.round(f.vol_21_pct * 100)}%` : `calmer than ${Math.round((1 - f.vol_21_pct) * 100)}%`} of stocks`} />
+            <Tile k="EXPECTED VOLATILITY · NEXT 3 MONTHS" v={P(f.vol_63)} s="annualised, like every volatility on the site" />
+            <Tile k="CHANCE OF A 15%+ FALL · 3 MONTHS" v={P(f.drop15)} col={f.drop15 > 0.65 ? C.amber : undefined} s={`a fall from any high to a later low · typical stock ${P(d15?.base_rate)}`} />
+            <Tile k="CHANCE OF A 25%+ FALL · 3 MONTHS" v={P(f.drop25)} col={f.drop25 > 0.35 ? C.dn : f.drop25 < 0.1 ? C.up : undefined} s={`the more serious warning · typical stock ${P(d25?.base_rate)}`} />
+          </div>
+          <div style={{ fontSize: 12.5, color: C.dust, marginTop: 12, lineHeight: 1.6 }}>These forecast <b style={{ color: C.latte }}>how bumpy</b> the ride is likely to be — not which way the price goes. Volatility comes from a model that beat “assume the last 3 months repeat”; the fall chances come from how often stocks with the same recent volatility actually fell.</div>
+        </>)}
+      </div>
+      <div style={card}>
+        <H t="WHY YOU CAN TRUST IT" sub="WALK-FORWARD: TRAINED ON THE PAST, TESTED ON THE FOLLOWING 6 MONTHS, FIVE TIMES (2024–2026)" />
+        <div style={{ overflowX: 'auto' }}><table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: mono, fontSize: 12 }}>
+          <thead><tr style={{ color: C.cocoa }}>{['Volatility forecast', 'Ranking skill (model)', 'Simple baseline', 'Typical error (model)', 'Baseline error'].map((h, i) => <th key={i} style={{ textAlign: i ? 'right' : 'left', fontWeight: 400, padding: '6px 8px', borderBottom: `1px solid ${C.b1}` }}>{h}</th>)}</tr></thead>
+          <tbody>{[['fut_vol_21', 'Next month'], ['fut_vol_63', 'Next 3 months']].map(([k, l]) => { const v = rv[k] || {}; return (<tr key={k}>
+            <td style={{ padding: '6px 8px', color: C.latte }}>{l}</td><td style={{ padding: '6px 8px', textAlign: 'right', color: C.up }}>{v.model_ic?.toFixed(2) ?? '—'}</td>
+            <td style={{ padding: '6px 8px', textAlign: 'right', color: C.dust }}>{v.baseline_ic?.toFixed(2) ?? '—'}</td><td style={{ padding: '6px 8px', textAlign: 'right', color: C.up }}>{P(v.model_median_error)}</td>
+            <td style={{ padding: '6px 8px', textAlign: 'right', color: C.dust }}>{P(v.baseline_median_error)}</td></tr>); })}</tbody></table></div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', gap: 14, marginTop: 14 }}>
+          {[[d15, '15%+ fall'], [d25, '25%+ fall']].map(([t, l]: any) => t && (<div key={l} style={{ background: C.s2, borderRadius: 8, padding: '12px 14px' }}>
+            <div style={{ fontFamily: mono, fontSize: 9.5, letterSpacing: 1.4, color: C.cocoa }}>CHANCE OF A {l.toUpperCase()} · CALIBRATION</div>
+            <div style={{ fontSize: 12, color: C.dust, margin: '6px 0 8px' }}>separates fallers from non-fallers: {t.auc?.toFixed(2)} (0.5 = coin flip) · {t.n_tested?.toLocaleString()} tested</div>
+            {t.calibration.map((c: any, i: number) => (<div key={i} style={{ display: 'grid', gridTemplateColumns: '90px 1fr 60px', gap: 8, alignItems: 'center', fontFamily: mono, fontSize: 11, padding: '2px 0' }}>
+              <span style={{ color: C.dust }}>said {P(c.predicted)}</span>
+              <span style={{ position: 'relative', height: 8, background: '#140d0a', borderRadius: 4 }}><i style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${c.actual * 100}%`, background: C.gold, borderRadius: 4 }} /><i style={{ position: 'absolute', top: -2, bottom: -2, width: 2, left: `${c.predicted * 100}%`, background: C.cream }} /></span>
+              <span style={{ color: C.cream, textAlign: 'right' }}>{P(c.actual)} fell</span></div>))}
+            <div style={{ fontSize: 11, color: C.cocoa, marginTop: 6 }}>Gold bar = what actually happened · white tick = what was predicted. Close together = trustworthy.</div>
+          </div>))}
+        </div>
+      </div>
+      <div style={card}>
+        <H t="WHAT DOESN'T WORK — STATED OPENLY" sub="PREDICTING WHICH STOCKS WILL BEAT THEIR SECTOR" />
+        <p style={{ fontSize: 14, color: C.latte, lineHeight: 1.65, margin: '0 0 12px' }}>We tested three ways of ranking stocks by their next 1 and 3 months against their own sector — the best single signal, a simple composite, and a machine-learning model on 26 inputs (momentum, value, quality, growth, earnings reaction) — on ~2,100 stocks a month, the same walk-forward way. <b style={{ color: C.amber }}>None passed</b> (a reliable result needs a t-statistic of 2 or more). What worked in 2024 stopped working in 2025, so <b>no return predictions are used anywhere on the site</b>.</p>
+        <div style={{ overflowX: 'auto' }}><table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: mono, fontSize: 12 }}>
+          <thead><tr style={{ color: C.cocoa }}>{['Horizon', 'Approach', 'Ranking skill', 't-stat', 'Right', 'Top 10% minus bottom 10%'].map((h, i) => <th key={i} style={{ textAlign: i > 1 ? 'right' : 'left', fontWeight: 400, padding: '6px 8px', borderBottom: `1px solid ${C.b1}` }}>{h}</th>)}</tr></thead>
+          <tbody>{(['21', '63'] as const).flatMap(h => Object.entries(R[h]?.results || {}).map(([n, r]: any) => (<tr key={h + n}>
+            <td style={{ padding: '5px 8px', color: C.dust }}>{h === '21' ? '1 month' : '3 months'}</td><td style={{ padding: '5px 8px', color: C.latte }}>{({ single: 'best single signal', composite: 'simple composite', lightgbm: 'ML model' } as any)[n] || n}</td>
+            <td style={{ padding: '5px 8px', textAlign: 'right' }}>{(r.ic >= 0 ? '+' : '') + r.ic.toFixed(3)}</td><td style={{ padding: '5px 8px', textAlign: 'right', color: Math.abs(r.t_nw) >= 2 ? C.up : C.amber }}>{r.t_nw.toFixed(2)}</td>
+            <td style={{ padding: '5px 8px', textAlign: 'right' }}>{Math.round(r.hit * 100)}%</td><td style={{ padding: '5px 8px', textAlign: 'right', color: r.top_minus_bottom_decile >= 0 ? C.up : C.dn }}>{(r.top_minus_bottom_decile * 100).toFixed(1)}%</td></tr>)))}</tbody></table></div>
+        <div style={{ fontSize: 12, color: C.cocoa, marginTop: 10, lineHeight: 1.55 }}>The earlier per-stock models (trained on one stock's own short history each time a page opened) have been retired: they fit the past almost perfectly and disagreed with each other — the signature of memorising rather than learning.</div>
+      </div>
+      </>); })()}
     {riskModel && <div style={card}>
       <div onClick={() => setShowRisk(v => !v)} style={{ display: 'flex', gap: 10, alignItems: 'baseline', cursor: 'pointer' }}>
         <span style={{ fontFamily: mono, fontSize: 10, letterSpacing: 2, color: C.gold }}>FULL RISK MODEL</span><span style={{ fontSize: 12.5, color: C.dust }}>the signals behind the Risk part of the score</span>

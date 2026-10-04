@@ -101,6 +101,14 @@ class PanelRetrainJob:
             logger.info(f"[retrain] pruned old rollback {old.name}")
 
     async def run(self):
+
+        import os as _os
+
+        if _os.environ.get("LEGACY_PANEL_RETRAIN") != "1":
+
+            logger.info("[retrain] legacy panel retrain disabled — it failed nightly (no 1-year validation data) and is being replaced by ML v2")
+
+            return
         t0 = time.time()
         stamp = datetime.now().strftime("%Y%m%d_%H%M")
         logger.info(f"[retrain] START universe={self.tickers} years={self.years}")

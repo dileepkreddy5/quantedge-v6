@@ -559,6 +559,18 @@ async def lifespan(app: FastAPI):
             logger.info("✅ Facts sheet scheduled (20:00 ET nightly)")
         except Exception as e:
             logger.warning(f"Facts sheet not scheduled: {e}")
+        try:
+            async def _ml2_monthly():
+                try:
+                    from services.ml2_monthly_job import run_ml2_monthly
+                    logger.info(f"✅ ML v2 monthly refresh: {await run_ml2_monthly(app.state.db)}")
+                except Exception as e:
+                    logger.error(f"❌ ML v2 monthly refresh FAILED: {e}")
+            scheduler.add_job(_ml2_monthly, trigger=CronTrigger(day="1-7", day_of_week="sat", hour=3, minute=30, timezone=et),
+                              id="ml2_monthly", name="ML v2 monthly refresh", replace_existing=True, max_instances=1, coalesce=True)
+            logger.info("✅ ML v2 monthly refresh scheduled (first Saturday of the month, 03:30 ET)")
+        except Exception as e:
+            logger.warning(f"ML v2 monthly not scheduled: {e}")
 
         # Nightly full-universe panel rebuild + multi-horizon retrain.
         # 02:15 America/Denver — after the 02:00/02:30 ET scans have finished and

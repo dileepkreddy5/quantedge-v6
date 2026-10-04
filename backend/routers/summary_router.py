@@ -607,3 +607,14 @@ async def model_validation():
     try: rep = json.load(open("/app/models/panel/training_report.json"))
     except Exception as e: raise HTTPException(status_code=404, detail=f"no validation report ({type(e).__name__})")
     return _clean_json(rep)
+
+
+
+@router.get("/ml/risk/{ticker}")
+async def ml_risk(ticker: str, request: Request):
+    """This stock's validated risk forecast, with the evidence behind it."""
+    tk = ticker.upper().strip(); pool = request.app.state.db
+    r = await pool.fetchrow("SELECT * FROM ml_risk_forecast WHERE ticker=$1 ORDER BY as_of DESC LIMIT 1", tk)
+    try: ev = json.load(open("/app/models/panel_v2/serving.json"))
+    except Exception: ev = {}
+    return _clean_json({"ticker": tk, "forecast": dict(r) if r else None, "evidence": ev})
