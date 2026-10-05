@@ -617,4 +617,8 @@ async def ml_risk(ticker: str, request: Request):
     r = await pool.fetchrow("SELECT * FROM ml_risk_forecast WHERE ticker=$1 ORDER BY as_of DESC LIMIT 1", tk)
     try: ev = json.load(open("/app/models/panel_v2/serving.json"))
     except Exception: ev = {}
-    return _clean_json({"ticker": tk, "forecast": dict(r) if r else None, "evidence": ev})
+    hz = await pool.fetch("""SELECT * FROM ml_risk_h WHERE ticker=$1 AND as_of=(SELECT max(as_of) FROM ml_risk_h) ORDER BY horizon""", tk) \
+        if await pool.fetchval("SELECT to_regclass('ml_risk_h')") else []
+    try: evh = json.load(open("/app/models/panel_v2/serving_h.json"))
+    except Exception: evh = {}
+    return _clean_json({"ticker": tk, "forecast": dict(r) if r else None, "evidence": ev, "horizons": [dict(x) for x in hz], "evidence_h": evh})

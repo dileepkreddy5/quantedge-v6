@@ -21,11 +21,14 @@ def history(cik):
     if not revs: return [], []
     rev = max(revs, key=lambda s: max(s))
     gp, op = _q_income(facts, "GrossProfit"), _q_income(facts, "OperatingIncomeLoss")
+    cost = {}
+    for _t in ("CostOfRevenue", "CostOfGoodsAndServicesSold", "CostOfGoodsSold", "CostOfServices"):
+        for _e, _v in (_q_income(facts, _t) or {}).items(): cost.setdefault(_e, _v)
     ni = {}
     for t in ("NetIncomeLoss", "ProfitLoss", "NetIncomeLossAvailableToCommonStockholdersBasic", "NetIncomeLossAvailableToCommonStockholdersDiluted"):
         for e, v in (_q_income(facts, t) or {}).items(): ni.setdefault(e, v)
     ocf = _q_cashflow(facts)
-    q = [{"end": e, "filed": rev[e]["filed"], "sales": rev[e]["val"], "gross_profit": (gp.get(e) or {}).get("val"),
+    q = [{"end": e, "filed": rev[e]["filed"], "sales": rev[e]["val"], "gross_profit": (gp[e]["val"] if e in gp else ((rev[e]["val"] - cost[e]["val"]) if e in cost else None)),
           "op_income": (op.get(e) or {}).get("val"), "net_income": (ni.get(e) or {}).get("val"), "op_cash_flow": (ocf.get(e) or {}).get("val")}
          for e in sorted(rev)]
     sh = []

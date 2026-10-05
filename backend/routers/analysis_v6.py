@@ -1200,6 +1200,9 @@ class QuantEdgeAnalyzerV6:
         price_data: Optional[pd.DataFrame] = None,
         fundamentals: Optional[Dict] = None,
     ) -> Dict:
+        # Retired: these were trained on one stock's short history every time a page opened — they fit the past
+        # near-perfectly and disagreed with each other (overfitting), and no visible page uses them any more.
+        return {"retired": "per-stock models retired — see Models & risk for the validated models"}
         """
         Train XGBoost, LightGBM, and BiLSTM on real historical data then predict.
 
