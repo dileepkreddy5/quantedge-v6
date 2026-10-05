@@ -64,24 +64,42 @@ const ModelsRiskTab: React.FC<{ ticker: string; data: any; forward?: React.React
             <td style={{ padding: '6px 8px', color: ac }}>{a[0]} <span style={{ color: C.cocoa }}>· {a[1]}</span></td></tr>); })}</tbody></table></div>
     </div>
     {forward && <div style={card}><H t="FORWARD INDICATORS" sub="GROWTH, REINVESTMENT AND MOMENTUM OF THE BUSINESS — NOT A PRICE FORECAST" />{forward}</div>}
-    {(() => { const f = ml?.forecast; const ev = ml?.evidence || {}; const rv = ev.risk?.vol || {}; const d15 = ev.drop15_table, d25 = ev.drop25_table; const R = ev.returns || {};
+    {(() => { const f = ml?.forecast; const ev = ml?.evidence || {}; const hz: any[] = ml?.horizons || []; const EH: any = ml?.evidence_h || {}; const px: number | null = data?.current_price || null;
+      const LBL: Record<number, string> = { 5: '1 week', 10: '2 weeks', 21: '1 month', 63: '3 months', 126: '6 months', 252: '1 year' };
+      const pcS = (v: number) => `${v >= 0 ? '+' : ''}${(v * 100).toFixed(0)}%`; const rv = ev.risk?.vol || {}; const d15 = ev.drop15_table, d25 = ev.drop25_table; const R = ev.returns || {};
       const P = (v: any) => v == null ? '—' : `${Math.round(v * 100)}%`;
       return (<>
       <div style={card}>
-        <H t="RISK FORECAST · MACHINE LEARNING" sub={f ? `FOR ${ticker} · AS OF ${f.as_of} · VALIDATED ON DATA THE MODELS NEVER SAW` : ''} />
-        {!f ? <div style={{ fontSize: 13.5, color: C.dust }}>No forecast for {ticker} yet — it needs a year of trading and enough volume to be in the monthly panel.</div> : (<>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 10 }}>
-            <Tile k="EXPECTED VOLATILITY · NEXT MONTH" v={P(f.vol_21)} col={f.vol_21_pct > 0.8 ? C.amber : f.vol_21_pct < 0.3 ? C.up : C.cream}
-              s={`a typical day ±${(f.vol_21 / Math.sqrt(252) * 100).toFixed(1)}% · ${f.vol_21_pct >= 0.5 ? `more turbulent than ${Math.round(f.vol_21_pct * 100)}%` : `calmer than ${Math.round((1 - f.vol_21_pct) * 100)}%`} of stocks`} />
-            <Tile k="EXPECTED VOLATILITY · NEXT 3 MONTHS" v={P(f.vol_63)} s="annualised, like every volatility on the site" />
-            <Tile k="CHANCE OF A 15%+ FALL · 3 MONTHS" v={P(f.drop15)} col={f.drop15 > 0.65 ? C.amber : undefined} s={`a fall from any high to a later low · typical stock ${P(d15?.base_rate)}`} />
-            <Tile k="CHANCE OF A 25%+ FALL · 3 MONTHS" v={P(f.drop25)} col={f.drop25 > 0.35 ? C.dn : f.drop25 < 0.1 ? C.up : undefined} s={`the more serious warning · typical stock ${P(d25?.base_rate)}`} />
-          </div>
-          <div style={{ fontSize: 12.5, color: C.dust, marginTop: 12, lineHeight: 1.6 }}>These forecast <b style={{ color: C.latte }}>how bumpy</b> the ride is likely to be — not which way the price goes. Volatility comes from a model that beat “assume the last 3 months repeat”; the fall chances come from how often stocks with the same recent volatility actually fell.</div>
+        <H t="RISK FORECAST · EVERY HORIZON" sub={hz.length ? `FOR ${ticker} · MODELS AS OF ${hz[0].as_of} · RANGES AT TODAY'S PRICE` : ''} />
+        {!hz.length ? <div style={{ fontSize: 13.5, color: C.dust }}>No forecast for {ticker} yet — it needs a year of trading and enough volume to be in the monthly panel.</div> : (<>
+          <div style={{ overflowX: 'auto' }}><table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: mono, fontSize: 12.5 }}>
+            <thead><tr style={{ color: C.cocoa }}>{['Horizon', 'Expected volatility', 'Likely range (8 in 10)', 'Chance of 15%+ fall', 'Chance of 25%+ fall', 'Range held in testing'].map((h, i) =>
+              <th key={i} style={{ textAlign: i ? 'right' : 'left', fontWeight: 400, padding: '7px 8px', borderBottom: `1px solid ${C.b1}` }}>{h}</th>)}</tr></thead>
+            <tbody>{hz.map((r: any) => { const e = EH[String(r.horizon)] || {}; const cov = r.horizon === 252 ? (e.baseline_range80_coverage ?? e.range80_coverage) : e.range80_coverage;
+              return (<tr key={r.horizon}>
+                <td style={{ padding: '7px 8px', color: C.latte }}>{LBL[r.horizon] || `${r.horizon}d`}{r.method === 'baseline' && <span style={{ color: C.amber }} title="Uses past volatility — the model didn't beat it at this horizon"> *</span>}</td>
+                <td style={{ padding: '7px 8px', textAlign: 'right', color: C.cream }}>{P(r.vol)}</td>
+                <td style={{ padding: '7px 8px', textAlign: 'right', color: C.cream }}>{px ? `$${(px * r.lo_mult).toFixed(2)} – $${(px * r.hi_mult).toFixed(2)}` : `${pcS(r.lo_mult - 1)} to ${pcS(r.hi_mult - 1)}`}
+                  {px && <span style={{ color: C.dust, fontSize: 11 }}> ({pcS(r.lo_mult - 1)} / {pcS(r.hi_mult - 1)})</span>}</td>
+                <td style={{ padding: '7px 8px', textAlign: 'right' }}>{P(r.drop15)}</td>
+                <td style={{ padding: '7px 8px', textAlign: 'right', color: r.drop25 > 0.35 ? C.dn : r.drop25 < 0.1 ? C.up : C.cream }}>{P(r.drop25)}</td>
+                <td style={{ padding: '7px 8px', textAlign: 'right', color: C.dust }}>{cov != null ? `${Math.round(cov * 100)}%` : '—'}</td></tr>); })}</tbody></table></div>
+          <div style={{ fontSize: 12.5, color: C.dust, marginTop: 12, lineHeight: 1.6 }}>These forecast <b style={{ color: C.latte }}>how bumpy</b> the ride is likely to be — not which way the price goes. Each range is where the price ended up 8 times out of 10 for similar stocks; the slight upward lean is the market's long-run drift, not a prediction. A “15%+ fall” means from any high to a later low within the period. <span style={{ color: C.amber }}>*</span> 1 year uses past volatility, because the model didn't beat it there; its fall chances rest on only ~3 years of one-year windows that include the April 2025 crash, so treat them as rough.</div>
         </>)}
       </div>
       <div style={card}>
         <H t="WHY YOU CAN TRUST IT" sub="WALK-FORWARD: TRAINED ON THE PAST, TESTED ON THE FOLLOWING 6 MONTHS, FIVE TIMES (2024–2026)" />
+        {Object.keys(EH).length > 0 && <div style={{ overflowX: 'auto', marginBottom: 16 }}><table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: mono, fontSize: 12 }}>
+          <thead><tr style={{ color: C.cocoa }}>{['Horizon', 'Volatility ranking: model / baseline', 'Typical error: model / baseline', 'Range held (aim 80%)', '25%+ fall: separation', 'Used'].map((h, i) =>
+            <th key={i} style={{ textAlign: i ? 'right' : 'left', fontWeight: 400, padding: '6px 8px', borderBottom: `1px solid ${C.b1}` }}>{h}</th>)}</tr></thead>
+          <tbody>{Object.entries(EH).filter(([, e]: any) => e && e.available).map(([h, e]: any) => (<tr key={h}>
+            <td style={{ padding: '6px 8px', color: C.latte }}>{e.label}</td>
+            <td style={{ padding: '6px 8px', textAlign: 'right' }}><span style={{ color: e.vol.model_ic > e.vol.baseline_ic ? C.up : C.dust }}>{e.vol.model_ic.toFixed(2)}</span> / {e.vol.baseline_ic.toFixed(2)}</td>
+            <td style={{ padding: '6px 8px', textAlign: 'right' }}><span style={{ color: e.vol.model_error < e.vol.baseline_error ? C.up : C.dust }}>{P(e.vol.model_error)}</span> / {P(e.vol.baseline_error)}</td>
+            <td style={{ padding: '6px 8px', textAlign: 'right' }}>{P(h === '252' ? (e.baseline_range80_coverage ?? e.range80_coverage) : e.range80_coverage)}</td>
+            <td style={{ padding: '6px 8px', textAlign: 'right' }}>{e.drop?.['25']?.auc?.toFixed(2) ?? '—'}</td>
+            <td style={{ padding: '6px 8px', textAlign: 'right', color: e.passes ? C.up : C.amber }}>{e.passes ? 'model' : 'baseline'}</td></tr>))}</tbody></table>
+          <div style={{ fontSize: 11.5, color: C.cocoa, marginTop: 6 }}>Separation: 0.5 = coin flip, 1.0 = perfect. A horizon uses the model only if it ranks better <i>and</i> errs less than “assume the last 3 months repeat”.</div></div>}
         <div style={{ overflowX: 'auto' }}><table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: mono, fontSize: 12 }}>
           <thead><tr style={{ color: C.cocoa }}>{['Volatility forecast', 'Ranking skill (model)', 'Simple baseline', 'Typical error (model)', 'Baseline error'].map((h, i) => <th key={i} style={{ textAlign: i ? 'right' : 'left', fontWeight: 400, padding: '6px 8px', borderBottom: `1px solid ${C.b1}` }}>{h}</th>)}</tr></thead>
           <tbody>{[['fut_vol_21', 'Next month'], ['fut_vol_63', 'Next 3 months']].map(([k, l]) => { const v = rv[k] || {}; return (<tr key={k}>
