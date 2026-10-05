@@ -1,3 +1,4 @@
+import MLTab from '../components/ui/MLTab';
 import ModelsRiskTab from '../components/ui/ModelsRiskTab';
 import NewsTab from '../components/ui/NewsTab';
 import FilingsTab from '../components/ui/FilingsTab';
@@ -61,7 +62,8 @@ const TABS = [
   { id: 'valuation',   label: '⚖️ VALUATION & PEERS' },
   { id: 'business',    label: '🏰 BUSINESS' },
   { id: 'news',        label: '📰 NEWS' },
-  { id: 'risk',        label: '🛡 MODELS & RISK' },
+  { id: 'risk',        label: '🛡 RISK & SCORE' },
+  { id: 'ml',          label: '🧠 ML MODELS' },
 ];
 
 const QUICK_TICKERS = ['AAPL', 'NVDA', 'TSLA', 'SPY', 'QQQ', 'MSFT', 'AMZN', 'META', 'GOOGL', 'BRK-B'];
@@ -364,7 +366,8 @@ export default function Dashboard() {
               
               {['news','altdata'].includes(activeTab) && <NewsTab ticker={ticker} fullModel={<NewsPanel ticker={ticker} data={data} />} />}
               
-              {['risk','ml','forecast','portfolio','performance'].includes(activeTab) && <ModelsRiskTab ticker={ticker} data={data} forward={<ForecastPanel ticker={ticker} />} riskModel={<RiskPanel ticker={ticker} />} />}
+              {activeTab === 'ml' && <MLTab ticker={ticker} data={data} />}
+          {['risk','forecast','portfolio','performance'].includes(activeTab) && <ModelsRiskTab ticker={ticker} data={data} forward={<ForecastPanel ticker={ticker} />} riskModel={<RiskPanel ticker={ticker} />} />}
               
               
               
